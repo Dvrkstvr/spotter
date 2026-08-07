@@ -35,6 +35,50 @@ Two ways, and both stay supported:
 
 iOS config is untouched but unexercised — nothing has been checked on it.
 
+Both also exist as double-clickable batch files in the repo root:
+`start-app.bat` (plain Metro) and `start-emulated.bat` (the full buddy-testing
+setup below; takes the emulator count as an optional argument).
+
+### Testing the buddy features without two phones
+
+Real Nearby Connections needs Bluetooth hardware, which emulators don't have.
+The sim radio replaces just the transport — a WebSocket to a relay on the dev
+machine — while every line of app code above the native module runs for real:
+discovery, the pairing code, sync, shared workouts, reconnects.
+
+```bash
+npm run start:emu
+```
+
+One command: boots up to two emulators (`-- 1` for just one), opens the relay
+in its own console window, and starts Metro with the sim enabled — then press
+`a` to open the app on an emulator, `shift+a` to pick which. Everything is
+skip-if-already-there, so rerunning it reuses running emulators and the open
+relay. Needs the Android emulator plus AVDs installed once (Android Studio's
+Device Manager is the easy way; the script prints the alternatives).
+
+Without emulators the two halves also run by hand — the relay plus a
+sim-enabled Metro, with the app in Expo Go on one or two phones:
+
+```bash
+npm run buddy-relay
+```
+
+```bash
+npm run start:sim
+```
+
+Either way, any combination of instances works — two emulators, emulator plus
+phone, two phones. Each instance appears in the
+other's share sheet exactly as a real phone would; pair them with the code as
+usual. The relay derives nothing from the app: killing it (or pressing
+`d`+Enter in its terminal) severs the link mid-session, which is the easy way
+to exercise the link-lost and reconnect paths.
+
+`EXPO_PUBLIC_SIM_RADIO` is inlined at bundle time: plain `npm start` never
+includes the sim, and release builds (`__DEV__` false) ignore it entirely. On
+a device where the native module exists, the real radio always wins.
+
 ### Why SDK 54 and not the latest
 
 Expo Go supports exactly one SDK at a time, and the Play Store won't serve a
@@ -106,8 +150,11 @@ These are deliberate, and each is called out in the code:
   `<BuddyRadio>` controller. In Expo Go the native module doesn't exist and
   everything falls back to the canned transport in
   `src/data/buddy-transport.ts`, where sends are simulated (the screen says
-  so). Pairing auto-accepts on proximity; the authentication digits Nearby
-  provides are not yet surfaced for comparison.
+  so) — unless the sim radio is enabled (see "Testing the buddy features
+  without two phones"), which restores the full live flow over a dev-machine
+  relay. First pairing is gated by Nearby's authentication digits (the
+  invitee shows them, the inviter types them); a standing pairing reconnects
+  silently.
 - **Routine editing has no Edit mode.** The button toggles its own label and
   nothing else — faithful to the design, where the rows are always editable.
 

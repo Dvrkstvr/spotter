@@ -11,6 +11,10 @@
  *
  * "Receiving" from a mock peer is real (the items genuinely merge into the
  * store and persist); "sending" goes nowhere, which the UI says out loud.
+ *
+ * For live two-way testing without Bluetooth (two emulators, or emulator +
+ * phone in Expo Go), use the sim radio instead: src/data/sim-radio.ts over
+ * scripts/buddy-relay.mjs, enabled via `npm run start:sim`.
  */
 import {
   DEFAULT_GROUPS,
