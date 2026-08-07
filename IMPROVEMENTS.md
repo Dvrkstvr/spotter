@@ -118,8 +118,16 @@ real gym use.
 - [X] **Field test with the buddy's phone** — install the release APK on both
       phones, pair in person, sync. Pre-Android-12 phones need Location
       Services ON for discovery (OS requirement, not ours).
-- [ ] Later: surface Nearby's authentication digits during pairing instead of
-      trusting proximity; reconnect flow that doesn't require re-scanning.
+- [x] ~~Later~~ (done as the redone invite flow, 7 Aug): pairing is now
+      code-gated — both phones show Nearby's auth digits in the share sheet
+      and both confirm (`pendingAuth`, `rejectConnection` added to the native
+      module); the Profile button reads "Share session" and the sheet is
+      framed as share mode (only others in share mode appear — both open it,
+      which was always true but never said). A pairing then stands until
+      Disconnect or app termination: the radio keeps looking whenever the
+      link drops, re-pairs the known buddy silently, and strangers knocking
+      outside share mode are auto-rejected. Profile shows Connected /
+      Reconnecting… live.
 
 ## 8. Shared buddy workouts — train the same routine together
 

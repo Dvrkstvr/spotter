@@ -86,7 +86,10 @@ export default function YouScreen() {
           </View>
           <View style={styles.buddyText}>
             <Text style={styles.buddyName}>{s.buddy}</Text>
-            <Text style={styles.buddyStatus}>{L.connected}</Text>
+            {/* Paired is standing; this line tracks the live link. */}
+            <Text style={styles.buddyStatus}>
+              {!hasRadio || s.buddyEndpoint ? L.connected : L.linkLost}
+            </Text>
           </View>
           <Btn
             variant="ghost"

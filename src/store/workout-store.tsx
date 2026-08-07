@@ -103,6 +103,8 @@ export type State = {
   /** live radio state (real transport only; all transient) */
   nearbyPeers: { endpointId: string; name: string }[];
   buddyEndpoint: string | null;
+  /** a connection awaiting the users' code check — both phones confirm */
+  pendingAuth: { endpointId: string; name: string; digits: string; incoming: boolean } | null;
   /** the connected peer's shareable data, from either transport */
   buddySnapshot: BuddySnapshot | null;
   /* — shared workout (all transient; see IMPROVEMENTS.md #8) — */
@@ -161,6 +163,7 @@ const initialState: State = {
   buddySync: false,
   nearbyPeers: [],
   buddyEndpoint: null,
+  pendingAuth: null,
   buddySnapshot: null,
   buddyInvite: null,
   sessionShared: false,

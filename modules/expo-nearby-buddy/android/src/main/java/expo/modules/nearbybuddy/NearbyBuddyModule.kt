@@ -142,6 +142,12 @@ class NearbyBuddyModule : Module() {
         .addOnFailureListener { promise.reject(CodedException("ACCEPT_FAILED", it.message, it)) }
     }
 
+    AsyncFunction("rejectConnection") { endpointId: String, promise: Promise ->
+      client.rejectConnection(endpointId)
+        .addOnSuccessListener { promise.resolve(null) }
+        .addOnFailureListener { promise.reject(CodedException("REJECT_FAILED", it.message, it)) }
+    }
+
     AsyncFunction("sendPayload") { endpointId: String, data: String, promise: Promise ->
       client.sendPayload(endpointId, Payload.fromBytes(data.toByteArray(Charsets.UTF_8)))
         .addOnSuccessListener { promise.resolve(null) }

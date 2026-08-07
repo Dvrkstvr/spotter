@@ -12,24 +12,57 @@ import { useStore } from '@/store/workout-store';
 
 export function ScanSheet() {
   const { s, L, patch } = useStore();
-  const close = () => patch({ scanning: false });
+
+  const cancelAuth = () => {
+    if (radio && s.pendingAuth) radio.rejectConnection(s.pendingAuth.endpointId).catch(() => {});
+    patch({ pendingAuth: null });
+  };
+  const close = () => {
+    cancelAuth();
+    patch({ scanning: false });
+  };
   useBackClose(close);
 
   // Real radio: live Nearby endpoints, discovered by <BuddyRadio> while this
-  // sheet is open. Expo Go: the canned mock list.
+  // sheet is open — anyone else who also has sharing open. Expo Go: the
+  // canned mock list.
   const nearby = hasRadio
     ? s.nearbyPeers.map((p) => ({ id: p.endpointId, name: p.name, device: L.nearbyDevice }))
     : scanPeers();
 
   const invite = (n: { id: string; name: string }) => {
     if (hasRadio && radio) {
+      // Just request — the code check (pendingAuth) decides the pairing;
+      // <BuddyRadio> opens the sync screen once both sides confirm.
       const me = s.profile.name.trim() || 'Workout Diary';
       radio.requestConnection(me, n.id).catch(() => {});
+      return;
     }
-    // Pairing goes straight into the sync screen — the first thing two
-    // freshly-paired devices want is to agree on their data.
+    // Mock pairing goes straight into the sync screen.
     patch({ buddy: n.name, scanning: false, buddySync: true });
   };
+
+  /* — the code check: both phones show the same digits, both confirm — */
+  if (s.pendingAuth) {
+    const pa = s.pendingAuth;
+    return (
+      <Sheet zIndex={87} maxHeight="70%" onClose={cancelAuth}>
+        <H4>{L.authTitle}</H4>
+        <Text style={styles.authName}>{pa.name}</Text>
+        <Text style={styles.authDigits}>{pa.digits}</Text>
+        <Text style={styles.authHint}>{L.authHint.replace('{name}', pa.name)}</Text>
+        <View style={styles.authActions}>
+          <Btn variant="secondary" label={L.cancel} style={styles.authAction} onPress={cancelAuth} />
+          <Btn
+            variant="primary"
+            label={L.pairBtn}
+            style={styles.authAction}
+            onPress={() => radio?.acceptConnection(pa.endpointId).catch(() => {})}
+          />
+        </View>
+      </Sheet>
+    );
+  }
 
   return (
     <Sheet zIndex={87} maxHeight="70%" onClose={close}>
@@ -39,6 +72,7 @@ export function ScanSheet() {
         <SearchingDot />
         <Text style={styles.searching}>{L.searching}</Text>
       </View>
+      <Text style={styles.shareHint}>{L.shareHint}</Text>
 
       <View style={styles.list}>
         {nearby.map((n) => (
@@ -86,6 +120,21 @@ const styles = StyleSheet.create({
   searchingRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
   dot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: color.accent },
   searching: { fontFamily: font.regular, fontSize: 11.5, color: color.neutral500 },
+  shareHint: { fontFamily: font.regular, fontSize: 11, color: color.neutral600, marginTop: 6 },
+
+  authName: { fontFamily: font.regular, fontSize: 13, color: color.neutral400, marginTop: 10 },
+  authDigits: {
+    fontFamily: font.heading,
+    fontSize: 44,
+    letterSpacing: 10,
+    color: color.accent,
+    textAlign: 'center',
+    marginVertical: 18,
+    fontVariant: ['tabular-nums'],
+  },
+  authHint: { fontFamily: font.regular, fontSize: 12.5, color: color.neutral500 },
+  authActions: { flexDirection: 'row', gap: 8, marginTop: 18 },
+  authAction: { flex: 1, height: 42 },
 
   list: { marginTop: 14 },
   row: {

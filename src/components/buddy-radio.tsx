@@ -36,9 +36,11 @@ export function BuddyRadio() {
 
   /* — advertising + discovery, driven by what the user is doing — */
 
+  // A pairing is standing until explicitly closed (Disconnect) or the app
+  // dies: while paired but unlinked, the radio keeps looking for the buddy.
   const active =
     radio !== null &&
-    (store.s.scanning || store.s.buddySync || store.s.sessionShared) &&
+    (store.s.scanning || store.s.buddySync || store.s.sessionShared || store.s.buddy !== null) &&
     store.s.buddyEndpoint === null;
 
   useEffect(() => {
@@ -137,9 +139,9 @@ export function BuddyRadio() {
         st.patch((s) => ({
           nearbyPeers: [...s.nearbyPeers.filter((p) => p.endpointId !== e.endpointId), e],
         }));
-        // Mid-session reconnect: the known buddy reappeared — reconnect
+        // The known buddy reappeared while the pairing stands — reconnect
         // without anyone having to tap anything.
-        if (st.s.sessionShared && !st.s.buddyEndpoint && st.s.buddy === e.name) {
+        if (!st.s.buddyEndpoint && st.s.buddy === e.name) {
           r.requestConnection(myName(st.s), e.endpointId).catch(() => {});
         }
       }),
@@ -150,19 +152,52 @@ export function BuddyRadio() {
         }))
       ),
 
-      // Both sides must accept; v1 trusts proximity and auto-accepts. The
-      // incoming side also opens the sync screen — unless a shared session is
-      // live, where this is a silent reconnect.
+      // First pairing is code-gated: both phones show Nearby's auth digits
+      // and both users confirm (the scan sheet renders the code; accept /
+      // reject happen there). Re-pairing with the already-trusted buddy is
+      // silent — that's the standing-pairing reconnect.
       r.addListener('onConnectionInitiated', (e) => {
-        r.acceptConnection(e.endpointId).catch(() => {});
-        if (e.isIncoming && !ref.current.s.sessionShared) {
-          ref.current.patch({ buddy: e.name, buddySync: true, scanning: false });
+        const st = ref.current;
+        if (e.name === st.s.buddy) {
+          r.acceptConnection(e.endpointId).catch(() => {});
+          return;
         }
+        // Strangers only pair through the code check, and the code only
+        // shows in the share sheet — anyone knocking while we're not in
+        // share mode (e.g. an ex-buddy's phone auto-reconnecting after a
+        // one-sided disconnect) is turned away.
+        if (!st.s.scanning) {
+          r.rejectConnection(e.endpointId).catch(() => {});
+          return;
+        }
+        st.patch({
+          pendingAuth: {
+            endpointId: e.endpointId,
+            name: e.name,
+            digits: e.authDigits,
+            incoming: e.isIncoming,
+          },
+        });
       }),
+
+      r.addListener('onConnectionFailed', (e) =>
+        ref.current.patch((s) =>
+          s.pendingAuth?.endpointId === e.endpointId ? { pendingAuth: null } : null
+        )
+      ),
 
       r.addListener('onConnected', (e) => {
         const st = ref.current;
-        st.patch({ buddyEndpoint: e.endpointId, scanning: false });
+        const pa = st.s.pendingAuth;
+        st.patch({
+          buddyEndpoint: e.endpointId,
+          scanning: false,
+          // A confirmed first pairing lands in the sync screen; a silent
+          // reconnect changes nothing on screen.
+          ...(pa && pa.endpointId === e.endpointId
+            ? { buddy: pa.name, pendingAuth: null, buddySync: true }
+            : {}),
+        });
         r.sendPayload(
           e.endpointId,
           JSON.stringify({ v: 1, t: 'snapshot', name: myName(st.s), data: shareableSlice(st.s) })

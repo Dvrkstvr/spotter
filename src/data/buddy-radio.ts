@@ -37,6 +37,7 @@ export type Radio = {
   stopDiscovery(): Promise<void>;
   requestConnection(name: string, endpointId: string): Promise<void>;
   acceptConnection(endpointId: string): Promise<void>;
+  rejectConnection(endpointId: string): Promise<void>;
   sendPayload(endpointId: string, data: string): Promise<void>;
   disconnectFrom(endpointId: string): Promise<void>;
   stopAll(): Promise<void>;
