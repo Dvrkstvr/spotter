@@ -93,6 +93,34 @@ Everything is currently seed data, frozen in memory (README "Known gaps").
       `lastLog`, which feeds the "last time" ghosts and the exercise sheet's
       last-session rows with their real date.
 
+## 7. Real buddy radio: dev build + Google Nearby Connections
+
+Follow-up to #5's mock-transport decision, after the app proved itself in
+real gym use.
+
+- [x] **Development build.** Composite Android SDK at `E:\android-sdk`
+      (junctions into Unity 6000.5.0f1's SDK + NDK 27.2, licenses accepted by
+      hand), `expo prebuild` with package `com.calvinkohl.workoutdiary`,
+      `expo-dev-client` + `expo-build-properties` (NDK pin). `android/` stays
+      gitignored — regenerate, don't edit.
+- [x] **Native module** `modules/expo-nearby-buddy`: Kotlin Expo module over
+      Google Nearby Connections (P2P_POINT_TO_POINT, byte payloads, one
+      service id), all events forwarded to JS. Manifest carries the full
+      Android 7→14 permission matrix; runtime requests happen JS-side via
+      PermissionsAndroid (`ensureRadioPermissions`).
+- [x] **Radio integration.** `buddy-radio.ts` bridges the module optionally —
+      Expo Go gets `null` and keeps the mock everywhere. `<BuddyRadio>`
+      (mounted with the overlays) owns the lifecycle: advertise+discover
+      while scanning or waiting, auto-accept, snapshot exchange on connect,
+      incoming items merged via the same `importFromPeer`. Scan sheet lists
+      live endpoints; sync overlay reads `s.buddySnapshot` for both
+      transports; sends go over the air for real.
+- [ ] **Field test with the buddy's phone** — install the release APK on both
+      phones, pair in person, sync. Pre-Android-12 phones need Location
+      Services ON for discovery (OS requirement, not ours).
+- [ ] Later: surface Nearby's authentication digits during pairing instead of
+      trusting proximity; reconnect flow that doesn't require re-scanning.
+
 ## Suggested order
 
 1 (small, half done) → 3 (small) → 2 (medium) → 6 (persistence at least) →

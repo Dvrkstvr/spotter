@@ -9,27 +9,43 @@ Design — the Nocturne design system, dark-only, in German and English.
 
 ## Running it
 
-```bash
-npm run android
-```
+Two ways, and both stay supported:
 
-That starts the dev server and opens the app on a connected device or emulator.
-`npm start` alone gives you the QR code and the usual Expo menu.
+- **Standalone / dev build** (the real app, with the real buddy radio):
 
-The app targets Android and runs in **Expo Go**. iOS config is untouched but
-unexercised — nothing has been checked on it.
+  ```bash
+  npm run android
+  ```
+
+  That runs `expo run:android` — Gradle-builds the native project and installs
+  it on a connected device. A shareable release APK comes from
+  `cd android && ./gradlew assembleRelease` (lands in
+  `android/app/build/outputs/apk/release/`). The build uses the Android
+  SDK/NDK that ships with Unity, assembled into `E:\android-sdk` as directory
+  junctions (see `android/local.properties`).
+
+- **Expo Go** (JS-only iteration, mock buddy radio):
+
+  ```bash
+  npm start
+  ```
+
+  Scan the QR code from Expo Go. Native modules aren't available there, so
+  the buddy sync falls back to its mock transport automatically.
+
+iOS config is untouched but unexercised — nothing has been checked on it.
 
 ### Why SDK 54 and not the latest
 
 Expo Go supports exactly one SDK at a time, and the Play Store won't serve a
 newer Expo Go than 54.0.8 to this phone — its Android version is below what the
-newer builds require. So the project is pinned to SDK 54 to match. The app
+newer builds require. So the project was pinned to SDK 54 to match. The app
 itself only needs Android 7.0 (`minSdkVersion` 24); it's Expo Go that's fussy,
 not the app.
 
-To move to a newer SDK later, build a development build instead of relying on
-Expo Go — that's your own client APK, so Expo Go's ceiling stops applying. The
-Android SDK bundled with Unity on this machine is enough to build one locally.
+The dev build now exists (see "Running it"), so Expo Go's ceiling no longer
+hard-blocks an SDK upgrade — it would just cost the Expo Go workflow. Still
+pinned to 54 for now to keep both paths alive.
 
 ## Checks
 
@@ -82,13 +98,16 @@ hardcodes nothing.
 
 These are deliberate, and each is called out in the code:
 
-- **The buddy radio is a mock.** The full pairing and sync flow exists — a
-  Buddy sync screen diffs both devices and transfers missing items and
-  translations — but it runs on the canned transport in
-  `src/data/buddy-transport.ts`, because real Bluetooth needs a native module
-  Expo Go can't load. Receiving from a mock peer genuinely imports into your
-  data; sending is simulated. A real transport replaces that file's three
-  functions.
+- **The buddy radio is real in the dev build, mock in Expo Go.** The sync
+  flow (diff both devices, transfer missing items and translations) runs on
+  Google Nearby Connections — Bluetooth + Wi-Fi Direct, no network needed —
+  via the local native module in `modules/expo-nearby-buddy`, bridged by
+  `src/data/buddy-radio.ts` and orchestrated by the always-mounted
+  `<BuddyRadio>` controller. In Expo Go the native module doesn't exist and
+  everything falls back to the canned transport in
+  `src/data/buddy-transport.ts`, where sends are simulated (the screen says
+  so). Pairing auto-accepts on proximity; the authentication digits Nearby
+  provides are not yet surfaced for comparison.
 - **Routine editing has no Edit mode.** The button toggles its own label and
   nothing else — faithful to the design, where the rows are always editable.
 

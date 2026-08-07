@@ -108,3 +108,27 @@ export const diffBuddy = (local: SyncSide, peer: BuddySnapshot): BuddyDiff => ({
   receive: oneWay(peer, local),
   send: oneWay(local, peer),
 });
+
+/** The shareable slice of a device's state — what a snapshot carries. */
+export const shareableSlice = (s: SyncSide): SyncSide => ({
+  groups: s.groups,
+  kinds: s.kinds,
+  custom: s.custom,
+  routines: s.routines,
+});
+
+/* ── wire protocol (real radio) ────────────────────────────────────────── */
+
+/** Messages the two phones exchange once Nearby connects them. */
+export type BuddyMessage =
+  | { v: 1; t: 'snapshot'; name: string; data: SyncSide }
+  | { v: 1; t: 'item'; item: SyncItem };
+
+export const parseBuddyMessage = (raw: string): BuddyMessage | null => {
+  try {
+    const m = JSON.parse(raw);
+    return m && m.v === 1 && (m.t === 'snapshot' || m.t === 'item') ? (m as BuddyMessage) : null;
+  } catch {
+    return null;
+  }
+};

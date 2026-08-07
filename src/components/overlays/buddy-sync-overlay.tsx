@@ -17,7 +17,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CHECK_D, Icon } from '@/components/icon';
 import { FullScreen } from '@/components/sheet';
 import { useBackClose } from '@/hooks/use-back-close';
-import { BuddySnapshot, connectPeer, scanPeers, sendToPeer } from '@/data/buddy-transport';
+import { hasRadio, radio } from '@/data/buddy-radio';
+import { connectPeer, scanPeers, sendToPeer } from '@/data/buddy-transport';
 import { BuddyDiff, diffBuddy, SyncItem, syncItemId } from '@/data/buddy-sync';
 import { Strings } from '@/data/i18n';
 import { color, font, t, tracking } from '@/design/tokens';
@@ -27,36 +28,44 @@ import { resolveNames, useStore } from '@/store/workout-store';
 export function BuddySyncOverlay() {
   const { s, L, patch, importFromPeer } = useStore();
   const insets = useSafeAreaInsets();
-  const close = () => patch({ buddySync: false });
+
+  // Real radio: <BuddyRadio> fills s.buddySnapshot when the peer's snapshot
+  // arrives. Mock: the effect below fakes the same thing. Either way this
+  // overlay only ever reads the store.
+  const snapshot = s.buddySnapshot;
+  const endpoint = s.buddyEndpoint;
+
+  const close = () => {
+    if (radio && endpoint) radio.disconnectFrom(endpoint).catch(() => {});
+    patch({ buddySync: false, buddySnapshot: null, buddyEndpoint: null });
+  };
   useBackClose(close);
 
-  const [snapshot, setSnapshot] = useState<BuddySnapshot | null>(null);
   const [diff, setDiff] = useState<BuddyDiff | null>(null);
   const [done, setDone] = useState<Set<string>>(new Set());
 
   const buddyName = s.buddy;
 
-  // Connect on open. The mock resolves names to peers; a real transport
-  // would reconnect to the already-paired device here.
+  // Mock connect on open (Expo Go). With the real radio the connection was
+  // already requested from the scan sheet; the snapshot lands on its own.
   useEffect(() => {
+    if (hasRadio) return;
     let alive = true;
-    setSnapshot(null);
-    setDiff(null);
-    setDone(new Set());
     const peer = scanPeers().find((p) => p.name === buddyName);
     if (!peer) return;
     connectPeer(peer.id).then((snap) => {
-      if (alive) setSnapshot(snap);
+      if (alive) patch({ buddySnapshot: snap });
     });
     return () => {
       alive = false;
     };
-  }, [buddyName]);
+  }, [buddyName, patch]);
 
   // Diff once, when the snapshot lands. Reads the store at that moment;
   // deliberately not re-diffed on every import so the list stays put.
   useEffect(() => {
     if (!snapshot) return;
+    setDone(new Set());
     setDiff(
       diffBuddy(
         { groups: s.groups, kinds: s.kinds, custom: s.custom, routines: s.routines },
@@ -77,7 +86,15 @@ export function BuddySyncOverlay() {
   const send = (item: SyncItem) => {
     if (!snapshot) return;
     const id = syncItemId(item);
-    sendToPeer(snapshot.peer.id, item).then(() => mark(id));
+    if (radio && endpoint) {
+      // Real: push it over the air; the buddy's phone merges it on arrival.
+      radio
+        .sendPayload(endpoint, JSON.stringify({ v: 1, t: 'item', item }))
+        .then(() => mark(id))
+        .catch(() => {});
+    } else {
+      sendToPeer(snapshot.peer.id, item).then(() => mark(id));
+    }
   };
 
   const pending = (list: SyncItem[]) => list.filter((i) => !done.has(syncItemId(i)));
@@ -96,7 +113,7 @@ export function BuddySyncOverlay() {
         <H2 size={t.h2} style={styles.tight}>
           {L.buddySync}
         </H2>
-        <Text style={styles.demoNote}>{L.syncDemoNote}</Text>
+        {!hasRadio && <Text style={styles.demoNote}>{L.syncDemoNote}</Text>}
 
         {!diff || !snapshot ? (
           <Text style={styles.connecting}>

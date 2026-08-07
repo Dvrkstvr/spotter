@@ -52,6 +52,7 @@ export const DICT = {
     transferAll: 'Transfer all', transferOne: 'Transfer', addedMark: 'Added', sentMark: 'Sent',
     inSync: 'Everything in sync.',
     typeGroup: 'Group', typeKind: 'Equipment', typeExercise: 'Exercise', typeRoutine: 'Routine',
+    nearbyDevice: 'Nearby device',
   },
   de: {
     today: 'Heute', plan: 'Plan', routines: 'Routinen', exercises: 'Übungen', you: 'Profil', settings: 'Einstellungen',
@@ -90,6 +91,7 @@ export const DICT = {
     transferAll: 'Alle übertragen', transferOne: 'Übertragen', addedMark: 'Hinzugefügt', sentMark: 'Gesendet',
     inSync: 'Alles synchron.',
     typeGroup: 'Gruppe', typeKind: 'Gerät', typeExercise: 'Übung', typeRoutine: 'Routine',
+    nearbyDevice: 'Gerät in der Nähe',
   },
 } as const;
 

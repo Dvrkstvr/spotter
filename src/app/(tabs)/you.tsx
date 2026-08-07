@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { GEAR_D, Icon } from '@/components/icon';
 import { ImageSlot } from '@/components/image-slot';
 import { Screen } from '@/components/screen';
+import { hasRadio, radio } from '@/data/buddy-radio';
 import { color, font, radius, t, tracking } from '@/design/tokens';
 import { Btn, H2, H6 } from '@/design/ui';
 import { useStore } from '@/store/workout-store';
@@ -89,13 +90,18 @@ export default function YouScreen() {
             variant="ghost"
             label={L.sync}
             labelStyle={styles.syncLabel}
-            onPress={() => patch({ buddySync: true })}
+            // Real radio holds no standing connection — syncing again means
+            // finding the buddy nearby again. The mock reconnects instantly.
+            onPress={() => patch(hasRadio ? { scanning: true } : { buddySync: true })}
           />
           <Btn
             variant="ghost"
             label={L.disconnect}
             labelStyle={styles.disconnect}
-            onPress={() => patch({ buddy: null })}
+            onPress={() => {
+              radio?.stopAll().catch(() => {});
+              patch({ buddy: null, buddyEndpoint: null, buddySnapshot: null });
+            }}
           />
         </View>
       ) : (

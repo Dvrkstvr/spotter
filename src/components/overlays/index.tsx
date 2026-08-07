@@ -12,6 +12,7 @@
  * selector replaces the design's tap-to-cycle, and buddy sync is the transfer
  * screen the design's mock pairing never had.
  */
+import { BuddyRadio } from '@/components/buddy-radio';
 import { BuddySyncOverlay } from '@/components/overlays/buddy-sync-overlay';
 import { ExerciseSheet } from '@/components/overlays/exercise-sheet';
 import { InstructionsSheet } from '@/components/overlays/instructions-sheet';
@@ -31,6 +32,7 @@ export function Overlays() {
 
   return (
     <>
+      <BuddyRadio />
       {s.exOpen && <ExerciseSheet />}
       {s.routineOpen && <RoutineOverlay />}
       {s.settingsOpen && <SettingsOverlay />}

@@ -6,9 +6,18 @@ Read the exact versioned docs at https://docs.expo.dev/versions/v54.0.0/ before
 writing any code.
 
 **This project is pinned to SDK 54 on purpose.** Calvin's phone is too old for
-any Expo Go newer than 54.0.8, and Expo Go only ever supports one SDK. Bumping
-the SDK breaks his only way of running the app. Don't upgrade it without also
-moving him to a development build — see "Running it" in the README.
+any Expo Go newer than 54.0.8, and Expo Go only ever supports one SDK. A dev
+build now exists (see "Running it" in the README) so the pin is no longer
+load-bearing, but keep it until an upgrade is actually wanted — Expo Go is
+still the fast JS-iteration path and must keep working, which also means:
+never import a native module directly from app code. Go through an optional
+bridge like `src/data/buddy-radio.ts` (`requireOptionalNativeModule` + a
+mock fallback), so Expo Go degrades instead of crashing.
+
+Native side: `android/` is generated (gitignored) — change `app.json` and
+rerun `npx expo prebuild --platform android`, don't edit `android/` by hand.
+The Android SDK/NDK comes from Unity via junctions at `E:\android-sdk`
+(licenses hand-accepted there). Local native modules live in `modules/`.
 
 ## What this project is
 

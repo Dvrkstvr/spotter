@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Sheet } from '@/components/sheet';
+import { hasRadio, radio } from '@/data/buddy-radio';
 import { scanPeers } from '@/data/buddy-transport';
 import { useBackClose } from '@/hooks/use-back-close';
 import { color, font, wash } from '@/design/tokens';
@@ -10,12 +11,25 @@ import { Btn, H4 } from '@/design/ui';
 import { useStore } from '@/store/workout-store';
 
 export function ScanSheet() {
-  const { L, patch } = useStore();
+  const { s, L, patch } = useStore();
   const close = () => patch({ scanning: false });
   useBackClose(close);
 
-  // Discovery comes from the transport (mock — see buddy-transport.ts).
-  const nearby = scanPeers();
+  // Real radio: live Nearby endpoints, discovered by <BuddyRadio> while this
+  // sheet is open. Expo Go: the canned mock list.
+  const nearby = hasRadio
+    ? s.nearbyPeers.map((p) => ({ id: p.endpointId, name: p.name, device: L.nearbyDevice }))
+    : scanPeers();
+
+  const invite = (n: { id: string; name: string }) => {
+    if (hasRadio && radio) {
+      const me = s.profile.name.trim() || 'Workout Diary';
+      radio.requestConnection(me, n.id).catch(() => {});
+    }
+    // Pairing goes straight into the sync screen — the first thing two
+    // freshly-paired devices want is to agree on their data.
+    patch({ buddy: n.name, scanning: false, buddySync: true });
+  };
 
   return (
     <Sheet zIndex={87} maxHeight="70%" onClose={close}>
@@ -28,13 +42,7 @@ export function ScanSheet() {
 
       <View style={styles.list}>
         {nearby.map((n) => (
-          <Pressable
-            key={n.id}
-            // Pairing goes straight into the sync screen — the first thing
-            // two freshly-paired devices want is to agree on their data.
-            onPress={() => patch({ buddy: n.name, scanning: false, buddySync: true })}
-            style={styles.row}
-          >
+          <Pressable key={n.id} onPress={() => invite(n)} style={styles.row}>
             <View style={styles.avatar}>
               <Text style={styles.initial}>{n.name[0]}</Text>
             </View>

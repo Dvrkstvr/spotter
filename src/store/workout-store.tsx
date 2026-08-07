@@ -100,6 +100,11 @@ export type State = {
   buddy: string | null;
   /** whether the buddy-sync overlay is open */
   buddySync: boolean;
+  /** live radio state (real transport only; all transient) */
+  nearbyPeers: { endpointId: string; name: string }[];
+  buddyEndpoint: string | null;
+  /** the connected peer's shareable data, from either transport */
+  buddySnapshot: BuddySnapshot | null;
   pickWorkout: boolean;
   /** day-of-week index whose scheduled routine is being picked, or null */
   dayPick: number | null;
@@ -136,6 +141,9 @@ const initialState: State = {
   scanning: false,
   buddy: null,
   buddySync: false,
+  nearbyPeers: [],
+  buddyEndpoint: null,
+  buddySnapshot: null,
   pickWorkout: false,
   dayPick: null,
   groups: DEFAULT_GROUPS.map((g) => ({ ...g })),
