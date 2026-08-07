@@ -62,6 +62,9 @@ export function SessionOverlay() {
             const doneN = entry.sets.filter((x) => x.done).length;
             const allDone = doneN === entry.sets.length && entry.sets.length > 0;
             const settings = setup(meta.id);
+            // There is no next exercise past the last one, so that row closes
+            // out the workout instead of going nowhere.
+            const isLast = i === session.list.length - 1;
 
             return (
               <View
@@ -201,13 +204,17 @@ export function SessionOverlay() {
 
                     <Pressable
                       onPress={() =>
-                        patch((st) => ({
-                          active: Math.min(st.active + 1, (st.session?.list.length ?? 1) - 1),
-                        }))
+                        isLast
+                          ? finishSession()
+                          : patch((st) => ({
+                              active: Math.min(st.active + 1, (st.session?.list.length ?? 1) - 1),
+                            }))
                       }
                       style={styles.next}
                     >
-                      <Text style={styles.nextLabel}>{L.nextExercise}</Text>
+                      <Text style={[styles.nextLabel, isLast && styles.nextLabelFinish]}>
+                        {isLast ? L.finishWorkout : L.nextExercise}
+                      </Text>
                       <Text style={styles.nextChevron}>›</Text>
                     </Pressable>
                   </View>
@@ -372,6 +379,8 @@ const styles = StyleSheet.create({
     borderTopColor: wash.text(8),
   },
   nextLabel: { flex: 1, fontFamily: font.regular, fontSize: 12.5, color: color.neutral400 },
+  /** The closing action reads in the accent, like every other terminal action. */
+  nextLabelFinish: { color: color.accent },
   nextChevron: { fontFamily: font.regular, fontSize: 14, color: color.accent },
 
   addExercise: { marginTop: 12, height: 40 },

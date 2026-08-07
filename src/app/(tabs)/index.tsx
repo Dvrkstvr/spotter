@@ -3,9 +3,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { CHECK_D, Icon } from '@/components/icon';
 import { Screen } from '@/components/screen';
 import { DOW } from '@/data/exercises';
-import { color, elevation, font, t, tracking, TODAY_DOW } from '@/design/tokens';
+import { color, elevation, font, t, tracking, TODAY_DOM, TODAY_DOW } from '@/design/tokens';
 import { Btn, CardKicker, H2, H3, H6 } from '@/design/ui';
 import { fmt, useStore } from '@/store/workout-store';
 
@@ -15,6 +16,14 @@ export default function TodayScreen() {
 
   const todayRid = s.schedule[TODAY_DOW];
   const tr = routine(todayRid ?? null);
+
+  /**
+   * Whether today has a logged session. The design has no completed state for
+   * this card — it always reads "planned" — so this treatment is an addition,
+   * built from the design's own cues: the accent check from a ticked set, and
+   * the demotion of a spent primary button to secondary.
+   */
+  const doneToday = s.done.includes(TODAY_DOM);
 
   const todayRoutine = tr
     ? {
