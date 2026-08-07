@@ -5,29 +5,39 @@ import { Sheet } from '@/components/sheet';
 import { useBackClose } from '@/hooks/use-back-close';
 import { todayDow } from '@/data/date';
 import { color, font, wash } from '@/design/tokens';
-import { Btn, H4 } from '@/design/ui';
+import { Btn, H4, missingName } from '@/design/ui';
 import { useStore } from '@/store/workout-store';
 
 export function PickWorkoutSheet() {
-  const { s, L, patch, ex, start } = useStore();
+  const { s, L, patch, ex, start, rInfo, exInfo } = useStore();
   const close = () => patch({ pickWorkout: false });
   useBackClose(close);
 
   const todayRid = s.schedule[todayDow()];
+
+  const exNames = (items: { ex: string }[]) =>
+    items
+      .map((i) => {
+        const e = ex(i.ex);
+        return e ? exInfo(e).text : null;
+      })
+      .filter(Boolean)
+      .join(' · ');
 
   const options = [
     ...s.routines
       .filter((r) => r.id !== todayRid)
       .map((r) => ({
         key: r.id,
-        name: r.name,
+        ...rInfo(r),
         meta: `${r.items.length} ${L.exCount}`,
-        detail: r.items.map((i) => ex(i.ex)?.name).filter(Boolean).join(' · '),
+        detail: exNames(r.items),
         go: () => start(r.id),
       })),
     {
       key: '__empty',
-      name: L.emptySession,
+      text: L.emptySession,
+      missing: false,
       meta: '',
       detail: L.addAsYouGo,
       go: () => start(null),
@@ -42,7 +52,7 @@ export function PickWorkoutSheet() {
         {options.map((o) => (
           <Pressable key={o.key} onPress={o.go} style={styles.row}>
             <View style={styles.text}>
-              <Text style={styles.name}>{o.name}</Text>
+              <Text style={[styles.name, o.missing && missingName]}>{o.text}</Text>
               <Text style={styles.detail} numberOfLines={1}>
                 {o.detail}
               </Text>

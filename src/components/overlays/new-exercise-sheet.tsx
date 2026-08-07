@@ -4,8 +4,8 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Sheet } from '@/components/sheet';
 import { useBackClose } from '@/hooks/use-back-close';
 import { color, font, wash } from '@/design/tokens';
-import { Btn, Field, H4, H6, Input, Seg } from '@/design/ui';
-import { useStore } from '@/store/workout-store';
+import { Btn, Field, H4, H6, Input, missingName, Seg } from '@/design/ui';
+import { resolveNames, useStore } from '@/store/workout-store';
 
 export function NewExerciseSheet() {
   const { s, L, patch } = useStore();
@@ -25,7 +25,9 @@ export function NewExerciseSheet() {
           ...st.custom,
           {
             id: `x${Date.now()}`,
+            // Canonical fallback plus the alias in the language it was typed in.
             name: c.name.trim(),
+            names: { [st.lang]: c.name.trim() },
             group: c.group,
             kind: c.kind,
             last: 0,
@@ -50,10 +52,11 @@ export function NewExerciseSheet() {
       <H6 style={styles.head}>{L.muscleGroup}</H6>
       <Seg
         options={s.groups
-          .filter((g) => g.label.trim())
+          .map((g) => ({ ...g, r: resolveNames(g.labels, s.lang) }))
+          .filter((g) => g.r.text.trim())
           .map((g) => ({
             key: g.key,
-            label: g.label,
+            label: g.r.text,
             on: draft.group === g.key,
             pick: () => patch((st) => ({ creating: { ...st.creating!, group: g.key } })),
           }))}
@@ -62,7 +65,8 @@ export function NewExerciseSheet() {
       <H6 style={styles.head}>{L.equipment}</H6>
       <View style={styles.chips}>
         {s.kinds
-          .filter((k) => k.label.trim())
+          .map((k) => ({ ...k, r: resolveNames(k.labels, s.lang) }))
+          .filter((k) => k.r.text.trim())
           .map((k) => {
             const on = draft.kind === k.key;
             return (
@@ -77,8 +81,14 @@ export function NewExerciseSheet() {
                   },
                 ]}
               >
-                <Text style={[styles.chipLabel, { color: on ? color.accent200 : color.neutral400 }]}>
-                  {k.label}
+                <Text
+                  style={[
+                    styles.chipLabel,
+                    { color: on ? color.accent200 : color.neutral400 },
+                    k.r.missing && missingName,
+                  ]}
+                >
+                  {k.r.text}
                 </Text>
               </Pressable>
             );

@@ -12,11 +12,12 @@ import { CHECK_D, Icon } from '@/components/icon';
 import { FullScreen } from '@/components/sheet';
 import { useBackClose } from '@/hooks/use-back-close';
 import { color, font, t, tracking, wash } from '@/design/tokens';
-import { Btn, H3, Input, Tag } from '@/design/ui';
+import { Btn, H3, Input, missingName, Tag } from '@/design/ui';
 import { prevNums, useStore } from '@/store/workout-store';
 
 export function SessionOverlay() {
-  const { s, L, patch, ex, gLabel, kLabel, setup, mutSession, totals, finishSession } = useStore();
+  const { s, L, patch, ex, gInfo, kInfo, exInfo, setup, mutSession, totals, finishSession } =
+    useStore();
   const insets = useSafeAreaInsets();
 
   // No back route in the design — only Discard and Finish. Swallow it so a
@@ -76,9 +77,11 @@ export function SessionOverlay() {
               >
                 <Pressable onPress={() => patch({ active: i })} style={styles.cardHead}>
                   <View style={styles.cardHeadText}>
-                    <Text style={styles.cardName}>{meta.name}</Text>
+                    <Text style={[styles.cardName, exInfo(meta).missing && missingName]}>
+                      {exInfo(meta).text}
+                    </Text>
                     <Text style={styles.cardSub}>
-                      {kLabel(meta.kind)} · {gLabel(meta.group)}
+                      {kInfo(meta.kind).text} · {gInfo(meta.group).text}
                     </Text>
                   </View>
                   <Text

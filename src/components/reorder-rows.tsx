@@ -16,7 +16,13 @@ import { GripIcon } from '@/components/icon';
 import { Input } from '@/design/ui';
 import { color, font } from '@/design/tokens';
 
-export type ReorderRow = { key: string; label: string; count: number | '' };
+export type ReorderRow = {
+  key: string;
+  label: string;
+  /** Overrides the list placeholder — e.g. the other language's name. */
+  placeholder?: string;
+  count: number | '';
+};
 
 const GAP = 5;
 
@@ -98,7 +104,7 @@ export function ReorderRows({
             </View>
             <Input
               style={styles.input}
-              placeholder={placeholder}
+              placeholder={row.placeholder ?? placeholder}
               value={row.label}
               onChangeText={(v) => onLabel(i, v)}
             />

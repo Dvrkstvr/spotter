@@ -5,24 +5,25 @@ import { ImageSlot } from '@/components/image-slot';
 import { Sheet } from '@/components/sheet';
 import { useBackClose } from '@/hooks/use-back-close';
 import { color, font, radius } from '@/design/tokens';
-import { Btn, Field, H4, H6, Input, Tag } from '@/design/ui';
+import { Btn, Field, H4, H6, Input, missingName, Tag } from '@/design/ui';
 import { useStore } from '@/store/workout-store';
 
 export function InstructionsSheet() {
-  const { s, L, patch, ex, gLabel, kLabel, setup, cues } = useStore();
+  const { s, L, patch, ex, gInfo, kInfo, exInfo, setup, cues } = useStore();
   const close = () => patch({ instrOpen: null });
   useBackClose(close);
 
   const e = ex(s.instrOpen!);
   if (!e) return null;
 
+  const name = exInfo(e);
   const settings = setup(e.id);
 
   return (
     <Sheet zIndex={86} maxHeight="88%" onClose={close}>
-      <H4>{e.name}</H4>
+      <H4 style={name.missing && missingName}>{name.text}</H4>
       <Text style={styles.meta}>
-        {kLabel(e.kind)} · {gLabel(e.group)}
+        {kInfo(e.kind).text} · {gInfo(e.group).text}
       </Text>
 
       <View style={styles.mainFrame}>

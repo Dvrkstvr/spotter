@@ -8,18 +8,24 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FullScreen } from '@/components/sheet';
 import { useBackClose } from '@/hooks/use-back-close';
 import { color, font, wash } from '@/design/tokens';
-import { Btn, Input } from '@/design/ui';
+import { Btn, Input, missingName } from '@/design/ui';
 import { Exercise } from '@/data/exercises';
 import { useStore } from '@/store/workout-store';
 
 export function PickerOverlay() {
-  const { s, L, patch, allEx, gLabel, kLabel, lastFor } = useStore();
+  const { s, L, patch, allEx, gInfo, kInfo, exInfo, lastFor } = useStore();
   const insets = useSafeAreaInsets();
   const close = () => patch({ picker: null, query: '' });
   useBackClose(close);
 
   const q = s.query.trim().toLowerCase();
-  const list = allEx().filter((e) => !q || e.name.toLowerCase().includes(q));
+  // Search matches the canonical name and every language's alias.
+  const list = allEx().filter(
+    (e) =>
+      !q ||
+      e.name.toLowerCase().includes(q) ||
+      Object.values(e.names ?? {}).some((n) => n?.toLowerCase().includes(q))
+  );
 
   const add = (e: Exercise) => {
     if (s.picker === 'routine' && s.routineOpen) {
@@ -82,17 +88,20 @@ export function PickerOverlay() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {list.map((e) => (
-          <Pressable key={e.id} onPress={() => add(e)} style={styles.row}>
-            <View style={styles.text}>
-              <Text style={styles.name}>{e.name}</Text>
-              <Text style={styles.kind}>
-                {kLabel(e.kind)} · {gLabel(e.group)}
-              </Text>
-            </View>
-            <Text style={styles.plus}>+</Text>
-          </Pressable>
-        ))}
+        {list.map((e) => {
+          const name = exInfo(e);
+          return (
+            <Pressable key={e.id} onPress={() => add(e)} style={styles.row}>
+              <View style={styles.text}>
+                <Text style={[styles.name, name.missing && missingName]}>{name.text}</Text>
+                <Text style={styles.kind}>
+                  {kInfo(e.kind).text} · {gInfo(e.group).text}
+                </Text>
+              </View>
+              <Text style={styles.plus}>+</Text>
+            </Pressable>
+          );
+        })}
       </ScrollView>
     </FullScreen>
   );

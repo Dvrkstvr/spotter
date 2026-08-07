@@ -5,17 +5,18 @@ import { Sheet } from '@/components/sheet';
 import { useBackClose } from '@/hooks/use-back-close';
 import { fmtDayTiny } from '@/data/i18n';
 import { color, font, wash } from '@/design/tokens';
-import { Btn, H4, H6, Input, Tag } from '@/design/ui';
+import { Btn, H4, H6, Input, missingName, Tag } from '@/design/ui';
 import { useStore } from '@/store/workout-store';
 
 export function ExerciseSheet() {
-  const { s, L, patch, ex, gLabel, kLabel, setup, mutSetup, lastFor } = useStore();
+  const { s, L, patch, ex, gInfo, kInfo, exInfo, rInfo, setup, mutSetup, lastFor } = useStore();
   const close = () => patch({ exOpen: null });
   useBackClose(close);
 
   const e = ex(s.exOpen!);
   if (!e) return null;
 
+  const name = exInfo(e);
   const rows = setup(e.id);
   // Really logged numbers when there are any, else the seed. The seed has no
   // date (the design hardcoded '5 Aug' here), so the date column stays empty.
@@ -23,15 +24,17 @@ export function ExerciseSheet() {
   const lastWhen = last.date
     ? fmtDayTiny(s.lang, new Date(`${last.date}T00:00:00`))
     : '';
-  const usedIn = s.routines.filter((r) => r.items.some((i) => i.ex === e.id)).map((r) => r.name);
+  const usedIn = s.routines
+    .filter((r) => r.items.some((i) => i.ex === e.id))
+    .map((r) => rInfo(r).text);
 
   return (
     <Sheet zIndex={70} maxHeight="80%" scrimOpacity={62} onClose={close}>
-      <H4>{e.name}</H4>
+      <H4 style={name.missing && missingName}>{name.text}</H4>
 
       <View style={styles.tagRow}>
-        <Tag tone="neutral" label={gLabel(e.group)} />
-        <Tag tone="outline" label={kLabel(e.kind)} />
+        <Tag tone="neutral" label={gInfo(e.group).text} />
+        <Tag tone="outline" label={kInfo(e.kind).text} />
         <View style={styles.spacer} />
         <Btn
           variant="secondary"

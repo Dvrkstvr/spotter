@@ -1,8 +1,12 @@
 /** Exercise library and per-exercise instructions. Ported from the design's EX / INFO. */
+import { LangMap } from './i18n';
 
 export type Exercise = {
   id: string;
+  /** Canonical name — the seed library is language-neutral gym vocabulary. */
   name: string;
+  /** Per-language names for user-created exercises. Seed entries have none. */
+  names?: LangMap;
   /** Key into the user's muscle-group list. */
   group: string;
   /** Key into the user's equipment list. */
@@ -54,12 +58,12 @@ export const INFO: Record<string, ExerciseInfo> = {
 };
 
 export type RoutineItem = { ex: string; sets: number; reps: number; w: number };
-export type Routine = { id: string; name: string; items: RoutineItem[] };
+export type Routine = { id: string; names: LangMap; items: RoutineItem[] };
 
 export const DEFAULT_ROUTINES: Routine[] = [
   {
     id: 'chest',
-    name: 'Chest A',
+    names: { en: 'Chest A', de: 'Brust A' },
     items: [
       { ex: 'bench', sets: 4, reps: 8, w: 70 },
       { ex: 'incline', sets: 3, reps: 10, w: 24 },
@@ -69,7 +73,7 @@ export const DEFAULT_ROUTINES: Routine[] = [
   },
   {
     id: 'back',
-    name: 'Back A',
+    names: { en: 'Back A', de: 'Rücken A' },
     items: [
       { ex: 'pullup', sets: 4, reps: 8, w: 0 },
       { ex: 'bbrow', sets: 4, reps: 8, w: 60 },
@@ -79,7 +83,7 @@ export const DEFAULT_ROUTINES: Routine[] = [
   },
   {
     id: 'both',
-    name: 'Chest & Back',
+    names: { en: 'Chest & Back', de: 'Brust & Rücken' },
     items: [
       { ex: 'bench', sets: 4, reps: 8, w: 70 },
       { ex: 'lat', sets: 4, reps: 10, w: 52.5 },
@@ -90,16 +94,20 @@ export const DEFAULT_ROUTINES: Routine[] = [
   },
 ];
 
-export const DEFAULT_GROUPS = [
-  { key: 'Chest', label: 'Chest' },
-  { key: 'Back', label: 'Back' },
-  { key: 'Other', label: 'Other' },
+/** Both languages seeded, so switching language translates the defaults. */
+export const DEFAULT_GROUPS: { key: string; labels: LangMap }[] = [
+  { key: 'Chest', labels: { en: 'Chest', de: 'Brust' } },
+  { key: 'Back', labels: { en: 'Back', de: 'Rücken' } },
+  { key: 'Other', labels: { en: 'Other', de: 'Sonstiges' } },
 ];
 
-export const DEFAULT_KINDS = ['Barbell', 'Dumbbell', 'Machine', 'Cable', 'Bodyweight'].map((k) => ({
-  key: k,
-  label: k,
-}));
+export const DEFAULT_KINDS: { key: string; labels: LangMap }[] = [
+  { key: 'Barbell', labels: { en: 'Barbell', de: 'Langhantel' } },
+  { key: 'Dumbbell', labels: { en: 'Dumbbell', de: 'Kurzhantel' } },
+  { key: 'Machine', labels: { en: 'Machine', de: 'Maschine' } },
+  { key: 'Cable', labels: { en: 'Cable', de: 'Kabelzug' } },
+  { key: 'Bodyweight', labels: { en: 'Bodyweight', de: 'Körpergewicht' } },
+];
 
 export const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 

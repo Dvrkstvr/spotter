@@ -12,13 +12,13 @@ import { toISO, todayDom } from '@/data/date';
 import { DOW } from '@/data/exercises';
 import { MONTHS } from '@/data/i18n';
 import { color, font, t, tracking } from '@/design/tokens';
-import { H2, H4, H6 } from '@/design/ui';
+import { H2, H4, H6, missingName } from '@/design/ui';
 import { useStore } from '@/store/workout-store';
 
 const GRID_GAP = 3;
 
 export default function PlanScreen() {
-  const { s, L, patch, routine, doneOn, loggedThisMonth } = useStore();
+  const { s, L, patch, routine, doneOn, loggedThisMonth, rInfo } = useStore();
   const [gridWidth, setGridWidth] = useState(0);
 
   const cell = gridWidth ? (gridWidth - GRID_GAP * 6) / 7 : 0;
@@ -42,7 +42,7 @@ export default function PlanScreen() {
       s.lang === 'de'
         ? `${DOW[selDow]} ${s.daySel}. ${monthName}`
         : `${DOW[selDow]} ${s.daySel} ${monthName}`,
-    title: selRoutine ? selRoutine.name : L.restDay,
+    title: selRoutine ? rInfo(selRoutine).text : L.restDay,
     body: selRoutine
       ? selDone
         ? L.dayDone
@@ -144,16 +144,21 @@ export default function PlanScreen() {
       <View style={styles.planRows}>
         {DOW.map((d, i) => {
           const r = routine(s.schedule[i] ?? null);
+          const rn = r ? rInfo(r) : null;
           // Opens the routine selector — the design cycled through the seed
           // routines here, which locked out any user-created ones.
           return (
             <Pressable key={d} onPress={() => patch({ dayPick: i })} style={styles.row}>
               <Text style={styles.rowDay}>{d.toUpperCase()}</Text>
               <Text
-                style={[styles.rowName, { color: r ? color.text : color.neutral600 }]}
+                style={[
+                  styles.rowName,
+                  { color: r ? color.text : color.neutral600 },
+                  rn?.missing && missingName,
+                ]}
                 numberOfLines={1}
               >
-                {r ? r.name : L.rest}
+                {rn ? rn.text : L.rest}
               </Text>
               <Text style={styles.rowMeta}>{r ? `${r.items.length} ${L.exCount}` : ''}</Text>
             </Pressable>

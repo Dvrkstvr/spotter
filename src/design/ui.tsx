@@ -84,6 +84,12 @@ export function CardKicker({ style, ...rest }: TextProps) {
   return <Text style={[styles.kicker, style]} {...rest} />;
 }
 
+/**
+ * The cue for a name with no entry in the active language — the fallback
+ * shows greyed and italic until a translation is added in Settings.
+ */
+export const missingName: TextStyle = { color: color.neutral600, fontStyle: 'italic' };
+
 /* ── rules ─────────────────────────────────────────────────────────────── */
 
 /**

@@ -8,26 +8,41 @@ import { Fragment } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Screen } from '@/components/screen';
+import { Exercise } from '@/data/exercises';
 import { color, font, t, tracking, wash } from '@/design/tokens';
-import { Btn, H2, H6, Hr, Input } from '@/design/ui';
-import { fmt, useStore } from '@/store/workout-store';
+import { Btn, H2, H6, Hr, Input, missingName } from '@/design/ui';
+import { fmt, resolveNames, useStore } from '@/store/workout-store';
 
 export default function LibraryScreen() {
-  const { s, L, patch, allEx, kLabel } = useStore();
+  const { s, L, patch, allEx, kInfo, exInfo } = useStore();
 
   const q = s.query.trim().toLowerCase();
-  const filters = [{ key: 'All', label: L.all }, ...s.kinds];
+  const filters = [
+    { key: 'All', label: L.all, missing: false },
+    ...s.kinds.map((k) => {
+      const r = resolveNames(k.labels, s.lang);
+      return { key: k.key, label: r.text, missing: r.missing };
+    }),
+  ];
 
-  const match = (e: { name: string; group: string; kind: string }) =>
-    (!q || e.name.toLowerCase().includes(q) || e.group.toLowerCase().includes(q)) &&
+  // Search matches the canonical name and every language's alias.
+  const match = (e: Exercise) =>
+    (!q ||
+      e.name.toLowerCase().includes(q) ||
+      Object.values(e.names ?? {}).some((n) => n?.toLowerCase().includes(q)) ||
+      e.group.toLowerCase().includes(q)) &&
     (s.filter === 'All' || e.kind === s.filter);
 
   const groups = s.groups
-    .map((g) => ({
-      name: g.label,
-      isDivider: !g.label.trim(),
-      items: allEx().filter((e) => e.group === g.key && match(e)),
-    }))
+    .map((g) => {
+      const r = resolveNames(g.labels, s.lang);
+      return {
+        name: r.text,
+        missing: r.missing,
+        isDivider: !r.text.trim(),
+        items: allEx().filter((e) => e.group === g.key && match(e)),
+      };
+    })
     .filter((g) => g.items.length || g.isDivider);
 
   return (
@@ -73,6 +88,7 @@ export default function LibraryScreen() {
                 style={[
                   styles.chipLabel,
                   { color: f.key === s.filter ? color.accent200 : color.neutral400 },
+                  f.missing && missingName,
                 ]}
               >
                 {f.label}
@@ -89,20 +105,24 @@ export default function LibraryScreen() {
           {g.isDivider ? (
             <Hr style={styles.groupRule} />
           ) : (
-            <H6 style={styles.groupHead}>{g.name}</H6>
+            <H6 style={[styles.groupHead, g.missing && missingName]}>{g.name}</H6>
           )}
           <View style={{ gap: t.gap }}>
-            {g.items.map((e) => (
-              <Pressable key={e.id} onPress={() => patch({ exOpen: e.id })} style={styles.row}>
-                <View style={styles.rowText}>
-                  <Text style={styles.rowName}>{e.name}</Text>
-                  <Text style={styles.rowKind}>{kLabel(e.kind)}</Text>
-                </View>
-                <Text style={styles.rowLast}>
-                  {e.last ? `${fmt(e.last)} kg` : e.kind === 'Bodyweight' ? L.bodyweight : '—'}
-                </Text>
-              </Pressable>
-            ))}
+            {g.items.map((e) => {
+              const name = exInfo(e);
+              const kind = kInfo(e.kind);
+              return (
+                <Pressable key={e.id} onPress={() => patch({ exOpen: e.id })} style={styles.row}>
+                  <View style={styles.rowText}>
+                    <Text style={[styles.rowName, name.missing && missingName]}>{name.text}</Text>
+                    <Text style={[styles.rowKind, kind.missing && missingName]}>{kind.text}</Text>
+                  </View>
+                  <Text style={styles.rowLast}>
+                    {e.last ? `${fmt(e.last)} kg` : e.kind === 'Bodyweight' ? L.bodyweight : '—'}
+                  </Text>
+                </Pressable>
+              );
+            })}
           </View>
         </Fragment>
       ))}

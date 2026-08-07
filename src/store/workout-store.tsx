@@ -24,7 +24,7 @@ import {
   Routine,
   SetupPair,
 } from '@/data/exercises';
-import { DICT, fmtDayLong, Lang, Strings } from '@/data/i18n';
+import { DICT, fmtDayLong, Lang, LangMap, Strings } from '@/data/i18n';
 
 /* ── types ─────────────────────────────────────────────────────────────── */
 
@@ -42,7 +42,13 @@ export type Summary = {
    */
   saveable: SessionExercise[] | null;
 };
-export type Labelled = { key: string; label: string };
+export type Labelled = { key: string; labels: LangMap };
+/**
+ * A name resolved for the current language. `missing` means the current
+ * language has no entry and `text` is a fallback from the other one — shown
+ * greyed as the cue that a translation is still wanted.
+ */
+export type Resolved = { text: string; missing: boolean };
 export type Draft = { name: string; group: string; kind: string };
 export type Profile = { name: string; age: string; weight: string; height: string };
 export type PickerMode = 'routine' | 'session' | null;
@@ -142,7 +148,9 @@ type Patch = Partial<State> | ((s: State) => Partial<State> | null);
  * connection, and a connection does not survive an app restart.
  */
 
-const STORAGE_KEY = 'workout-diary/v1';
+const STORAGE_KEY = 'workout-diary/v2';
+/** v2 added per-language names; v1 blobs are migrated on first load. */
+const STORAGE_KEY_V1 = 'workout-diary/v1';
 
 const PERSIST = [
   'routines', 'schedule', 'history', 'lastLog', 'custom', 'profile',
@@ -165,7 +173,59 @@ const filterPersisted = (raw: unknown): Partial<State> => {
   return out as Partial<State>;
 };
 
+/**
+ * Lift a v1 blob (single `label` / `name` strings) to v2 per-language names.
+ * An untouched default regains its seeded translations; anything the user
+ * named is filed under the blob's language, since that is what they typed in.
+ */
+const migrateV1 = (raw: unknown): Partial<State> => {
+  if (typeof raw !== 'object' || raw === null) return {};
+  const blob = raw as Record<string, any>;
+  const lang: Lang = blob.lang === 'de' ? 'de' : 'en';
+
+  const lift = (defs: readonly { key: string; labels: LangMap }[], rows: any[]): Labelled[] =>
+    rows.map((r) => {
+      if (r?.labels) return r;
+      const label = typeof r?.label === 'string' ? r.label : '';
+      const def = defs.find((d) => d.key === r?.key);
+      if (def && label === def.labels.en) return { key: r.key, labels: { ...def.labels } };
+      return { key: r?.key, labels: label.trim() ? { [lang]: label } : {} };
+    });
+
+  if (Array.isArray(blob.groups)) blob.groups = lift(DEFAULT_GROUPS, blob.groups);
+  if (Array.isArray(blob.kinds)) blob.kinds = lift(DEFAULT_KINDS, blob.kinds);
+  if (Array.isArray(blob.routines))
+    blob.routines = blob.routines.map((r: any) => {
+      if (r?.names) return r;
+      const def = DEFAULT_ROUTINES.find((d) => d.id === r?.id);
+      const names: LangMap =
+        def && r?.name === def.names.en
+          ? { ...def.names }
+          : typeof r?.name === 'string' && r.name.trim()
+            ? { [lang]: r.name }
+            : {};
+      const { name: _drop, ...rest } = r ?? {};
+      return { ...rest, names };
+    });
+  if (Array.isArray(blob.custom))
+    blob.custom = blob.custom.map((e: any) =>
+      e?.names || typeof e?.name !== 'string' ? e : { ...e, names: { [lang]: e.name } }
+    );
+
+  return filterPersisted(blob);
+};
+
 /* ── pure helpers (shared with screens) ────────────────────────────────── */
+
+/** Resolve a per-language name map for a language, falling back to the other. */
+export const resolveNames = (names: LangMap | undefined, lang: Lang, fallback = ''): Resolved => {
+  const cur = names?.[lang]?.trim();
+  if (cur) return { text: cur, missing: false };
+  const other: Lang = lang === 'en' ? 'de' : 'en';
+  const alt = names?.[other]?.trim();
+  if (alt) return { text: alt, missing: true };
+  return { text: fallback, missing: false };
+};
 
 /** Trim trailing zeros the way the design's `fmt` does. */
 export const fmt = (n: number) => String(Math.round(n * 100) / 100);
@@ -206,8 +266,14 @@ function useWorkoutState() {
   useEffect(() => {
     let alive = true;
     AsyncStorage.getItem(STORAGE_KEY)
-      .then((raw) => {
-        if (alive && raw) patch(filterPersisted(JSON.parse(raw)));
+      .then(async (raw) => {
+        if (raw) return filterPersisted(JSON.parse(raw));
+        // No v2 blob yet — lift a v1 one if it exists, then leave it behind.
+        const v1 = await AsyncStorage.getItem(STORAGE_KEY_V1);
+        return v1 ? migrateV1(JSON.parse(v1)) : null;
+      })
+      .then((data) => {
+        if (alive && data) patch(data);
       })
       .catch(() => {}) // unreadable blob → run on the seed rather than crash
       .finally(() => {
@@ -231,8 +297,19 @@ function useWorkoutState() {
   const allEx = () => [...EX, ...state.custom];
   const ex = (id: string) => allEx().find((e) => e.id === id);
   const routine = (id: string | null | undefined) => state.routines.find((r) => r.id === id);
-  const gLabel = (key: string) => state.groups.find((x) => x.key === key)?.label ?? key;
-  const kLabel = (key: string) => state.kinds.find((x) => x.key === key)?.label ?? key;
+
+  /* Per-language names, resolved for the active language. Callers render
+     `.text` and grey it when `.missing` — the "not translated yet" cue. */
+  const gInfo = (key: string): Resolved => {
+    const g = state.groups.find((x) => x.key === key);
+    return g ? resolveNames(g.labels, state.lang) : { text: key, missing: false };
+  };
+  const kInfo = (key: string): Resolved => {
+    const k = state.kinds.find((x) => x.key === key);
+    return k ? resolveNames(k.labels, state.lang) : { text: key, missing: false };
+  };
+  const exInfo = (e: Exercise): Resolved => resolveNames(e.names, state.lang, e.name);
+  const rInfo = (r: Routine): Resolved => resolveNames(r.names, state.lang);
 
   /** "Last time" for an exercise — really logged history first, then the seed. */
   const lastFor = (id: string): { date: string | null; sets: string[] } => {
@@ -306,7 +383,7 @@ function useWorkoutState() {
     patch({
       session: {
         rid: rid ?? null,
-        name: r ? r.name : (DICT[state.lang] ?? DICT.en).freeSession,
+        name: r ? rInfo(r).text : (DICT[state.lang] ?? DICT.en).freeSession,
         list: (r ? r.items : []).map((it) => {
           const last = lastFor(it.ex).sets;
           return {
@@ -414,7 +491,7 @@ function useWorkoutState() {
       return {
         routines: [
           ...s.routines,
-          { id: `r${Date.now()}`, name: name.trim() || L.newRoutine, items },
+          { id: `r${Date.now()}`, names: { [s.lang]: name.trim() || L.newRoutine }, items },
         ],
         summary: { ...s.summary, saveable: null, note: L.routineSaved },
       };
@@ -442,8 +519,10 @@ function useWorkoutState() {
     allEx,
     ex,
     routine,
-    gLabel,
-    kLabel,
+    gInfo,
+    kInfo,
+    exInfo,
+    rInfo,
     lastFor,
     doneOn,
     loggedThisMonth,

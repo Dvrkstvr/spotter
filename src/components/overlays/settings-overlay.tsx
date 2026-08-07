@@ -13,7 +13,7 @@ import { FullScreen } from '@/components/sheet';
 import { useBackClose } from '@/hooks/use-back-close';
 import { color, t, tracking } from '@/design/tokens';
 import { Btn, H2, H6, Seg } from '@/design/ui';
-import { useStore } from '@/store/workout-store';
+import { resolveNames, useStore } from '@/store/workout-store';
 
 export function SettingsOverlay() {
   const { s, L, patch, allEx, reorder } = useStore();
@@ -21,17 +21,31 @@ export function SettingsOverlay() {
   const close = () => patch({ settingsOpen: false });
   useBackClose(close);
 
-  const groupRows = s.groups.map((g) => ({
-    key: g.key,
-    label: g.label,
-    count: allEx().filter((e) => e.group === g.key).length || ('' as const),
-  }));
+  /**
+   * Rows edit the active language only. An entry with no name in this
+   * language shows the other language's name as its placeholder — greyed, the
+   * cue that typing here adds the missing translation rather than renaming.
+   */
+  const rowsFor = (list: typeof s.groups, field: 'group' | 'kind') =>
+    list.map((g) => {
+      const r = resolveNames(g.labels, s.lang);
+      return {
+        key: g.key,
+        label: g.labels[s.lang] ?? '',
+        placeholder: r.missing ? r.text : L.dividerHint,
+        count: allEx().filter((e) => e[field] === g.key).length || ('' as const),
+      };
+    });
 
-  const kindRows = s.kinds.map((k) => ({
-    key: k.key,
-    label: k.label,
-    count: allEx().filter((e) => e.kind === k.key).length || ('' as const),
-  }));
+  const groupRows = rowsFor(s.groups, 'group');
+  const kindRows = rowsFor(s.kinds, 'kind');
+
+  const setLabel = (listKey: 'groups' | 'kinds', i: number, v: string) =>
+    patch((st) => ({
+      [listKey]: st[listKey].map((x, j) =>
+        j === i ? { ...x, labels: { ...x.labels, [st.lang]: v } } : x
+      ),
+    }));
 
   return (
     <FullScreen zIndex={78}>
@@ -63,9 +77,7 @@ export function SettingsOverlay() {
         <ReorderRows
           rows={groupRows}
           placeholder={L.dividerHint}
-          onLabel={(i, v) =>
-            patch((st) => ({ groups: st.groups.map((x, j) => (j === i ? { ...x, label: v } : x)) }))
-          }
+          onLabel={(i, v) => setLabel('groups', i, v)}
           onDelete={(i) => patch((st) => ({ groups: st.groups.filter((_, j) => j !== i) }))}
           onReorder={(from, to) => reorder('groups', from, to)}
         />
@@ -75,7 +87,7 @@ export function SettingsOverlay() {
           labelStyle={styles.ghostLabel}
           style={styles.addBtn}
           onPress={() =>
-            patch((st) => ({ groups: [...st.groups, { key: `g${Date.now()}`, label: '' }] }))
+            patch((st) => ({ groups: [...st.groups, { key: `g${Date.now()}`, labels: {} }] }))
           }
         />
 
@@ -83,9 +95,7 @@ export function SettingsOverlay() {
         <ReorderRows
           rows={kindRows}
           placeholder={L.dividerHint}
-          onLabel={(i, v) =>
-            patch((st) => ({ kinds: st.kinds.map((x, j) => (j === i ? { ...x, label: v } : x)) }))
-          }
+          onLabel={(i, v) => setLabel('kinds', i, v)}
           onDelete={(i) => patch((st) => ({ kinds: st.kinds.filter((_, j) => j !== i) }))}
           onReorder={(from, to) => reorder('kinds', from, to)}
         />
@@ -95,7 +105,7 @@ export function SettingsOverlay() {
           labelStyle={styles.ghostLabel}
           style={styles.addBtn}
           onPress={() =>
-            patch((st) => ({ kinds: [...st.kinds, { key: `k${Date.now()}`, label: '' }] }))
+            patch((st) => ({ kinds: [...st.kinds, { key: `k${Date.now()}`, labels: {} }] }))
           }
         />
       </ScrollView>

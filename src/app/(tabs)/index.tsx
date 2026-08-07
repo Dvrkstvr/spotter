@@ -9,11 +9,11 @@ import { daysSince, todayDow, todayISO } from '@/data/date';
 import { DOW } from '@/data/exercises';
 import { fmtDayShort, fmtLastDone } from '@/data/i18n';
 import { color, elevation, font, t, tracking } from '@/design/tokens';
-import { Btn, CardKicker, H2, H3, H6 } from '@/design/ui';
+import { Btn, CardKicker, H2, H3, H6, missingName } from '@/design/ui';
 import { fmt, useStore } from '@/store/workout-store';
 
 export default function TodayScreen() {
-  const { s, L, patch, ex, routine, start, doneOn } = useStore();
+  const { s, L, patch, ex, routine, start, doneOn, rInfo, exInfo } = useStore();
   const router = useRouter();
 
   const dow = todayDow();
@@ -35,25 +35,29 @@ export default function TodayScreen() {
     return dates.length ? daysSince(dates.sort().pop()!) : null;
   })();
 
+  const trName = tr ? rInfo(tr) : null;
   const todayRoutine = tr
     ? {
-        name: tr.name,
+        name: trName!.text,
+        missing: trName!.missing,
         summary: `${tr.items.length} ${L.exCount} · ${tr.items.reduce((a, i) => a + i.sets, 0)} ${L.setCount}`,
         lines: tr.items.map((i) => ({
-          name: ex(i.ex)!.name,
+          ...exInfo(ex(i.ex)!),
           scheme: `${i.sets} × ${i.reps}  ·  ${i.w ? `${fmt(i.w)} kg` : 'BW'}`,
         })),
       }
-    : { name: L.restDay, summary: '', lines: [] };
+    : { name: L.restDay, missing: false, summary: '', lines: [] };
 
   const weekRows = DOW.map((d, i) => {
     const rid = s.schedule[i];
     const r = routine(rid ?? null);
+    const rn = r ? rInfo(r) : null;
     const isToday = i === dow;
     return {
       day: d.toUpperCase(),
       dayColor: isToday ? color.accent : color.neutral500,
-      name: r ? r.name : L.rest,
+      name: rn ? rn.text : L.rest,
+      missing: rn?.missing ?? false,
       nameColor: r ? (isToday ? color.text : color.neutral300) : color.neutral600,
       meta: r ? `${r.items.length} ${L.exCount}` : '',
     };
@@ -91,7 +95,7 @@ export default function TodayScreen() {
         </View>
 
         <View style={styles.heroNameRow}>
-          <H3 size={t.h3} style={styles.tight}>
+          <H3 size={t.h3} style={[styles.tight, todayRoutine.missing && missingName]}>
             {todayRoutine.name}
           </H3>
           <Text style={styles.heroSummary}>{todayRoutine.summary}</Text>
@@ -100,8 +104,8 @@ export default function TodayScreen() {
         <View style={styles.heroLines}>
           {todayRoutine.lines.map((l, i) => (
             <View key={i} style={styles.heroLine}>
-              <Text style={styles.heroLineName} numberOfLines={1}>
-                {l.name}
+              <Text style={[styles.heroLineName, l.missing && missingName]} numberOfLines={1}>
+                {l.text}
               </Text>
               <Text style={styles.heroLineScheme}>{l.scheme}</Text>
             </View>
@@ -133,7 +137,10 @@ export default function TodayScreen() {
         {weekRows.map((w, i) => (
           <View key={i} style={styles.row}>
             <Text style={[styles.rowDay, { color: w.dayColor }]}>{w.day}</Text>
-            <Text style={[styles.rowName, { color: w.nameColor }]} numberOfLines={1}>
+            <Text
+              style={[styles.rowName, { color: w.nameColor }, w.missing && missingName]}
+              numberOfLines={1}
+            >
               {w.name}
             </Text>
             <Text style={styles.rowMeta}>{w.meta}</Text>

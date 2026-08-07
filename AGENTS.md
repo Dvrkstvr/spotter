@@ -57,6 +57,11 @@ Keep these; they're decisions, not drift. Each is commented at its site.
   the store), and the durable slice of state persists to AsyncStorage — see
   `PERSIST` in `workout-store.tsx` before adding state you expect to survive
   a restart.
+- User-named things (groups, equipment, routines, custom exercises) carry
+  per-language names (`LangMap`), where the design had single strings. Resolve
+  them through the store's `gInfo`/`kInfo`/`rInfo`/`exInfo` — never read
+  `.labels`/`.names` directly in a screen — and render a `missing` result with
+  the `missingName` style from `ui.tsx`.
 
 ## Checks
 

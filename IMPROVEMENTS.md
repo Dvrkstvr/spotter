@@ -38,22 +38,21 @@ Working list, in the order we'll go through them. Check items off as they land.
 
 ## 4. Per-language aliases for user-named things
 
-- [ ] Applies to everything the user can name: muscle groups + equipment
-      (`Labelled` in the store), custom exercises, routines, machine-setup
-      labels.
-- [ ] Data model: label becomes per-language, e.g.
-      `label: Partial<Record<Lang, string>>` with the language it was created
-      in filled. `gLabel`/`kLabel` (and friends) resolve current lang →
-      fallback to any available lang.
-- [ ] Display: when the current language has no alias, show the fallback
-      greyed (`color.neutral600`-ish, from tokens) — the visual cue that it
-      still needs translating.
-- [ ] Editing: in Settings (and wherever the thing is named), editing while in
-      language X writes the X alias; an untranslated entry's field shows the
-      fallback as placeholder.
-- [ ] Migration: seed data (`DEFAULT_GROUPS`, `DEFAULT_KINDS`) already exists
-      in both languages via the dictionary — decide whether defaults keep
-      using dict keys or move to the same per-language structure.
+- [x] Muscle groups + equipment (`labels: LangMap`), routines (`names`), and
+      custom exercises (`names`, with `name` kept as canonical fallback) are
+      per-language. Machine-setup labels deliberately excluded — they're
+      freeform per-machine notes, not vocabulary.
+- [x] Resolution via store helpers `gInfo`/`kInfo`/`rInfo`/`exInfo` →
+      `{ text, missing }`; `missing` renders with the shared `missingName`
+      style (greyed italic) across every screen and sheet.
+- [x] Editing writes the active language: settings rows and the routine title
+      input show the current-language value with the other language's name as
+      grey placeholder — typing adds the translation. Search matches every
+      language's alias.
+- [x] Defaults seeded in both languages (Chest/Brust, Barbell/Langhantel,
+      Chest A/Brust A, …) so switching language now translates them; v1
+      storage blobs migrate on first load (untouched defaults regain both
+      languages, user-named things file under the blob's language).
 
 ## 5. Buddy invite + buddy sync screen
 

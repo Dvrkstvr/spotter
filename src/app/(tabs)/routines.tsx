@@ -4,11 +4,11 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Screen } from '@/components/screen';
 import { DOW } from '@/data/exercises';
 import { color, font, t, tracking } from '@/design/tokens';
-import { Btn, H2 } from '@/design/ui';
+import { Btn, H2, missingName } from '@/design/ui';
 import { useStore } from '@/store/workout-store';
 
 export default function RoutinesScreen() {
-  const { s, L, patch, ex } = useStore();
+  const { s, L, patch, ex, rInfo, exInfo } = useStore();
 
   /** Which weekdays this routine is scheduled on. */
   const dayFor = (rid: string) =>
@@ -17,8 +17,9 @@ export default function RoutinesScreen() {
   const newRoutine = () =>
     patch((st) => {
       const id = `r${Date.now()}`;
+      // Named in the active language; the other stays empty until translated.
       return {
-        routines: [...st.routines, { id, name: L.newRoutine, items: [] }],
+        routines: [...st.routines, { id, names: { [st.lang]: L.newRoutine }, items: [] }],
         routineOpen: id,
         editing: true,
       };
@@ -34,22 +35,31 @@ export default function RoutinesScreen() {
       </View>
 
       <View style={styles.list}>
-        {s.routines.map((r) => (
-          <Pressable
-            key={r.id}
-            onPress={() => patch({ routineOpen: r.id, editing: false })}
-            style={styles.card}
-          >
-            <View style={styles.cardTop}>
-              <Text style={styles.cardName}>{r.name}</Text>
-              <View style={styles.spacer} />
-              <Text style={styles.cardDays}>{dayFor(r.id)}</Text>
-            </View>
-            <Text style={styles.cardSummary}>
-              {r.items.map((i) => ex(i.ex)?.name).filter(Boolean).join(' · ')}
-            </Text>
-          </Pressable>
-        ))}
+        {s.routines.map((r) => {
+          const name = rInfo(r);
+          return (
+            <Pressable
+              key={r.id}
+              onPress={() => patch({ routineOpen: r.id, editing: false })}
+              style={styles.card}
+            >
+              <View style={styles.cardTop}>
+                <Text style={[styles.cardName, name.missing && missingName]}>{name.text}</Text>
+                <View style={styles.spacer} />
+                <Text style={styles.cardDays}>{dayFor(r.id)}</Text>
+              </View>
+              <Text style={styles.cardSummary}>
+                {r.items
+                  .map((i) => {
+                    const e = ex(i.ex);
+                    return e ? exInfo(e).text : null;
+                  })
+                  .filter(Boolean)
+                  .join(' · ')}
+              </Text>
+            </Pressable>
+          );
+        })}
       </View>
     </Screen>
   );

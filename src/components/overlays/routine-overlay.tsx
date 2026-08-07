@@ -11,11 +11,11 @@ import { FullScreen } from '@/components/sheet';
 import { useBackClose } from '@/hooks/use-back-close';
 import { DOW } from '@/data/exercises';
 import { color, font, t, tracking } from '@/design/tokens';
-import { Btn, Input } from '@/design/ui';
+import { Btn, Input, missingName } from '@/design/ui';
 import { fmt, num, useStore } from '@/store/workout-store';
 
 export function RoutineOverlay() {
-  const { s, L, patch, ex, routine, gLabel, kLabel, mutRoutine, start } = useStore();
+  const { s, L, patch, ex, routine, gInfo, kInfo, exInfo, rInfo, mutRoutine, start } = useStore();
   const insets = useSafeAreaInsets();
   const close = () => patch({ routineOpen: null });
   useBackClose(close);
@@ -45,9 +45,18 @@ export function RoutineOverlay() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
+        {/* Edits the name in the active language only; when that language has
+            no name yet the other one shows as the placeholder, greyed — type
+            to add the translation. */}
         <TextInput
-          value={r.name}
-          onChangeText={(v) => mutRoutine(r.id, (copy) => { copy.name = v; })}
+          value={r.names[s.lang] ?? ''}
+          placeholder={rInfo(r).missing ? rInfo(r).text : ''}
+          placeholderTextColor={color.neutral600}
+          onChangeText={(v) =>
+            mutRoutine(r.id, (copy) => {
+              copy.names = { ...copy.names, [s.lang]: v };
+            })
+          }
           cursorColor={color.accent}
           selectionColor={color.accent}
           style={styles.nameInput}
@@ -65,12 +74,13 @@ export function RoutineOverlay() {
         <View style={{ gap: t.gap }}>
           {r.items.map((item, n) => {
             const e = ex(item.ex);
+            const name = e ? exInfo(e) : null;
             return (
               <View key={`${item.ex}-${n}`} style={styles.row}>
                 <View style={styles.rowText}>
-                  <Text style={styles.rowName}>{e?.name}</Text>
+                  <Text style={[styles.rowName, name?.missing && missingName]}>{name?.text}</Text>
                   <Text style={styles.rowKind}>
-                    {e ? `${kLabel(e.kind)} · ${gLabel(e.group)}` : ''}
+                    {e ? `${kInfo(e.kind).text} · ${gInfo(e.group).text}` : ''}
                   </Text>
                 </View>
                 <Input

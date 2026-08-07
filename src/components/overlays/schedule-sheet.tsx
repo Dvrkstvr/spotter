@@ -11,12 +11,12 @@ import { CHECK_D, Icon } from '@/components/icon';
 import { Sheet } from '@/components/sheet';
 import { useBackClose } from '@/hooks/use-back-close';
 import { color, font, wash } from '@/design/tokens';
-import { Btn, H4 } from '@/design/ui';
+import { Btn, H4, missingName } from '@/design/ui';
 import { useStore } from '@/store/workout-store';
 import { DOW } from '@/data/exercises';
 
 export function ScheduleSheet() {
-  const { s, L, patch, ex } = useStore();
+  const { s, L, patch, ex, rInfo, exInfo } = useStore();
   const close = () => patch({ dayPick: null });
   useBackClose(close);
 
@@ -36,11 +36,17 @@ export function ScheduleSheet() {
   const options = [
     ...s.routines.map((r) => ({
       key: r.id as string | null,
-      name: r.name,
+      ...rInfo(r),
       meta: `${r.items.length} ${L.exCount}`,
-      detail: r.items.map((i) => ex(i.ex)?.name).filter(Boolean).join(' · '),
+      detail: r.items
+        .map((i) => {
+          const e = ex(i.ex);
+          return e ? exInfo(e).text : null;
+        })
+        .filter(Boolean)
+        .join(' · '),
     })),
-    { key: null, name: L.rest, meta: '', detail: L.dayFree },
+    { key: null, text: L.rest, missing: false, meta: '', detail: L.dayFree },
   ];
 
   return (
@@ -53,7 +59,11 @@ export function ScheduleSheet() {
           return (
             <Pressable key={o.key ?? '__rest'} onPress={() => pick(o.key)} style={styles.row}>
               <View style={styles.text}>
-                <Text style={[styles.name, on && { color: color.accent }]}>{o.name}</Text>
+                <Text
+                  style={[styles.name, on && { color: color.accent }, o.missing && missingName]}
+                >
+                  {o.text}
+                </Text>
                 <Text style={styles.detail} numberOfLines={1}>
                   {o.detail}
                 </Text>

@@ -8,6 +8,13 @@
 
 export type Lang = 'en' | 'de';
 
+/**
+ * A user-named thing's display names, one per language it has been named in.
+ * Missing languages fall back to whichever is filled, shown greyed as a cue
+ * that the translation doesn't exist yet.
+ */
+export type LangMap = Partial<Record<Lang, string>>;
+
 export const DICT = {
   en: {
     today: 'Today', plan: 'Plan', routines: 'Routines', exercises: 'Exercises', you: 'Profile', settings: 'Settings',
