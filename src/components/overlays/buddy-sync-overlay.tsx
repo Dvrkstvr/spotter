@@ -35,10 +35,10 @@ export function BuddySyncOverlay() {
   const snapshot = s.buddySnapshot;
   const endpoint = s.buddyEndpoint;
 
-  const close = () => {
-    if (radio && endpoint) radio.disconnectFrom(endpoint).catch(() => {});
-    patch({ buddySync: false, buddySnapshot: null, buddyEndpoint: null });
-  };
+  // Closing leaves the connection up — it's the substrate for shared
+  // workouts now. Disconnecting is the Profile card's explicit button.
+  const close = () =>
+    patch(hasRadio ? { buddySync: false } : { buddySync: false, buddySnapshot: null });
   useBackClose(close);
 
   const [diff, setDiff] = useState<BuddyDiff | null>(null);

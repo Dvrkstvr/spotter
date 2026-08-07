@@ -4,7 +4,12 @@
  * One card per exercise; the focused one opens to its set rows. Tapping the
  * greyed "last time" figure copies those numbers in, and ticking an untouched
  * set fills it from last time rather than logging a blank.
+ *
+ * In a shared session the buddy bar goes live: their exercise, their set
+ * count, whose turn it is. All of it advisory — nothing here ever blocks
+ * input on what the other phone does (or forgets) to tap.
  */
+import { useKeepAwake } from 'expo-keep-awake';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -20,6 +25,10 @@ export function SessionOverlay() {
     useStore();
   const insets = useSafeAreaInsets();
 
+  // Gym phones lock constantly, and a lock kills the Nearby link — keep the
+  // screen on while a session is open. Also just right for a logging screen.
+  useKeepAwake();
+
   // No back route in the design — only Discard and Finish. Swallow it so a
   // stray press cannot throw away a workout in progress.
   useBackClose(() => {}, { swallow: true });
@@ -29,6 +38,52 @@ export function SessionOverlay() {
 
   const tot = totals();
   const progressPct = tot.all ? Math.round((tot.done / tot.all) * 100) : 0;
+
+  /* — the buddy bar's live state (advisory only, never blocking) — */
+
+  const bp = s.buddyProgress;
+  const myActiveEx = session.list[s.active]?.ex ?? null;
+  const nm = (v: string) => v.replace('{name}', s.buddy ?? '');
+
+  const buddyLive = (() => {
+    if (!s.sessionShared) return null;
+    if (!s.buddyEndpoint) return { text: nm(L.stLost), turn: null, jump: null };
+    if (s.buddyJoin === 'declined') return { text: nm(L.stDeclined), turn: null, jump: null };
+    if (!bp || s.buddyJoin === 'pending') return { text: nm(L.stPending), turn: null, jump: null };
+    if (bp.finished) return { text: nm(L.stFinished), turn: null, jump: null };
+
+    if (bp.active && bp.active === myActiveEx) {
+      const mine = session.list[s.active].sets.filter((x) => x.done).length;
+      const theirs = bp.list.find((e) => e.ex === bp.active);
+      const theirDone = theirs?.done.filter(Boolean).length ?? 0;
+      const theirAll = theirs?.done.length ?? 0;
+      if (theirAll > 0 && theirDone >= theirAll)
+        return { text: nm(L.stWaiting), turn: null, jump: null };
+      const mode = s.turnModes[bp.active] ?? 'alternate';
+      // Fewer completed sets goes next; ties go to the host.
+      const turn =
+        mode === 'parallel'
+          ? L.together
+          : mine < theirDone || (mine === theirDone && s.sessionRole === 'host')
+            ? L.yourTurn
+            : nm(L.theirTurn);
+      return { text: `${theirDone}/${theirAll}`, turn, mode, modeEx: bp.active, jump: null };
+    }
+
+    if (bp.active) {
+      const meta = ex(bp.active);
+      const exName = meta ? exInfo(meta).text : bp.active;
+      const myIndex = session.list.findIndex((e) => e.ex === bp.active);
+      const prefix = myIndex >= 0 ? nm(myIndex > s.active ? L.stAhead : L.stBehind) + ' · ' : '';
+      return {
+        text: `${prefix}${exName}`,
+        turn: null,
+        // Reconvergence: their exercise is in my list too — one tap to join them.
+        jump: myIndex >= 0 && myIndex !== s.active ? { index: myIndex, name: exName } : null,
+      };
+    }
+    return { text: nm(L.stPending), turn: null, jump: null };
+  })();
 
   return (
     <FullScreen zIndex={80}>
@@ -241,10 +296,52 @@ export function SessionOverlay() {
           <View style={styles.buddyAvatar}>
             <Text style={styles.buddyInitial}>{s.buddy[0]}</Text>
           </View>
-          <Text style={styles.buddyName} numberOfLines={1}>
-            {s.buddy}
-          </Text>
-          <Text style={styles.buddyStatus}>{L.trainingWith}</Text>
+          <View style={styles.buddyText}>
+            <Text style={styles.buddyName} numberOfLines={1}>
+              {s.buddy}
+            </Text>
+            {buddyLive && (
+              <Text style={styles.buddySub} numberOfLines={1}>
+                {buddyLive.text}
+              </Text>
+            )}
+          </View>
+          {!buddyLive && <Text style={styles.buddyStatus}>{L.trainingWith}</Text>}
+          {buddyLive?.turn && (
+            <>
+              {'mode' in buddyLive && buddyLive.modeEx && (
+                <Pressable
+                  onPress={() =>
+                    patch((st) => ({
+                      turnModes: {
+                        ...st.turnModes,
+                        [buddyLive.modeEx]:
+                          (st.turnModes[buddyLive.modeEx] ?? 'alternate') === 'alternate'
+                            ? 'parallel'
+                            : 'alternate',
+                      },
+                    }))
+                  }
+                  style={styles.modeChip}
+                >
+                  <Text style={styles.modeChipLabel}>
+                    {(s.turnModes[buddyLive.modeEx] ?? 'alternate') === 'alternate'
+                      ? L.modeAlternate
+                      : L.modeParallel}
+                  </Text>
+                </Pressable>
+              )}
+              <Text style={styles.buddyStatus}>{buddyLive.turn}</Text>
+            </>
+          )}
+          {buddyLive?.jump && (
+            <Btn
+              variant="ghost"
+              label={L.jumpTo.replace('{ex}', buddyLive.jump.name)}
+              labelStyle={styles.jumpLabel}
+              onPress={() => patch({ active: buddyLive.jump!.index })}
+            />
+          )}
         </View>
       )}
 
@@ -409,8 +506,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   buddyInitial: { fontFamily: font.regular, fontSize: 11, color: color.accent200 },
-  buddyName: { flex: 1, fontFamily: font.regular, fontSize: 12.5, color: color.text },
+  buddyText: { flex: 1, minWidth: 0 },
+  buddyName: { fontFamily: font.regular, fontSize: 12.5, color: color.text },
+  buddySub: { fontFamily: font.regular, fontSize: 10.5, color: color.neutral500 },
   buddyStatus: { fontFamily: font.regular, fontSize: 11, color: color.accent400 },
+  modeChip: {
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: color.divider,
+  },
+  modeChipLabel: { fontFamily: font.regular, fontSize: 10, color: color.neutral400 },
+  jumpLabel: { fontSize: 11.5 },
 
   footer: {
     flexDirection: 'row',

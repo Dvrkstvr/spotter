@@ -117,17 +117,77 @@ export const shareableSlice = (s: SyncSide): SyncSide => ({
   routines: s.routines,
 });
 
+/* ── shared sessions ───────────────────────────────────────────────────── */
+
+/**
+ * One phone's live session state, as broadcast to the buddy. Always the full
+ * state, never an event stream — receiving any one message is enough to be
+ * caught up, which is what makes reconnecting after a drop trivial.
+ */
+export type BuddyProgress = {
+  rid: string | null;
+  /** exercise id currently expanded on their screen, null when finished */
+  active: string | null;
+  list: { ex: string; done: boolean[] }[];
+  finished: boolean;
+};
+
+type ProgressSource = {
+  rid: string | null;
+  list: { ex: string; sets: { done: boolean }[] }[];
+};
+
+export const progressOf = (
+  session: ProgressSource,
+  activeIndex: number,
+  finished = false
+): BuddyProgress => ({
+  rid: session.rid,
+  active: finished ? null : (session.list[activeIndex]?.ex ?? null),
+  list: session.list.map((e) => ({ ex: e.ex, done: e.sets.map((x) => x.done) })),
+  finished,
+});
+
+/**
+ * Everything the buddy needs to run the starter's routine: the routine
+ * itself plus any custom exercises it uses and their groups/kinds. The
+ * starter's version wins — accepting upserts all of it.
+ */
+export type SessionInvite = {
+  routine: Routine;
+  custom: Exercise[];
+  groups: Labelled[];
+  kinds: Labelled[];
+};
+
+/** Content equality for routines — same names, same items, order included. */
+export const routineEquals = (a: Routine, b: Routine) =>
+  JSON.stringify({ n: a.names, i: a.items }) === JSON.stringify({ n: b.names, i: b.items });
+
 /* ── wire protocol (real radio) ────────────────────────────────────────── */
 
 /** Messages the two phones exchange once Nearby connects them. */
 export type BuddyMessage =
   | { v: 1; t: 'snapshot'; name: string; data: SyncSide }
-  | { v: 1; t: 'item'; item: SyncItem };
+  | { v: 1; t: 'item'; item: SyncItem }
+  | { v: 1; t: 'sessionInvite'; invite: SessionInvite }
+  | { v: 1; t: 'sessionJoin' }
+  | { v: 1; t: 'sessionDecline' }
+  | { v: 1; t: 'progress'; state: BuddyProgress };
+
+const MESSAGE_TYPES = new Set([
+  'snapshot',
+  'item',
+  'sessionInvite',
+  'sessionJoin',
+  'sessionDecline',
+  'progress',
+]);
 
 export const parseBuddyMessage = (raw: string): BuddyMessage | null => {
   try {
     const m = JSON.parse(raw);
-    return m && m.v === 1 && (m.t === 'snapshot' || m.t === 'item') ? (m as BuddyMessage) : null;
+    return m && m.v === 1 && MESSAGE_TYPES.has(m.t) ? (m as BuddyMessage) : null;
   } catch {
     return null;
   }

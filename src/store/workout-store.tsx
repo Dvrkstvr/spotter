@@ -14,7 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useState } from 'react';
 
 import type { BuddySnapshot } from '@/data/buddy-transport';
-import type { SyncItem } from '@/data/buddy-sync';
+import type { BuddyProgress, SessionInvite, SyncItem } from '@/data/buddy-sync';
 import { todayDom, todayISO } from '@/data/date';
 import {
   DEFAULT_GROUPS,
@@ -105,6 +105,19 @@ export type State = {
   buddyEndpoint: string | null;
   /** the connected peer's shareable data, from either transport */
   buddySnapshot: BuddySnapshot | null;
+  /* — shared workout (all transient; see IMPROVEMENTS.md #8) — */
+  /** incoming "train together?" invite awaiting a decision */
+  buddyInvite: SessionInvite | null;
+  /** whether the live session is shared with the buddy */
+  sessionShared: boolean;
+  /** who initiated the shared session — ties on turn order go to the host */
+  sessionRole: 'host' | 'guest' | null;
+  /** host's view of the invite: has the buddy joined? */
+  buddyJoin: 'pending' | 'joined' | 'declined' | null;
+  /** the buddy's live session state, as last broadcast */
+  buddyProgress: BuddyProgress | null;
+  /** per-exercise turn-taking choice; advisory display only */
+  turnModes: Record<string, 'alternate' | 'parallel'>;
   pickWorkout: boolean;
   /** day-of-week index whose scheduled routine is being picked, or null */
   dayPick: number | null;
@@ -144,6 +157,12 @@ const initialState: State = {
   nearbyPeers: [],
   buddyEndpoint: null,
   buddySnapshot: null,
+  buddyInvite: null,
+  sessionShared: false,
+  sessionRole: null,
+  buddyJoin: null,
+  buddyProgress: null,
+  turnModes: {},
   pickWorkout: false,
   dayPick: null,
   groups: DEFAULT_GROUPS.map((g) => ({ ...g })),
@@ -253,6 +272,28 @@ export const num = (v: string | number, fb: number) => {
 export const prevNums = (prev: string) => {
   const m = String(prev).split('×');
   return { w: (m[0] || '').trim().replace('BW', '0'), r: (m[1] || '').trim() };
+};
+
+/** Build a fresh session from a routine, with "last time" ghosts filled in. */
+const sessionFrom = (s: State, r: Routine): Session => {
+  const lastOf = (id: string) =>
+    s.lastLog[id]?.sets ?? [...EX, ...s.custom].find((e) => e.id === id)?.lastSets ?? [];
+  return {
+    rid: r.id,
+    name: resolveNames(r.names, s.lang).text,
+    list: r.items.map((it) => {
+      const last = lastOf(it.ex);
+      return {
+        ex: it.ex,
+        sets: Array.from({ length: it.sets }, (_, k) => ({
+          w: '',
+          reps: '',
+          done: false,
+          prev: last[k] || last[0] || `${fmt(it.w)} × ${it.reps}`,
+        })),
+      };
+    }),
+  };
 };
 
 /* ── store ─────────────────────────────────────────────────────────────── */
@@ -476,32 +517,80 @@ function useWorkoutState() {
   /* — session lifecycle — */
 
   const start = (rid: string | null | undefined) => {
-    const r = rid ? state.routines.find((x) => x.id === rid) : null;
-    patch({
-      session: {
-        rid: rid ?? null,
-        name: r ? rInfo(r).text : (DICT[state.lang] ?? DICT.en).freeSession,
-        list: (r ? r.items : []).map((it) => {
-          const last = lastFor(it.ex).sets;
-          return {
-            ex: it.ex,
-            sets: Array.from({ length: it.sets }, (_, k) => ({
-              w: '',
-              reps: '',
-              done: false,
-              prev: last[k] || last[0] || `${fmt(it.w)} × ${it.reps}`,
-            })),
-          };
-        }),
-      },
-      active: 0,
-      elapsed: 0,
-      routineOpen: null,
-      summary: null,
-      picker: null,
-      pickWorkout: false,
+    patch((s) => {
+      const r = rid ? s.routines.find((x) => x.id === rid) : null;
+      return {
+        session: r
+          ? sessionFrom(s, r)
+          : { rid: null, name: (DICT[s.lang] ?? DICT.en).freeSession, list: [] },
+        active: 0,
+        elapsed: 0,
+        routineOpen: null,
+        summary: null,
+        picker: null,
+        pickWorkout: false,
+        // Solo by default — <BuddyRadio> flips this to a hosted shared
+        // session right after, if a buddy is connected.
+        sessionShared: false,
+        sessionRole: null,
+        buddyJoin: null,
+        buddyProgress: null,
+        turnModes: {},
+      };
     });
   };
+
+  /**
+   * Accept an incoming "train together" invite: upsert the starter's routine
+   * and its dependencies (their version wins — that's the sync), then start
+   * the same session as the guest.
+   */
+  const acceptInvite = () => {
+    patch((s) => {
+      const inv = s.buddyInvite;
+      if (!inv) return null;
+
+      const custom = [...s.custom];
+      for (const e of inv.custom) {
+        const i = custom.findIndex((x) => x.id === e.id);
+        if (i < 0) custom.push(e);
+        else custom[i] = e;
+      }
+      const groups = [
+        ...s.groups,
+        ...inv.groups.filter((g) => !s.groups.some((x) => x.key === g.key)),
+      ];
+      const kinds = [
+        ...s.kinds,
+        ...inv.kinds.filter((k) => !s.kinds.some((x) => x.key === k.key)),
+      ];
+      const routines = s.routines.some((r) => r.id === inv.routine.id)
+        ? s.routines.map((r) => (r.id === inv.routine.id ? inv.routine : r))
+        : [...s.routines, inv.routine];
+
+      return {
+        custom,
+        groups,
+        kinds,
+        routines,
+        buddyInvite: null,
+        session: sessionFrom({ ...s, custom }, inv.routine),
+        active: 0,
+        elapsed: 0,
+        routineOpen: null,
+        summary: null,
+        picker: null,
+        pickWorkout: false,
+        sessionShared: true,
+        sessionRole: 'guest',
+        buddyJoin: null,
+        buddyProgress: null,
+        turnModes: {},
+      };
+    });
+  };
+
+  const declineInvite = () => patch({ buddyInvite: null });
 
   /** Ticked sets, total sets, and total volume for the live session. */
   const totals = () => {
@@ -631,6 +720,8 @@ function useWorkoutState() {
     reorder,
     importFromPeer,
     start,
+    acceptInvite,
+    declineInvite,
     totals,
     clock,
     finishSession,

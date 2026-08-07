@@ -4,7 +4,7 @@ Working list, in the order we'll go through them. Check items off as they land.
 
 ## 1. Finish workout from the last exercise + completed state on Today
 
-- [ ] **Verify on-device:** the "Finish workout" row on the last exercise is
+- [X] **Verify on-device:** the "Finish workout" row on the last exercise is
       already implemented (`session-overlay.tsx`, commit `d89227a`) — the last
       card's footer row calls `finishSession()` and reads in the accent. If the
       phone still shows "Next exercise", the running bundle is stale; reload
@@ -115,11 +115,51 @@ real gym use.
       incoming items merged via the same `importFromPeer`. Scan sheet lists
       live endpoints; sync overlay reads `s.buddySnapshot` for both
       transports; sends go over the air for real.
-- [ ] **Field test with the buddy's phone** — install the release APK on both
+- [X] **Field test with the buddy's phone** — install the release APK on both
       phones, pair in person, sync. Pre-Android-12 phones need Location
       Services ON for discovery (OS requirement, not ours).
 - [ ] Later: surface Nearby's authentication digits during pairing instead of
       trusting proximity; reconnect flow that doesn't require re-scanning.
+
+## 8. Shared buddy workouts — train the same routine together
+
+Calvin's idea, sharpened in discussion (7 Aug 2026): both phones do the same
+routine, live over the real radio. Core principle decided up front:
+**two synced sessions, not host-controls-client** — each phone runs its own
+session and broadcasts progress; every coordination cue (whose turn, who's
+waiting) is displayed, never enforced. Advisory, non-blocking, because a
+forgotten tick must never freeze the buddy's screen mid-workout.
+
+- [x] **Join prompt, not forced start.** Starting a routine while connected
+      sends a session invite carrying the starter's routine content plus its
+      custom-exercise/group/kind dependencies (starter's version wins — this
+      also transfers/updates the routine on the spot). The buddy gets a
+      one-tap "Train together?" sheet (`buddy-invite-sheet.tsx`, z 89);
+      decline is fine and visible to the host.
+- [x] **Live progress.** Both sides broadcast full session state (current
+      exercise, per-set ticks, finished) on every change, debounced 250 ms,
+      from `<BuddyRadio>`. Full state, not events — that makes reconnect
+      resync free. Discard reads as "finished" to the buddy (v1).
+- [x] **Buddy panel** in the session overlay's buddy bar: waiting-to-join,
+      declined, same exercise (their set count + turn hint), different
+      exercise (ahead/behind + one-tap jump when it's in my list), waiting
+      for me, finished, connection lost. Turn hint per exercise with an
+      alternate/parallel chip; fewer completed sets goes next, ties go to
+      the host.
+- [x] **Reconnect.** While a shared session is live and the endpoint is
+      gone: keep advertising/discovering, auto-request the known buddy by
+      name, auto-accept silently (no sync screen popping over the session),
+      resend snapshot + full progress on reconnect. `useKeepAwake` while a
+      session is open. Closing the Buddy sync screen no longer disconnects —
+      the connection is the substrate for co-sessions; Disconnect on the
+      Profile card is the explicit teardown.
+- [x] **Today-card indicator** while connected: today's routine vs the
+      buddy's snapshot via `routineEquals` (content, not id) — in sync
+      (accent check) / differs / missing on their phone.
+- [x] v1 boundaries: freeform sessions don't share; each phone logs only its
+      own numbers; no abandon signal beyond disconnect; routine conflict
+      resolution beyond "starter wins at invite" stays in Buddy sync later.
+      Profile's "Connected" label still reflects pairing, not the live link.
 
 ## Suggested order
 

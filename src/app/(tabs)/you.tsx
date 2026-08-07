@@ -90,9 +90,11 @@ export default function YouScreen() {
             variant="ghost"
             label={L.sync}
             labelStyle={styles.syncLabel}
-            // Real radio holds no standing connection — syncing again means
-            // finding the buddy nearby again. The mock reconnects instantly.
-            onPress={() => patch(hasRadio ? { scanning: true } : { buddySync: true })}
+            // Still connected → straight to the sync screen; connection gone
+            // → find the buddy nearby again first. Mock connects instantly.
+            onPress={() =>
+              patch(hasRadio && !s.buddyEndpoint ? { scanning: true } : { buddySync: true })
+            }
           />
           <Btn
             variant="ghost"

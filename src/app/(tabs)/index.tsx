@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { CHECK_D, Icon } from '@/components/icon';
 import { Screen } from '@/components/screen';
+import { routineEquals } from '@/data/buddy-sync';
 import { daysSince, todayDow, todayISO } from '@/data/date';
 import { DOW } from '@/data/exercises';
 import { fmtDayShort, fmtLastDone } from '@/data/i18n';
@@ -33,6 +34,18 @@ export default function TodayScreen() {
     if (!todayRid) return null;
     const dates = s.history.filter((h) => h.rid === todayRid).map((h) => h.date);
     return dates.length ? daysSince(dates.sort().pop()!) : null;
+  })();
+
+  /**
+   * While a buddy is live-connected: is today's routine the same on their
+   * phone? Content comparison, not id existence — both may have edited it.
+   */
+  const planSync = (() => {
+    if (!tr || !s.buddyEndpoint || !s.buddySnapshot) return null;
+    const theirs = s.buddySnapshot.routines.find((r) => r.id === tr.id);
+    if (!theirs) return { text: L.planMissing, ok: false };
+    if (routineEquals(tr, theirs)) return { text: L.planSynced, ok: true };
+    return { text: L.planDiffers, ok: false };
   })();
 
   const trName = tr ? rInfo(tr) : null;
@@ -100,6 +113,22 @@ export default function TodayScreen() {
           </H3>
           <Text style={styles.heroSummary}>{todayRoutine.summary}</Text>
         </View>
+
+        {planSync && (
+          <View style={styles.planSyncRow}>
+            {planSync.ok && (
+              <Icon d={CHECK_D} size={10} strokeWidth={2.2} color={color.accent400} />
+            )}
+            <Text
+              style={[
+                styles.planSyncText,
+                { color: planSync.ok ? color.accent400 : color.neutral500 },
+              ]}
+            >
+              {planSync.text.replace('{name}', s.buddy ?? '')}
+            </Text>
+          </View>
+        )}
 
         <View style={styles.heroLines}>
           {todayRoutine.lines.map((l, i) => (
@@ -180,6 +209,8 @@ const styles = StyleSheet.create({
   heroLastDone: { fontFamily: font.regular, fontSize: 11, color: color.neutral500 },
   doneBadge: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   doneBadgeText: { fontFamily: font.regular, fontSize: 11, color: color.accent400 },
+  planSyncRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 3 },
+  planSyncText: { fontFamily: font.regular, fontSize: 10.5 },
   heroNameRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 10, marginTop: 5 },
   heroSummary: {
     fontFamily: font.regular,
