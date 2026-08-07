@@ -6,8 +6,8 @@
  * up on arrival, so the entry animation replays on tab switches the way it does
  * in the design — where switching tabs remounts the panel.
  */
-import { useIsFocused } from 'expo-router';
-import { ReactNode } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { ReactNode, useCallback, useState } from 'react';
 import { ScrollView, StyleProp, ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -21,7 +21,16 @@ export function Screen({
   contentStyle?: StyleProp<ViewStyle>;
 }) {
   const insets = useSafeAreaInsets();
-  const focused = useIsFocused();
+
+  // Bumping this remounts RiseIn, which is what replays the animation. Driven
+  // by useFocusEffect rather than useIsFocused: it's the hook expo-router
+  // actually exports, on every SDK.
+  const [focusCount, setFocusCount] = useState(0);
+  useFocusEffect(
+    useCallback(() => {
+      setFocusCount((n) => n + 1);
+    }, [])
+  );
 
   return (
     <ScrollView
@@ -33,7 +42,7 @@ export function Screen({
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
     >
-      <RiseIn key={focused ? 'shown' : 'hidden'}>{children}</RiseIn>
+      <RiseIn key={focusCount}>{children}</RiseIn>
     </ScrollView>
   );
 }

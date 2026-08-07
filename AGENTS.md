@@ -2,8 +2,13 @@
 
 ## Expo HAS CHANGED
 
-Read the exact versioned docs at https://docs.expo.dev/versions/v57.0.0/ before
+Read the exact versioned docs at https://docs.expo.dev/versions/v54.0.0/ before
 writing any code.
+
+**This project is pinned to SDK 54 on purpose.** Calvin's phone is too old for
+any Expo Go newer than 54.0.8, and Expo Go only ever supports one SDK. Bumping
+the SDK breaks his only way of running the app. Don't upgrade it without also
+moving him to a development build — see "Running it" in the README.
 
 ## What this project is
 

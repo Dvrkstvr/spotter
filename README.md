@@ -16,9 +16,20 @@ npm run android
 That starts the dev server and opens the app on a connected device or emulator.
 `npm start` alone gives you the QR code and the usual Expo menu.
 
-The app targets Android. Expo Go is enough for everyday work; the photo picker
-also works there. iOS config is untouched but unexercised — nothing has been
-checked on it.
+The app targets Android and runs in **Expo Go**. iOS config is untouched but
+unexercised — nothing has been checked on it.
+
+### Why SDK 54 and not the latest
+
+Expo Go supports exactly one SDK at a time, and the Play Store won't serve a
+newer Expo Go than 54.0.8 to this phone — its Android version is below what the
+newer builds require. So the project is pinned to SDK 54 to match. The app
+itself only needs Android 7.0 (`minSdkVersion` 24); it's Expo Go that's fussy,
+not the app.
+
+To move to a newer SDK later, build a development build instead of relying on
+Expo Go — that's your own client APK, so Expo Go's ceiling stops applying. The
+Android SDK bundled with Unity on this machine is enough to build one locally.
 
 ## Checks
 
