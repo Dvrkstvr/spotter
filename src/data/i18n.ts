@@ -46,6 +46,12 @@ export const DICT = {
     chooseWorkout: 'Choose a workout', thisWeek: 'This week', seePlan: 'See plan',
     chooseRoutine: 'Choose routine',
     saveAsRoutine: 'Save as new routine', routineSaved: 'Saved to your routines.',
+    buddySync: 'Buddy sync', sync: 'Sync', connectingTo: 'Connecting to {name}…',
+    syncDemoNote: 'Demo transport — nothing leaves this phone yet.',
+    missingHere: 'Missing on your device', missingThere: 'Missing on {name}’s device',
+    transferAll: 'Transfer all', transferOne: 'Transfer', addedMark: 'Added', sentMark: 'Sent',
+    inSync: 'Everything in sync.',
+    typeGroup: 'Group', typeKind: 'Equipment', typeExercise: 'Exercise', typeRoutine: 'Routine',
   },
   de: {
     today: 'Heute', plan: 'Plan', routines: 'Routinen', exercises: 'Übungen', you: 'Profil', settings: 'Einstellungen',
@@ -78,6 +84,12 @@ export const DICT = {
     chooseWorkout: 'Training auswählen', thisWeek: 'Diese Woche', seePlan: 'Plan ansehen',
     chooseRoutine: 'Routine wählen',
     saveAsRoutine: 'Als neue Routine speichern', routineSaved: 'In deinen Routinen gespeichert.',
+    buddySync: 'Buddy-Sync', sync: 'Sync', connectingTo: 'Verbinde mit {name} …',
+    syncDemoNote: 'Demo-Übertragung — noch verlässt nichts dieses Handy.',
+    missingHere: 'Fehlt auf deinem Gerät', missingThere: 'Fehlt bei {name}',
+    transferAll: 'Alle übertragen', transferOne: 'Übertragen', addedMark: 'Hinzugefügt', sentMark: 'Gesendet',
+    inSync: 'Alles synchron.',
+    typeGroup: 'Gruppe', typeKind: 'Gerät', typeExercise: 'Übung', typeRoutine: 'Routine',
   },
 } as const;
 

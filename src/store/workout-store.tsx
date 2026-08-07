@@ -13,6 +13,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useState } from 'react';
 
+import type { BuddySnapshot } from '@/data/buddy-transport';
+import type { SyncItem } from '@/data/buddy-sync';
 import { todayDom, todayISO } from '@/data/date';
 import {
   DEFAULT_GROUPS,
@@ -96,6 +98,8 @@ export type State = {
   settingsOpen: boolean;
   scanning: boolean;
   buddy: string | null;
+  /** whether the buddy-sync overlay is open */
+  buddySync: boolean;
   pickWorkout: boolean;
   /** day-of-week index whose scheduled routine is being picked, or null */
   dayPick: number | null;
@@ -131,6 +135,7 @@ const initialState: State = {
   settingsOpen: false,
   scanning: false,
   buddy: null,
+  buddySync: false,
   pickWorkout: false,
   dayPick: null,
   groups: DEFAULT_GROUPS.map((g) => ({ ...g })),
@@ -376,6 +381,90 @@ function useWorkoutState() {
     });
   };
 
+  /**
+   * Merge one diffed item from a buddy's snapshot into local state — the
+   * "receive" half of buddy sync. Whole items come with their dependency
+   * closure: an exercise pulls its group/kind if those are missing too, a
+   * routine pulls its custom exercises. Translations fill one language on an
+   * entity both sides already have.
+   */
+  const importFromPeer = (peer: BuddySnapshot, item: SyncItem) => {
+    patch((s) => {
+      if (item.kind === 'translation') {
+        const fill = (names: LangMap): LangMap => ({ ...names, [item.lang]: item.text });
+        switch (item.type) {
+          case 'group':
+            return {
+              groups: s.groups.map((g) => (g.key === item.key ? { ...g, labels: fill(g.labels) } : g)),
+            };
+          case 'kind':
+            return {
+              kinds: s.kinds.map((k) => (k.key === item.key ? { ...k, labels: fill(k.labels) } : k)),
+            };
+          case 'exercise':
+            return {
+              custom: s.custom.map((e) =>
+                e.id === item.key ? { ...e, names: fill(e.names ?? {}) } : e
+              ),
+            };
+          case 'routine':
+            return {
+              routines: s.routines.map((r) =>
+                r.id === item.key ? { ...r, names: fill(r.names) } : r
+              ),
+            };
+        }
+      }
+
+      const groups = [...s.groups];
+      const kinds = [...s.kinds];
+      const custom = [...s.custom];
+      const routines = [...s.routines];
+
+      const needGroup = (key: string) => {
+        if (groups.some((g) => g.key === key)) return;
+        const g = peer.groups.find((x) => x.key === key);
+        if (g) groups.push(g);
+      };
+      const needKind = (key: string) => {
+        if (kinds.some((k) => k.key === key)) return;
+        const k = peer.kinds.find((x) => x.key === key);
+        if (k) kinds.push(k);
+      };
+      const needExercise = (id: string) => {
+        if (EX.some((e) => e.id === id) || custom.some((e) => e.id === id)) return;
+        const e = peer.custom.find((x) => x.id === id);
+        if (!e) return;
+        custom.push(e);
+        needGroup(e.group);
+        needKind(e.kind);
+      };
+
+      switch (item.type) {
+        case 'group':
+          needGroup(item.key);
+          break;
+        case 'kind':
+          needKind(item.key);
+          break;
+        case 'exercise':
+          needExercise(item.key);
+          break;
+        case 'routine': {
+          if (!routines.some((r) => r.id === item.key)) {
+            const r = peer.routines.find((x) => x.id === item.key);
+            if (r) {
+              routines.push(r);
+              r.items.forEach((i) => needExercise(i.ex));
+            }
+          }
+          break;
+        }
+      }
+      return { groups, kinds, custom, routines };
+    });
+  };
+
   /* — session lifecycle — */
 
   const start = (rid: string | null | undefined) => {
@@ -532,6 +621,7 @@ function useWorkoutState() {
     mutSession,
     mutRoutine,
     reorder,
+    importFromPeer,
     start,
     totals,
     clock,

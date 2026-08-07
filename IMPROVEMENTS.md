@@ -56,27 +56,25 @@ Working list, in the order we'll go through them. Check items off as they land.
 
 ## 5. Buddy invite + buddy sync screen
 
-The big one. Currently the buddy is a mock: hardcoded nearby list, no
-transport, pairing just sets a name (`scan-sheet.tsx`).
-
-- [ ] **Transport decision first.** Real Bluetooth needs a native module
-      (e.g. `react-native-ble-plx`) which does **not** run in Expo Go — and
-      this project is pinned to SDK 54 because Expo Go is the only way the app
-      runs on the phone (see AGENTS.md). Options:
-      1. move to a development build (unblocks BLE, drops the Expo Go
-         constraint — README already sketches this),
-      2. sync over local network / internet instead of BLE,
-      3. build the whole sync flow against a mock transport now, swap the
-         real one in later.
-- [ ] **Sync model.** Every user can add their own groups, equipment,
-      exercises, aliases — so a shared session can reference things missing on
-      the other device. Diff what the session needs against what the peer has:
-      custom exercises, groups/kinds (with aliases from #4), setups, images.
-- [ ] **Buddy sync screen.** New overlay (registered in `overlays/index.tsx`,
-      own `useBackClose`): lists missing items and missing translations on
-      either side, each transferable with a tap, plus a "transfer all".
-- [ ] Depends on #4 — the alias model defines what a "missing translation"
-      even is, so do #4 first.
+- [x] **Transport: mock now, swappable later** (decided). Real BLE can't run
+      in Expo Go and the project is pinned to SDK 54, so the flow is built
+      against `buddy-transport.ts` — three canned peers, canned latency,
+      canned snapshots. A real transport reimplements its three functions
+      (`scanPeers` / `connectPeer` / `sendToPeer`) and nothing else. Receives
+      genuinely merge into the store and persist; sends are simulated, and the
+      screen's demo note says so.
+- [x] **Sync model.** `buddy-sync.ts` diffs the shareable slice (groups,
+      equipment, custom exercises, routines) by key/id in both directions,
+      plus missing translations (a language filled on one side, empty on the
+      other — the #4 alias model). Imports pull their dependency closure:
+      a routine brings its custom exercises, an exercise its group/kind.
+- [x] **Buddy sync screen.** `buddy-sync-overlay.tsx`, z 79, own back
+      handling: two sections ("Missing on your device" / "Missing on
+      {name}'s"), per-row Transfer, Transfer all, Added/Sent marks, in-sync
+      note. Pairing in the scan sheet opens it directly; the Profile buddy
+      card gains a Sync button. Mock peers are staged to exercise every case
+      (Jonas: bilingual extras + a routine with a custom-exercise dependency;
+      Mira: German-only items; Tom: nothing, so your stuff shows sendable).
 
 ## 6. Go live: persistence, real date, real history
 

@@ -82,8 +82,13 @@ hardcodes nothing.
 
 These are deliberate, and each is called out in the code:
 
-- **The buddy is a mock.** The nearby-devices list is hardcoded; there is no
-  Bluetooth. Pairing sets a name and shows the strip.
+- **The buddy radio is a mock.** The full pairing and sync flow exists — a
+  Buddy sync screen diffs both devices and transfers missing items and
+  translations — but it runs on the canned transport in
+  `src/data/buddy-transport.ts`, because real Bluetooth needs a native module
+  Expo Go can't load. Receiving from a mock peer genuinely imports into your
+  data; sending is simulated. A real transport replaces that file's three
+  functions.
 - **Routine editing has no Edit mode.** The button toggles its own label and
   nothing else — faithful to the design, where the rows are always editable.
 

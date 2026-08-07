@@ -87,6 +87,12 @@ export default function YouScreen() {
           </View>
           <Btn
             variant="ghost"
+            label={L.sync}
+            labelStyle={styles.syncLabel}
+            onPress={() => patch({ buddySync: true })}
+          />
+          <Btn
+            variant="ghost"
             label={L.disconnect}
             labelStyle={styles.disconnect}
             onPress={() => patch({ buddy: null })}
@@ -237,6 +243,7 @@ const styles = StyleSheet.create({
   buddyName: { fontFamily: font.regular, fontSize: 14, color: color.text },
   buddyStatus: { fontFamily: font.regular, fontSize: 11, color: color.accent400 },
   disconnect: { fontSize: 12 },
+  syncLabel: { fontSize: 12 },
   buddySub: { fontFamily: font.regular, fontSize: 12.5, color: color.neutral500, marginBottom: 9 },
   inviteBtn: { height: 40, marginTop: 0 },
 

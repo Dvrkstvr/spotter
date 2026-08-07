@@ -3,22 +3,19 @@ import { useEffect, useState } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Sheet } from '@/components/sheet';
+import { scanPeers } from '@/data/buddy-transport';
 import { useBackClose } from '@/hooks/use-back-close';
 import { color, font, wash } from '@/design/tokens';
 import { Btn, H4 } from '@/design/ui';
 import { useStore } from '@/store/workout-store';
 
-/** Placeholder discovery results — the design ships these, there is no radio yet. */
-const NEARBY = [
-  { name: 'Jonas', device: 'Pixel 8 · 2 m' },
-  { name: 'Mira', device: 'Galaxy S24 · 5 m' },
-  { name: 'Tom', device: 'Pixel 7a · 9 m' },
-];
-
 export function ScanSheet() {
   const { L, patch } = useStore();
   const close = () => patch({ scanning: false });
   useBackClose(close);
+
+  // Discovery comes from the transport (mock — see buddy-transport.ts).
+  const nearby = scanPeers();
 
   return (
     <Sheet zIndex={87} maxHeight="70%" onClose={close}>
@@ -30,10 +27,12 @@ export function ScanSheet() {
       </View>
 
       <View style={styles.list}>
-        {NEARBY.map((n) => (
+        {nearby.map((n) => (
           <Pressable
-            key={n.name}
-            onPress={() => patch({ buddy: n.name, scanning: false })}
+            key={n.id}
+            // Pairing goes straight into the sync screen — the first thing
+            // two freshly-paired devices want is to agree on their data.
+            onPress={() => patch({ buddy: n.name, scanning: false, buddySync: true })}
             style={styles.row}
           >
             <View style={styles.avatar}>
