@@ -40,7 +40,7 @@ export function Overlays() {
       {s.routineOpen && <RoutineOverlay />}
       {s.settingsOpen && <SettingsOverlay />}
       {s.buddySync && <BuddySyncOverlay />}
-      {s.session && <SessionOverlay />}
+      {s.session && !s.sessionMin && <SessionOverlay />}
       {s.dayPick !== null && <ScheduleSheet />}
       {s.pickWorkout && <PickWorkoutSheet />}
       {s.picker && <PickerOverlay />}

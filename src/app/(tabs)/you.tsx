@@ -5,12 +5,14 @@ import { GEAR_D, Icon } from '@/components/icon';
 import { ImageSlot } from '@/components/image-slot';
 import { Screen } from '@/components/screen';
 import { hasRadio, radio } from '@/data/buddy-radio';
+import { useBuddyLive } from '@/hooks/use-buddy-live';
 import { color, font, radius, t, tracking } from '@/design/tokens';
-import { Btn, H2, H6 } from '@/design/ui';
+import { Btn, H2, H6, missingName } from '@/design/ui';
 import { useStore } from '@/store/workout-store';
 
 export default function YouScreen() {
-  const { s, L, patch, allEx, loggedThisMonth } = useStore();
+  const { s, L, patch, allEx, loggedThisMonth, ex, exInfo } = useStore();
+  const buddyLive = useBuddyLive();
 
   const sub =
     [
@@ -117,6 +119,98 @@ export default function YouScreen() {
             onPress={() => patch({ scanning: true })}
           />
         </View>
+      )}
+
+      {/* Full co-session detail — the session overlay's buddy bar stays
+          minimal and taps through to here. */}
+      {s.session && s.sessionShared && buddyLive && (
+        <>
+          <H6 style={styles.sectionHead}>{L.liveSession}</H6>
+          <View style={styles.liveCard}>
+            <View style={styles.liveStatusRow}>
+              <Text style={styles.liveStatus} numberOfLines={1}>
+                {buddyLive.text}
+              </Text>
+              {buddyLive.turn && <Text style={styles.liveTurn}>{buddyLive.turn}</Text>}
+              {buddyLive.modeEx && (
+                <Pressable
+                  onPress={() =>
+                    patch((st) => ({
+                      turnModes: {
+                        ...st.turnModes,
+                        [buddyLive.modeEx!]:
+                          (st.turnModes[buddyLive.modeEx!] ?? 'alternate') === 'alternate'
+                            ? 'parallel'
+                            : 'alternate',
+                      },
+                    }))
+                  }
+                  style={styles.modeChip}
+                >
+                  <Text style={styles.modeChipLabel}>
+                    {(s.turnModes[buddyLive.modeEx] ?? 'alternate') === 'alternate'
+                      ? L.modeAlternate
+                      : L.modeParallel}
+                  </Text>
+                </Pressable>
+              )}
+              {buddyLive.jump && (
+                <Btn
+                  variant="ghost"
+                  label={L.jumpTo.replace('{ex}', buddyLive.jump.name)}
+                  labelStyle={styles.jumpLabel}
+                  onPress={() => patch({ active: buddyLive.jump!.index })}
+                />
+              )}
+            </View>
+
+            <View style={styles.liveHead}>
+              <Text style={[styles.liveCol, styles.liveColName]}>{L.exercise}</Text>
+              <Text style={[styles.liveCol, styles.liveColN]}>{L.me}</Text>
+              <Text style={[styles.liveCol, styles.liveColN]} numberOfLines={1}>
+                {s.buddy}
+              </Text>
+            </View>
+            {s.session.list.map((entry, i) => {
+              const meta = ex(entry.ex);
+              const name = meta ? exInfo(meta) : { text: entry.ex, missing: false };
+              const mine = entry.sets.filter((x) => x.done).length;
+              const theirs = s.buddyProgress?.list.find((e) => e.ex === entry.ex);
+              const theirDone = theirs ? theirs.done.filter(Boolean).length : null;
+              const myActive = i === s.active;
+              const theirActive = s.buddyProgress?.active === entry.ex;
+              return (
+                <View key={`${entry.ex}-${i}`} style={styles.liveRow}>
+                  <Text
+                    style={[
+                      styles.liveRowName,
+                      myActive && { color: color.accent200 },
+                      name.missing && missingName,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {name.text}
+                  </Text>
+                  <Text style={[styles.liveRowN, myActive && { color: color.accent400 }]}>
+                    {mine}/{entry.sets.length}
+                  </Text>
+                  <View style={styles.liveTheirCell}>
+                    <Text
+                      style={[
+                        styles.liveRowN,
+                        styles.liveTheirN,
+                        theirActive && { color: color.accent400 },
+                      ]}
+                    >
+                      {theirs ? `${theirDone}/${theirs.done.length}` : '—'}
+                    </Text>
+                    {theirActive && <View style={styles.theirDot} />}
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        </>
       )}
 
       <H6 style={styles.sectionHead}>{L.training}</H6>
@@ -252,6 +346,56 @@ const styles = StyleSheet.create({
   buddyStatus: { fontFamily: font.regular, fontSize: 11, color: color.accent400 },
   disconnect: { fontSize: 12 },
   syncLabel: { fontSize: 12 },
+
+  liveCard: {
+    borderRadius: radius.md,
+    backgroundColor: t.rowBg,
+    borderBottomWidth: 1,
+    borderBottomColor: t.rule,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  liveStatusRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  liveStatus: { flex: 1, fontFamily: font.regular, fontSize: 12.5, color: color.text },
+  liveTurn: { fontFamily: font.regular, fontSize: 11.5, color: color.accent400 },
+  modeChip: {
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: color.divider,
+  },
+  modeChipLabel: { fontFamily: font.regular, fontSize: 10, color: color.neutral400 },
+  jumpLabel: { fontSize: 11.5 },
+  liveHead: { flexDirection: 'row', gap: 8, marginTop: 10, paddingBottom: 4 },
+  liveCol: {
+    fontFamily: font.regular,
+    fontSize: 9.5,
+    letterSpacing: tracking(9.5, 0.07),
+    textTransform: 'uppercase',
+    color: color.neutral700,
+  },
+  liveColName: { flex: 1 },
+  liveColN: { width: 52, textAlign: 'center' },
+  liveRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 5 },
+  liveRowName: { flex: 1, fontFamily: font.regular, fontSize: 13, color: color.neutral300 },
+  liveRowN: {
+    width: 52,
+    textAlign: 'center',
+    fontFamily: font.regular,
+    fontSize: 12,
+    color: color.neutral500,
+    fontVariant: ['tabular-nums'],
+  },
+  liveTheirCell: {
+    width: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  liveTheirN: { width: undefined },
+  theirDot: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: color.accent },
   buddySub: { fontFamily: font.regular, fontSize: 12.5, color: color.neutral500, marginBottom: 9 },
   inviteBtn: { height: 40, marginTop: 0 },
 

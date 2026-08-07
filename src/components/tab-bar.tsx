@@ -34,22 +34,37 @@ const ROUTE: Record<string, string> = {
 type TabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>['tabBar']>>[0];
 
 export function TabBar({ state, navigation }: TabBarProps) {
-  const { s, L, patch } = useStore();
+  const { s, L, patch, clock } = useStore();
   const insets = useSafeAreaInsets();
   const current = state.routes[state.index]?.name;
 
+  const minimized = s.session !== null && s.sessionMin;
+
   return (
     <View>
-      {s.buddy && (
-        <View style={styles.buddyBar}>
+      {minimized ? (
+        // A session is tucked behind the tabs — the strip is the way back.
+        <Pressable onPress={() => patch({ sessionMin: false })} style={styles.buddyBar}>
           <View style={styles.buddyAvatar}>
-            <Text style={styles.buddyInitial}>{s.buddy[0]}</Text>
+            <View style={styles.liveDot} />
           </View>
           <Text style={styles.buddyName} numberOfLines={1}>
-            {s.buddy}
+            {s.session!.name} · {clock}
           </Text>
-          <Text style={styles.buddyStatus}>{L.trainingWith}</Text>
-        </View>
+          <Text style={styles.buddyStatus}>{L.backToWorkout} ›</Text>
+        </Pressable>
+      ) : (
+        s.buddy && (
+          <View style={styles.buddyBar}>
+            <View style={styles.buddyAvatar}>
+              <Text style={styles.buddyInitial}>{s.buddy[0]}</Text>
+            </View>
+            <Text style={styles.buddyName} numberOfLines={1}>
+              {s.buddy}
+            </Text>
+            <Text style={styles.buddyStatus}>{L.trainingWith}</Text>
+          </View>
+        )
       )}
 
       <View style={[styles.bar, { paddingBottom: 8 + insets.bottom }]}>
@@ -123,6 +138,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   buddyInitial: { fontFamily: font.regular, fontSize: 11, color: color.accent200 },
+  liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: color.accent },
   buddyName: { flex: 1, fontFamily: font.regular, fontSize: 12.5, color: color.text },
   buddyStatus: { fontFamily: font.regular, fontSize: 11, color: color.accent400 },
 });

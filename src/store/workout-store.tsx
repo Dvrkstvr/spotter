@@ -118,6 +118,11 @@ export type State = {
   buddyProgress: BuddyProgress | null;
   /** per-exercise turn-taking choice; advisory display only */
   turnModes: Record<string, 'alternate' | 'parallel'>;
+  /**
+   * Session overlay tucked away behind the tabs (tap the buddy bar) — the
+   * session itself keeps running; the tab bar shows a resume strip.
+   */
+  sessionMin: boolean;
   pickWorkout: boolean;
   /** day-of-week index whose scheduled routine is being picked, or null */
   dayPick: number | null;
@@ -163,6 +168,7 @@ const initialState: State = {
   buddyJoin: null,
   buddyProgress: null,
   turnModes: {},
+  sessionMin: false,
   pickWorkout: false,
   dayPick: null,
   groups: DEFAULT_GROUPS.map((g) => ({ ...g })),
@@ -536,6 +542,7 @@ function useWorkoutState() {
         buddyJoin: null,
         buddyProgress: null,
         turnModes: {},
+        sessionMin: false,
       };
     });
   };
@@ -586,6 +593,7 @@ function useWorkoutState() {
         buddyJoin: null,
         buddyProgress: null,
         turnModes: {},
+        sessionMin: false,
       };
     });
   };

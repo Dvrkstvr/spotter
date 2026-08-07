@@ -160,6 +160,13 @@ forgotten tick must never freeze the buddy's screen mid-workout.
       own numbers; no abandon signal beyond disconnect; routine conflict
       resolution beyond "starter wins at invite" stays in Buddy sync later.
       Profile's "Connected" label still reflects pairing, not the live link.
+- [x] **Minimal bar + Profile detail** (follow-up request): the session's
+      buddy bar shows one glanceable line (turn hint or status) and tapping
+      it tucks the session behind the tabs (`sessionMin`) and opens the
+      Profile tab, which gains a Live-session card: full status, turn-mode
+      chip, jump control, and a per-exercise you-vs-buddy progress table
+      (accent = active on each side). The tab-bar buddy strip becomes the
+      "Back to workout" resume strip (name + running clock) while minimized.
 
 ## Suggested order
 

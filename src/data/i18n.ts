@@ -63,6 +63,7 @@ export const DICT = {
     jumpTo: 'Go to {ex}',
     planSynced: 'In sync with {name}', planDiffers: "Differs on {name}'s phone",
     planMissing: "Not on {name}'s phone yet",
+    backToWorkout: 'Back to workout', liveSession: 'Live session', me: 'You',
   },
   de: {
     today: 'Heute', plan: 'Plan', routines: 'Routinen', exercises: 'Übungen', you: 'Profil', settings: 'Einstellungen',
@@ -112,6 +113,7 @@ export const DICT = {
     jumpTo: 'Zu {ex}',
     planSynced: 'Synchron mit {name}', planDiffers: 'Auf {name}s Handy anders',
     planMissing: 'Noch nicht auf {name}s Handy',
+    backToWorkout: 'Zurück zum Training', liveSession: 'Live-Session', me: 'Du',
   },
 } as const;
 
