@@ -68,9 +68,16 @@ export default function TodayScreen() {
         <View style={styles.heroTop}>
           <CardKicker>{L.plannedToday}</CardKicker>
           <View style={styles.spacer} />
-          <Text style={styles.heroLastDone}>
-            {L.lastDone} {L.sevenDays}
-          </Text>
+          {doneToday ? (
+            <View style={styles.doneBadge}>
+              <Icon d={CHECK_D} size={12} strokeWidth={2.2} color={color.accent400} />
+              <Text style={styles.doneBadgeText}>{L.completedToday}</Text>
+            </View>
+          ) : (
+            <Text style={styles.heroLastDone}>
+              {L.lastDone} {L.sevenDays}
+            </Text>
+          )}
         </View>
 
         <View style={styles.heroNameRow}>
@@ -92,9 +99,9 @@ export default function TodayScreen() {
         </View>
 
         <Btn
-          variant="primary"
+          variant={doneToday ? 'secondary' : 'primary'}
           block
-          label={`${L.start} ${todayRoutine.name}`}
+          label={doneToday ? L.startAgain : `${L.start} ${todayRoutine.name}`}
           onPress={() => start(todayRid)}
           style={styles.startBtn}
           labelStyle={styles.startLabel}
@@ -154,6 +161,8 @@ const styles = StyleSheet.create({
   heroTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   spacer: { flex: 1 },
   heroLastDone: { fontFamily: font.regular, fontSize: 11, color: color.neutral500 },
+  doneBadge: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  doneBadgeText: { fontFamily: font.regular, fontSize: 11, color: color.accent400 },
   heroNameRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 10, marginTop: 5 },
   heroSummary: {
     fontFamily: font.regular,
