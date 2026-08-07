@@ -1,16 +1,18 @@
 /** Post-workout summary — sets, volume, time, and where it was filed. */
 import { useRouter } from 'expo-router';
+import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { RiseIn } from '@/components/motion';
 import { useBackClose } from '@/hooks/use-back-close';
 import { color, elevation, font, radius, tracking, wash } from '@/design/tokens';
-import { Btn, CardKicker, H3 } from '@/design/ui';
+import { Btn, CardKicker, H3, Input } from '@/design/ui';
 import { useStore } from '@/store/workout-store';
 
 export function SummaryModal() {
-  const { s, L, patch } = useStore();
+  const { s, L, patch, saveAsRoutine } = useStore();
   const router = useRouter();
+  const [routineName, setRoutineName] = useState('');
 
   const close = () => {
     patch({ summary: null });
@@ -39,6 +41,26 @@ export function SummaryModal() {
         </View>
 
         <Text style={styles.note}>{summary.note}</Text>
+
+        {/* Freeform sessions can be kept as a routine — not in the original
+            design, which threw the exercise list away here. */}
+        {summary.saveable && (
+          <View style={styles.saveRow}>
+            <Input
+              style={styles.saveInput}
+              placeholder={L.newRoutine}
+              value={routineName}
+              onChangeText={setRoutineName}
+            />
+            <Btn
+              variant="secondary"
+              label={L.saveAsRoutine}
+              labelStyle={styles.saveLabel}
+              onPress={() => saveAsRoutine(routineName)}
+            />
+          </View>
+        )}
+
         {/* The design labels this button "Done" literally, not from the dictionary. */}
         <Btn variant="primary" block label="Done" style={styles.doneBtn} onPress={close} />
       </RiseIn>
@@ -80,5 +102,8 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   note: { fontFamily: font.regular, fontSize: 12.5, color: color.neutral400, marginTop: 14 },
+  saveRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 14 },
+  saveInput: { flex: 1, width: undefined },
+  saveLabel: { fontSize: 12.5 },
   doneBtn: { marginTop: 16, height: 42 },
 });

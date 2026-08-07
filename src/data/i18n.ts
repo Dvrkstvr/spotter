@@ -38,6 +38,7 @@ export const DICT = {
     connected: 'Connected', disconnect: 'Disconnect', dividerHint: 'leave empty for a divider', trainingWith: 'training with you',
     chooseWorkout: 'Choose a workout', thisWeek: 'This week', seePlan: 'See plan',
     chooseRoutine: 'Choose routine',
+    saveAsRoutine: 'Save as new routine', routineSaved: 'Saved to your routines.',
   },
   de: {
     today: 'Heute', plan: 'Plan', routines: 'Routinen', exercises: 'Übungen', you: 'Profil', settings: 'Einstellungen',
@@ -68,6 +69,7 @@ export const DICT = {
     connected: 'Verbunden', disconnect: 'Trennen', dividerHint: 'leer lassen für eine Trennlinie', trainingWith: 'trainiert mit dir',
     chooseWorkout: 'Training auswählen', thisWeek: 'Diese Woche', seePlan: 'Plan ansehen',
     chooseRoutine: 'Routine wählen',
+    saveAsRoutine: 'Als neue Routine speichern', routineSaved: 'In deinen Routinen gespeichert.',
   },
 } as const;
 

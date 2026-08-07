@@ -17,17 +17,14 @@ Working list, in the order we'll go through them. Check items off as they land.
 
 ## 2. "Save as new routine" after finishing an empty session
 
-- [ ] When `finishSession()` runs on a session with `rid === null` (freeform /
-      empty start) and a non-empty `list`, offer saving it as a routine.
-- [ ] UI: extend `summary-modal.tsx` with a name field + "Save as routine"
-      button rather than a whole new screen — the summary modal is already the
-      post-workout moment, and overlays are added in `overlays/index.tsx`
-      z-order.
-- [ ] Conversion: each `SessionExercise` → routine item
-      `{ ex, sets: sets.length, reps, w }`, taking reps/weight from the logged
-      numbers (mode or last set — decide when implementing; `prevNums` helps).
-- [ ] Store: needs `rid` (or a `wasFreeform` flag) and the finished `list`
-      carried into `summary`, since `session` is nulled on finish.
+- [x] `finishSession()` carries the exercise list into `summary.saveable` when
+      the session was freeform (`rid === null`) and non-empty.
+- [x] UI in `summary-modal.tsx` (decided over a separate screen): name field +
+      "Save as new routine" button; after saving, the row disappears and the
+      note flips to "Saved to your routines."
+- [x] Conversion in `saveAsRoutine()`: set count kept per exercise;
+      weight/reps from the last ticked set (else last set), falling back to
+      the "last time" ghost. Empty name falls back to "New routine".
 
 ## 3. Routine selector in the weekly plan
 

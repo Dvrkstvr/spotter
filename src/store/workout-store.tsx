@@ -28,7 +28,17 @@ import { TODAY_DOM } from '@/design/tokens';
 export type LoggedSet = { w: string; reps: string; done: boolean; prev: string };
 export type SessionExercise = { ex: string; sets: LoggedSet[] };
 export type Session = { rid: string | null; name: string; list: SessionExercise[] };
-export type Summary = { name: string; stats: { k: string; v: string | number }[]; note: string };
+export type Summary = {
+  name: string;
+  stats: { k: string; v: string | number }[];
+  note: string;
+  /**
+   * The finished exercises, kept only when the session was freeform (no
+   * routine) and non-empty — the summary modal offers to save them as a new
+   * routine. Null otherwise; not part of the original design.
+   */
+  saveable: SessionExercise[] | null;
+};
 export type Labelled = { key: string; label: string };
 export type Draft = { name: string; group: string; kind: string };
 export type Profile = { name: string; age: string; weight: string; height: string };
@@ -269,7 +279,41 @@ function useWorkoutState() {
             { k: L.time, v: clock },
           ],
           note: tot.done ? L.savedNote : L.savedEmpty,
+          saveable:
+            s.session.rid === null && s.session.list.length > 0 ? s.session.list : null,
         },
+      };
+    });
+  };
+
+  /**
+   * Turn the summary's freeform session into a routine. Each exercise keeps
+   * its set count; weight and reps come from the last ticked set (else the
+   * last set at all), falling back to the "last time" ghost.
+   */
+  const saveAsRoutine = (name: string) => {
+    patch((s) => {
+      if (!s.summary?.saveable) return null;
+      const items = s.summary.saveable
+        .filter((e) => e.sets.length > 0)
+        .map((e) => {
+          const src = [...e.sets].reverse().find((x) => x.done) ?? e.sets[e.sets.length - 1];
+          const ghost = prevNums(src.prev);
+          return {
+            ex: e.ex,
+            sets: e.sets.length,
+            reps: Math.round(num(src.reps || ghost.r, 8)),
+            w: num(src.w || ghost.w, 0),
+          };
+        });
+      if (items.length === 0) return null;
+      const L = DICT[s.lang] ?? DICT.en;
+      return {
+        routines: [
+          ...s.routines,
+          { id: `r${Date.now()}`, name: name.trim() || L.newRoutine, items },
+        ],
+        summary: { ...s.summary, saveable: null, note: L.routineSaved },
       };
     });
   };
@@ -307,6 +351,7 @@ function useWorkoutState() {
     totals,
     clock,
     finishSession,
+    saveAsRoutine,
   };
 }
 
