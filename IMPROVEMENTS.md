@@ -31,14 +31,13 @@ Working list, in the order we'll go through them. Check items off as they land.
 
 ## 3. Routine selector in the weekly plan
 
-- [ ] Replace the tap-to-cycle in `plan.tsx` (`CYCLE` array — hardcodes the
-      three seed routine ids, so custom routines can't be scheduled at all
-      today) with a proper picker.
-- [ ] Reuse the existing sheet pattern: a small sheet listing all
-      `s.routines` + "Rest", in the style of `pick-workout-sheet.tsx`. Tapping
-      a weekday row opens it for that day.
-- [ ] Update the `weeklyPlan` string ("Weekly plan · tap to change") in both
-      languages to match the new behaviour.
+- [x] Replace the tap-to-cycle in `plan.tsx` (`CYCLE` array — hardcoded the
+      three seed routine ids, so custom routines couldn't be scheduled) with a
+      proper picker: `schedule-sheet.tsx`, z 83, listing all `s.routines` +
+      Rest with the current choice checked in the accent. New store field
+      `dayPick`, new dict key `chooseRoutine`.
+- [x] `weeklyPlan` string kept as-is — "tap to change" still describes the
+      new behaviour in both languages.
 
 ## 4. Per-language aliases for user-named things
 

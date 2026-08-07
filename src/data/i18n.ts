@@ -37,6 +37,7 @@ export const DICT = {
     invite: 'Invite over Bluetooth', inviteShort: 'Invite', nearby: 'Nearby devices', searching: 'Searching…',
     connected: 'Connected', disconnect: 'Disconnect', dividerHint: 'leave empty for a divider', trainingWith: 'training with you',
     chooseWorkout: 'Choose a workout', thisWeek: 'This week', seePlan: 'See plan',
+    chooseRoutine: 'Choose routine',
   },
   de: {
     today: 'Heute', plan: 'Plan', routines: 'Routinen', exercises: 'Übungen', you: 'Profil', settings: 'Einstellungen',
@@ -66,6 +67,7 @@ export const DICT = {
     invite: 'Per Bluetooth einladen', inviteShort: 'Einladen', nearby: 'Geräte in der Nähe', searching: 'Suche…',
     connected: 'Verbunden', disconnect: 'Trennen', dividerHint: 'leer lassen für eine Trennlinie', trainingWith: 'trainiert mit dir',
     chooseWorkout: 'Training auswählen', thisWeek: 'Diese Woche', seePlan: 'Plan ansehen',
+    chooseRoutine: 'Routine wählen',
   },
 } as const;
 

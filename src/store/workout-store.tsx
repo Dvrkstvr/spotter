@@ -68,6 +68,8 @@ export type State = {
   scanning: boolean;
   buddy: string | null;
   pickWorkout: boolean;
+  /** day-of-week index whose scheduled routine is being picked, or null */
+  dayPick: number | null;
   groups: Labelled[];
   kinds: Labelled[];
   /** image-slot fills, keyed by slot id. The design persists these to a sidecar. */
@@ -100,6 +102,7 @@ const initialState: State = {
   scanning: false,
   buddy: null,
   pickWorkout: false,
+  dayPick: null,
   groups: DEFAULT_GROUPS.map((g) => ({ ...g })),
   kinds: DEFAULT_KINDS.map((k) => ({ ...k })),
   images: {},

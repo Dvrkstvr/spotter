@@ -18,9 +18,6 @@ const FIRST_DOW = 5;
 const DAYS_IN_MONTH = 31;
 const GRID_GAP = 3;
 
-/** Tapping a weekday cycles it through the routines, then back to rest. */
-const CYCLE: (string | null)[] = [null, 'chest', 'back', 'both'];
-
 export default function PlanScreen() {
   const { s, L, patch, routine } = useStore();
   const [gridWidth, setGridWidth] = useState(0);
@@ -42,15 +39,6 @@ export default function PlanScreen() {
           : L.dayPlanned
       : L.dayFree,
   };
-
-  const cycle = (dow: number) =>
-    patch((st) => {
-      const next = CYCLE[(CYCLE.indexOf(st.schedule[dow] ?? null) + 1) % CYCLE.length];
-      const schedule = { ...st.schedule };
-      if (next) schedule[dow] = next;
-      else delete schedule[dow];
-      return { schedule };
-    });
 
   return (
     <Screen>
@@ -144,8 +132,10 @@ export default function PlanScreen() {
       <View style={styles.planRows}>
         {DOW.map((d, i) => {
           const r = routine(s.schedule[i] ?? null);
+          // Opens the routine selector — the design cycled through the seed
+          // routines here, which locked out any user-created ones.
           return (
-            <Pressable key={d} onPress={() => cycle(i)} style={styles.row}>
+            <Pressable key={d} onPress={() => patch({ dayPick: i })} style={styles.row}>
               <Text style={styles.rowDay}>{d.toUpperCase()}</Text>
               <Text
                 style={[styles.rowName, { color: r ? color.text : color.neutral600 }]}
