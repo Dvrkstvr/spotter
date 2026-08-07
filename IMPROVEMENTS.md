@@ -128,6 +128,11 @@ real gym use.
       link drops, re-pairs the known buddy silently, and strangers knocking
       outside share mode are auto-rejected. Profile shows Connected /
       Reconnecting… live.
+- [x] **Field feedback round (8 Aug):** the tapped row flips to "Invite
+      sent"; the code now shows only on the invitee (who accepts up front —
+      Cancel still rejects) while the inviter types it in, auto-checked at
+      full length with a wrong-code hint. The typed code is the pairing gate:
+      it proves the inviter is physically reading the invitee's screen.
 
 ## 8. Shared buddy workouts — train the same routine together
 

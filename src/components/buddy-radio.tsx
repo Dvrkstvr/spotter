@@ -170,6 +170,10 @@ export function BuddyRadio() {
           r.rejectConnection(e.endpointId).catch(() => {});
           return;
         }
+        // The invitee displays the code and accepts up front — the actual
+        // gate is the inviter typing that code, which only their accept can
+        // pass. Cancel on the invitee side still rejects.
+        if (e.isIncoming) r.acceptConnection(e.endpointId).catch(() => {});
         st.patch({
           pendingAuth: {
             endpointId: e.endpointId,

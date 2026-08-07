@@ -1,4 +1,4 @@
-/** Nearby devices — the Bluetooth buddy pairing sheet. */
+/** Share mode — discover others sharing nearby and pair with a typed code. */
 import { useEffect, useState } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -7,11 +7,30 @@ import { hasRadio, radio } from '@/data/buddy-radio';
 import { scanPeers } from '@/data/buddy-transport';
 import { useBackClose } from '@/hooks/use-back-close';
 import { color, font, wash } from '@/design/tokens';
-import { Btn, H4 } from '@/design/ui';
+import { Btn, H4, Input } from '@/design/ui';
 import { useStore } from '@/store/workout-store';
 
 export function ScanSheet() {
   const { s, L, patch } = useStore();
+
+  // Which endpoint got our invite — its row reads "Invite sent" until the
+  // code stage arrives or the request dies.
+  const [sentTo, setSentTo] = useState<string | null>(null);
+  // The inviter's typed code attempt, and whether the last one was wrong.
+  const [code, setCode] = useState('');
+  const [wrong, setWrong] = useState(false);
+
+  const pa = s.pendingAuth;
+
+  // Leaving the code stage (paired, cancelled, or failed) resets the local
+  // trail so the list is fresh if we come back.
+  useEffect(() => {
+    if (!pa) {
+      setSentTo(null);
+      setCode('');
+      setWrong(false);
+    }
+  }, [pa]);
 
   const cancelAuth = () => {
     if (radio && s.pendingAuth) radio.rejectConnection(s.pendingAuth.endpointId).catch(() => {});
@@ -32,34 +51,58 @@ export function ScanSheet() {
 
   const invite = (n: { id: string; name: string }) => {
     if (hasRadio && radio) {
-      // Just request — the code check (pendingAuth) decides the pairing;
-      // <BuddyRadio> opens the sync screen once both sides confirm.
+      // Just request — the code stage decides the pairing; <BuddyRadio>
+      // opens the sync screen once the connection lands.
       const me = s.profile.name.trim() || 'Workout Diary';
-      radio.requestConnection(me, n.id).catch(() => {});
+      setSentTo(n.id);
+      radio.requestConnection(me, n.id).catch(() => setSentTo(null));
       return;
     }
     // Mock pairing goes straight into the sync screen.
     patch({ buddy: n.name, scanning: false, buddySync: true });
   };
 
-  /* — the code check: both phones show the same digits, both confirm — */
-  if (s.pendingAuth) {
-    const pa = s.pendingAuth;
+  const tryCode = (v: string) => {
+    setWrong(false);
+    setCode(v);
+    if (!pa || v.length < pa.digits.length) return;
+    if (v.trim().toUpperCase() === pa.digits.trim().toUpperCase()) {
+      radio?.acceptConnection(pa.endpointId).catch(() => {});
+    } else {
+      setWrong(true);
+      setCode('');
+    }
+  };
+
+  /* — the code stage: the invitee shows it, the inviter types it — */
+  if (pa) {
     return (
       <Sheet zIndex={87} maxHeight="70%" onClose={cancelAuth}>
         <H4>{L.authTitle}</H4>
         <Text style={styles.authName}>{pa.name}</Text>
-        <Text style={styles.authDigits}>{pa.digits}</Text>
-        <Text style={styles.authHint}>{L.authHint.replace('{name}', pa.name)}</Text>
-        <View style={styles.authActions}>
-          <Btn variant="secondary" label={L.cancel} style={styles.authAction} onPress={cancelAuth} />
-          <Btn
-            variant="primary"
-            label={L.pairBtn}
-            style={styles.authAction}
-            onPress={() => radio?.acceptConnection(pa.endpointId).catch(() => {})}
-          />
-        </View>
+
+        {pa.incoming ? (
+          <>
+            <Text style={styles.authDigits}>{pa.digits}</Text>
+            <Text style={styles.authHint}>{L.authShowHint.replace('{name}', pa.name)}</Text>
+          </>
+        ) : (
+          <>
+            <Input
+              style={styles.authInput}
+              value={code}
+              onChangeText={tryCode}
+              maxLength={pa.digits.length}
+              keyboardType={/^\d+$/.test(pa.digits) ? 'number-pad' : 'default'}
+              autoFocus
+            />
+            <Text style={[styles.authHint, wrong && styles.authWrong]}>
+              {wrong ? L.authWrong : L.authEnterHint.replace('{name}', pa.name)}
+            </Text>
+          </>
+        )}
+
+        <Btn variant="secondary" block label={L.cancel} style={styles.closeBtn} onPress={cancelAuth} />
       </Sheet>
     );
   }
@@ -75,18 +118,23 @@ export function ScanSheet() {
       <Text style={styles.shareHint}>{L.shareHint}</Text>
 
       <View style={styles.list}>
-        {nearby.map((n) => (
-          <Pressable key={n.id} onPress={() => invite(n)} style={styles.row}>
-            <View style={styles.avatar}>
-              <Text style={styles.initial}>{n.name[0]}</Text>
-            </View>
-            <View style={styles.text}>
-              <Text style={styles.name}>{n.name}</Text>
-              <Text style={styles.device}>{n.device}</Text>
-            </View>
-            <Text style={styles.invite}>{L.inviteShort}</Text>
-          </Pressable>
-        ))}
+        {nearby.map((n) => {
+          const sent = sentTo === n.id;
+          return (
+            <Pressable key={n.id} disabled={sent} onPress={() => invite(n)} style={styles.row}>
+              <View style={styles.avatar}>
+                <Text style={styles.initial}>{n.name[0]}</Text>
+              </View>
+              <View style={styles.text}>
+                <Text style={styles.name}>{n.name}</Text>
+                <Text style={styles.device}>{n.device}</Text>
+              </View>
+              <Text style={[styles.invite, sent && styles.inviteSent]}>
+                {sent ? L.inviteSent : L.inviteShort}
+              </Text>
+            </Pressable>
+          );
+        })}
       </View>
 
       <Btn variant="secondary" block label={L.close} style={styles.closeBtn} onPress={close} />
@@ -133,8 +181,18 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   authHint: { fontFamily: font.regular, fontSize: 12.5, color: color.neutral500 },
-  authActions: { flexDirection: 'row', gap: 8, marginTop: 18 },
-  authAction: { flex: 1, height: 42 },
+  authWrong: { color: color.accent },
+  authInput: {
+    marginVertical: 18,
+    alignSelf: 'center',
+    minWidth: 160,
+    textAlign: 'center',
+    fontFamily: font.heading,
+    fontSize: 30,
+    letterSpacing: 8,
+    paddingVertical: 8,
+  },
+  inviteSent: { color: color.neutral500 },
 
   list: { marginTop: 14 },
   row: {
