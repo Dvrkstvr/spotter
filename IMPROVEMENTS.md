@@ -83,20 +83,18 @@ transport, pairing just sets a name (`scan-sheet.tsx`).
 
 Everything is currently seed data, frozen in memory (README "Known gaps").
 
-- [ ] **Persistence.** AsyncStorage (`@react-native-async-storage/async-storage`,
-      works in Expo Go SDK 54): hydrate the store on launch, debounce-save on
-      every `patch()`. The state is already one JSON-serializable object with a
-      single choke point, so this is cheap. expo-sqlite only if history
-      outgrows it.
-- [ ] **Real date.** Derive today from `new Date()` instead of
-      `TODAY_DOW`/`TODAY_DOM`; compute the Plan month grid (first weekday,
-      day count) instead of the fixed August 2026.
-- [ ] **Real history.** `done` becomes real dates, not day-of-month numbers;
-      "last done 7 days ago" computed from history; `finishSession()` writes
-      the logged numbers back so "last time" ghosts come from actual sessions
-      instead of static `lastSets`.
-- [ ] Order matters: persistence first (worthless to log real history that
-      evaporates), then date, then history.
+- [x] **Persistence.** The durable slice (`PERSIST` in the store) is one JSON
+      blob in AsyncStorage — hydrated on launch, debounce-saved (400 ms) on
+      change. Transient UI and the live session reset on restart; `buddy` too,
+      since a connection can't survive one.
+- [x] **Real date.** `src/data/date.ts` replaces `TODAY_DOW`/`TODAY_DOM`;
+      the Plan grid computes the real current month; date labels are formatted
+      per language (`fmtDay*` in i18n.ts) instead of dictionary constants.
+- [x] **Real history.** `done: number[]` became `history` (real ISO dates +
+      routine id): the "last done N days ago" label is computed (hidden until
+      a routine has history), and `finishSession()` writes ticked numbers to
+      `lastLog`, which feeds the "last time" ghosts and the exercise sheet's
+      last-session rows with their real date.
 
 ## Suggested order
 

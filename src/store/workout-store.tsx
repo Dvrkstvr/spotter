@@ -5,11 +5,15 @@
  * shape, the same mutators, the same derived values. `patch()` stands in for
  * the class's `setState` — partial merge, optional updater function.
  *
- * State is in-memory only, exactly as the design is. Nothing survives a reload
- * yet; persistence is the obvious next step but is not part of this design.
+ * The durable slice (see PERSIST below) is stored in AsyncStorage as one JSON
+ * blob: hydrated once on launch, debounce-saved on every change. The design
+ * itself was in-memory only; persistence and the real-date history are
+ * deliberate departures from it.
  */
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useState } from 'react';
 
+import { todayDom, todayISO } from '@/data/date';
 import {
   DEFAULT_GROUPS,
   DEFAULT_KINDS,
@@ -20,8 +24,7 @@ import {
   Routine,
   SetupPair,
 } from '@/data/exercises';
-import { DICT, Lang, Strings } from '@/data/i18n';
-import { TODAY_DOM } from '@/design/tokens';
+import { DICT, fmtDayLong, Lang, Strings } from '@/data/i18n';
 
 /* ── types ─────────────────────────────────────────────────────────────── */
 
@@ -43,6 +46,10 @@ export type Labelled = { key: string; label: string };
 export type Draft = { name: string; group: string; kind: string };
 export type Profile = { name: string; age: string; weight: string; height: string };
 export type PickerMode = 'routine' | 'session' | null;
+/** One finished session: which local day it landed on, and from which routine. */
+export type HistoryEntry = { date: string; rid: string | null };
+/** The last logged numbers for one exercise, shown as the "last time" ghosts. */
+export type LastLog = { date: string; sets: string[] };
 
 /**
  * Everything the design keeps in `Component.state`, minus `tab` — which screen
@@ -64,8 +71,14 @@ export type State = {
   filter: string;
   elapsed: number;
   summary: Summary | null;
-  /** days of the month with a logged session */
-  done: number[];
+  /**
+   * Every finished session, by real local date. Replaces the design's
+   * `done: number[]` (days of a pinned August 2026), which stopped making
+   * sense once "today" went live.
+   */
+  history: HistoryEntry[];
+  /** last logged numbers per exercise id — real history behind "last time" */
+  lastLog: Record<string, LastLog>;
   daySel: number;
   custom: Exercise[];
   creating: Draft | null;
@@ -99,8 +112,9 @@ const initialState: State = {
   filter: 'All',
   elapsed: 0,
   summary: null,
-  done: [3, 5],
-  daySel: 7,
+  history: [],
+  lastLog: {},
+  daySel: todayDom(),
   custom: [],
   creating: null,
   profile: { name: '', age: '', weight: '', height: '' },
@@ -119,6 +133,37 @@ const initialState: State = {
 };
 
 type Patch = Partial<State> | ((s: State) => Partial<State> | null);
+
+/* ── persistence ──────────────────────────────────────────────────────────
+ *
+ * The durable slice of state, as one JSON blob in AsyncStorage. Everything
+ * not listed is transient UI (open overlays, the live session, the clock) and
+ * deliberately reseeds. `buddy` stays out too: it names a live Bluetooth
+ * connection, and a connection does not survive an app restart.
+ */
+
+const STORAGE_KEY = 'workout-diary/v1';
+
+const PERSIST = [
+  'routines', 'schedule', 'history', 'lastLog', 'custom', 'profile',
+  'setups', 'videos', 'lang', 'groups', 'kinds', 'images',
+] as const satisfies readonly (keyof State)[];
+
+type Persisted = Pick<State, (typeof PERSIST)[number]>;
+
+const pickPersisted = (s: State): Persisted => {
+  const out = {} as Persisted;
+  for (const k of PERSIST) (out as Record<string, unknown>)[k] = s[k];
+  return out;
+};
+
+/** Keep only known durable keys, so stale blobs can't resurrect UI state. */
+const filterPersisted = (raw: unknown): Partial<State> => {
+  if (typeof raw !== 'object' || raw === null) return {};
+  const out: Record<string, unknown> = {};
+  for (const k of PERSIST) if (k in raw) out[k] = (raw as Record<string, unknown>)[k];
+  return out as Partial<State>;
+};
 
 /* ── pure helpers (shared with screens) ────────────────────────────────── */
 
@@ -141,6 +186,9 @@ export const prevNums = (prev: string) => {
 
 function useWorkoutState() {
   const [state, setState] = useState<State>(initialState);
+  // False until the stored blob has been merged in; saving waits for it so a
+  // fresh launch can never overwrite real data with the seed.
+  const [hydrated, setHydrated] = useState(false);
 
   // Everything below closes over `state` directly. The hook re-runs on every
   // change anyway, so there is nothing for a latest-value ref to buy — and
@@ -153,6 +201,31 @@ function useWorkoutState() {
     });
   }, []);
 
+  /* — hydrate once, then debounce-save the durable slice on every change — */
+
+  useEffect(() => {
+    let alive = true;
+    AsyncStorage.getItem(STORAGE_KEY)
+      .then((raw) => {
+        if (alive && raw) patch(filterPersisted(JSON.parse(raw)));
+      })
+      .catch(() => {}) // unreadable blob → run on the seed rather than crash
+      .finally(() => {
+        if (alive) setHydrated(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [patch]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const id = setTimeout(() => {
+      AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(pickPersisted(state))).catch(() => {});
+    }, 400);
+    return () => clearTimeout(id);
+  }, [state, hydrated]);
+
   /* — lookups — */
 
   const allEx = () => [...EX, ...state.custom];
@@ -160,6 +233,22 @@ function useWorkoutState() {
   const routine = (id: string | null | undefined) => state.routines.find((r) => r.id === id);
   const gLabel = (key: string) => state.groups.find((x) => x.key === key)?.label ?? key;
   const kLabel = (key: string) => state.kinds.find((x) => x.key === key)?.label ?? key;
+
+  /** "Last time" for an exercise — really logged history first, then the seed. */
+  const lastFor = (id: string): { date: string | null; sets: string[] } => {
+    const logged = state.lastLog[id];
+    if (logged) return { date: logged.date, sets: logged.sets };
+    return { date: null, sets: ex(id)?.lastSets ?? [] };
+  };
+
+  /** Whether a given local day (ISO) has a logged session. */
+  const doneOn = (iso: string) => state.history.some((h) => h.date === iso);
+
+  /** Distinct days with a logged session in the current month. */
+  const loggedThisMonth = () => {
+    const prefix = todayISO().slice(0, 8); // 'YYYY-MM-'
+    return new Set(state.history.map((h) => h.date).filter((d) => d.startsWith(prefix))).size;
+  };
 
   /** The machine settings for an exercise — the user's edits, else the defaults. */
   const setup = (id: string): SetupPair[] =>
@@ -214,23 +303,22 @@ function useWorkoutState() {
 
   const start = (rid: string | null | undefined) => {
     const r = rid ? state.routines.find((x) => x.id === rid) : null;
-    const lookup = (id: string) => allEx().find((e) => e.id === id)!;
     patch({
       session: {
         rid: rid ?? null,
         name: r ? r.name : (DICT[state.lang] ?? DICT.en).freeSession,
-        list: (r ? r.items : []).map((it) => ({
-          ex: it.ex,
-          sets: Array.from({ length: it.sets }, (_, k) => ({
-            w: '',
-            reps: '',
-            done: false,
-            prev:
-              lookup(it.ex).lastSets[k] ||
-              lookup(it.ex).lastSets[0] ||
-              `${fmt(it.w)} × ${it.reps}`,
-          })),
-        })),
+        list: (r ? r.items : []).map((it) => {
+          const last = lastFor(it.ex).sets;
+          return {
+            ex: it.ex,
+            sets: Array.from({ length: it.sets }, (_, k) => ({
+              w: '',
+              reps: '',
+              done: false,
+              prev: last[k] || last[0] || `${fmt(it.w)} × ${it.reps}`,
+            })),
+          };
+        }),
       },
       active: 0,
       elapsed: 0,
@@ -266,11 +354,24 @@ function useWorkoutState() {
   const finishSession = () => {
     const L = DICT[state.lang] ?? DICT.en;
     const tot = totals();
+    const today = todayISO();
     patch((s) => {
       if (!s.session) return null;
+
+      // Write the ticked numbers back per exercise — these become the "last
+      // time" ghosts, replacing the static seed the design shipped with.
+      const lastLog = { ...s.lastLog };
+      for (const e of s.session.list) {
+        const sets = e.sets
+          .filter((x) => x.done)
+          .map((x) => `${num(x.w, 0) ? fmt(num(x.w, 0)) : 'BW'} × ${Math.round(num(x.reps, 0))}`);
+        if (sets.length) lastLog[e.ex] = { date: today, sets };
+      }
+
       return {
         session: null,
-        done: s.done.includes(TODAY_DOM) ? s.done : [...s.done, TODAY_DOM],
+        history: [...s.history, { date: today, rid: s.session.rid }],
+        lastLog,
         summary: {
           name: s.session.name,
           stats: [
@@ -278,7 +379,9 @@ function useWorkoutState() {
             { k: L.volume, v: Math.round(tot.vol) },
             { k: L.time, v: clock },
           ],
-          note: tot.done ? L.savedNote : L.savedEmpty,
+          note: tot.done
+            ? L.savedNote.replace('{date}', fmtDayLong(s.lang, new Date()))
+            : L.savedEmpty,
           saveable:
             s.session.rid === null && s.session.list.length > 0 ? s.session.list : null,
         },
@@ -341,6 +444,9 @@ function useWorkoutState() {
     routine,
     gLabel,
     kLabel,
+    lastFor,
+    doneOn,
+    loggedThisMonth,
     setup,
     cues,
     mutSetup,

@@ -3,7 +3,8 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Sheet } from '@/components/sheet';
 import { useBackClose } from '@/hooks/use-back-close';
-import { color, font, wash, TODAY_DOW } from '@/design/tokens';
+import { todayDow } from '@/data/date';
+import { color, font, wash } from '@/design/tokens';
 import { Btn, H4 } from '@/design/ui';
 import { useStore } from '@/store/workout-store';
 
@@ -12,7 +13,7 @@ export function PickWorkoutSheet() {
   const close = () => patch({ pickWorkout: false });
   useBackClose(close);
 
-  const todayRid = s.schedule[TODAY_DOW];
+  const todayRid = s.schedule[todayDow()];
 
   const options = [
     ...s.routines

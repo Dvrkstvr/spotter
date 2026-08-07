@@ -162,10 +162,5 @@ export const t = {
   },
 } as const;
 
-/**
- * The design's calendar is pinned to a fixed "today" — Friday 7 August 2026 —
- * and its seed data (logged days, "last done 7 days ago") is written around it.
- * Kept as constants so the app reads exactly as the design does.
- */
-export const TODAY_DOW = 4; // index into DOW → Fri
-export const TODAY_DOM = 7; // day of month
+// The design pinned "today" to Friday 7 August 2026 (TODAY_DOW / TODAY_DOM
+// lived here); the app went live instead — see src/data/date.ts.

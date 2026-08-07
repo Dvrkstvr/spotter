@@ -9,7 +9,7 @@ import { Btn, H2, H6 } from '@/design/ui';
 import { useStore } from '@/store/workout-store';
 
 export default function YouScreen() {
-  const { s, L, patch, allEx } = useStore();
+  const { s, L, patch, allEx, loggedThisMonth } = useStore();
 
   const sub =
     [
@@ -27,7 +27,7 @@ export default function YouScreen() {
   ] as const;
 
   const stats = [
-    { k: L.thisMonth, v: s.done.length },
+    { k: L.thisMonth, v: loggedThisMonth() },
     { k: L.routines, v: s.routines.length },
     { k: L.exercises, v: allEx().length },
   ];

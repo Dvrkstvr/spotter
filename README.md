@@ -82,12 +82,18 @@ hardcodes nothing.
 
 These are deliberate, and each is called out in the code:
 
-- **Nothing persists.** State is in-memory, as the design is. Close the app and
-  it reseeds. Persistence is the first real feature to add.
-- **"Today" is fixed to Friday 7 August 2026.** The design pins it, and its seed
-  data — the logged days, "last done 7 days ago" — is written around that date.
-  See `TODAY_DOW` / `TODAY_DOM` in `src/design/tokens.ts`.
 - **The buddy is a mock.** The nearby-devices list is hardcoded; there is no
   Bluetooth. Pairing sets a name and shows the strip.
 - **Routine editing has no Edit mode.** The button toggles its own label and
   nothing else — faithful to the design, where the rows are always editable.
+
+Two of the original gaps have since been closed, as departures from the
+design (which was in-memory and pinned to Friday 7 August 2026):
+
+- **State persists.** The durable slice — routines, schedule, history, logged
+  numbers, profile, settings — lives in AsyncStorage as one JSON blob; open
+  overlays and the live session deliberately reset on restart. See `PERSIST`
+  in `src/store/workout-store.tsx`.
+- **"Today" is live.** Dates come from `src/data/date.ts`; the Plan screen
+  shows the real current month; finished sessions are logged by real date and
+  feed the "last time" ghosts and "last done N days ago".

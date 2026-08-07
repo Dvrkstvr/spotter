@@ -30,9 +30,9 @@ export const DICT = {
     time: 'Time', loggedMonth: 'logged this month', unscheduled: 'unscheduled', bodyweight: 'bodyweight',
     dayDone: 'Done — logged this session.', dayPlannedPast: 'Planned, not logged.', dayPlanned: 'Planned.',
     dayFree: 'Nothing planned. Start a free session any time.', addDetails: 'Add your details below',
-    savedNote: 'Saved to Friday 7 August. Next time these numbers show up as “last time”.',
+    savedNote: 'Saved to {date}. Next time these numbers show up as “last time”.',
     savedEmpty: 'Saved empty — nothing was ticked off.', ok: 'Done',
-    todayDate: 'Fri 7 August', sevenDays: '7 days ago',
+    daysAgo: '{n} days ago', oneDayAgo: 'yesterday',
     buddy: 'Buddy', buddySub: 'Pair with someone at the gym over Bluetooth — you both see the same session and can tick off sets for each other.',
     invite: 'Invite over Bluetooth', inviteShort: 'Invite', nearby: 'Nearby devices', searching: 'Searching…',
     connected: 'Connected', disconnect: 'Disconnect', dividerHint: 'leave empty for a divider', trainingWith: 'training with you',
@@ -61,9 +61,10 @@ export const DICT = {
     time: 'Dauer', loggedMonth: 'diesen Monat erledigt', unscheduled: 'nicht geplant', bodyweight: 'Körpergewicht',
     dayDone: 'Erledigt — Einheit aufgezeichnet.', dayPlannedPast: 'Geplant, nicht aufgezeichnet.', dayPlanned: 'Geplant.',
     dayFree: 'Nichts geplant. Du kannst jederzeit frei trainieren.', addDetails: 'Trag deine Daten unten ein',
-    savedNote: 'Für Freitag, 7. August gespeichert. Beim nächsten Mal stehen diese Zahlen unter „letztes Mal“.',
+    savedNote: 'Für {date} gespeichert. Beim nächsten Mal stehen diese Zahlen unter „letztes Mal“.',
     savedEmpty: 'Leer gespeichert — nichts abgehakt.', ok: 'Fertig',
-    todayDate: 'Fr 7. August', sevenDays: '7 Tagen',
+    // composed after lastDone ('zuletzt vor …'), so no 'vor' of their own
+    daysAgo: '{n} Tagen', oneDayAgo: 'einem Tag',
     buddy: 'Trainingspartner', buddySub: 'Verbinde dich per Bluetooth mit jemandem im Studio — ihr seht dieselbe Einheit und könnt Sätze füreinander abhaken.',
     invite: 'Per Bluetooth einladen', inviteShort: 'Einladen', nearby: 'Geräte in der Nähe', searching: 'Suche…',
     connected: 'Verbunden', disconnect: 'Trennen', dividerHint: 'leer lassen für eine Trennlinie', trainingWith: 'trainiert mit dir',
@@ -75,3 +76,50 @@ export const DICT = {
 
 /** Every key the UI can ask for, with values widened so either language fits. */
 export type Strings = { [K in keyof (typeof DICT)['en']]: string };
+
+/* ── live dates ────────────────────────────────────────────────────────────
+ *
+ * The design's dates were baked into the dictionary ('Fri 7 August'); going
+ * live they are formatted from real Dates instead. Kept as hand-rolled tables
+ * rather than Intl, so both languages render identically on every device.
+ * Day tables are Monday-based, matching `DOW` and the schedule keys.
+ */
+
+const DAYS_SHORT = {
+  en: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+  de: ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'],
+} as const;
+
+const DAYS_LONG = {
+  en: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+  de: ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag'],
+} as const;
+
+export const MONTHS = {
+  en: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
+  de: ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'],
+} as const;
+
+const dowOf = (d: Date) => (d.getDay() + 6) % 7;
+
+/** 'Fri 7 August' / 'Fr 7. August' — the Today screen's date label. */
+export const fmtDayShort = (lang: Lang, d: Date) =>
+  lang === 'de'
+    ? `${DAYS_SHORT.de[dowOf(d)]} ${d.getDate()}. ${MONTHS.de[d.getMonth()]}`
+    : `${DAYS_SHORT.en[dowOf(d)]} ${d.getDate()} ${MONTHS.en[d.getMonth()]}`;
+
+/** 'Friday 7 August' / 'Freitag, 7. August' — the summary's filing note. */
+export const fmtDayLong = (lang: Lang, d: Date) =>
+  lang === 'de'
+    ? `${DAYS_LONG.de[dowOf(d)]}, ${d.getDate()}. ${MONTHS.de[d.getMonth()]}`
+    : `${DAYS_LONG.en[dowOf(d)]} ${d.getDate()} ${MONTHS.en[d.getMonth()]}`;
+
+/** '5 Aug' / '5. Aug' — compact, for the last-session rows. */
+export const fmtDayTiny = (lang: Lang, d: Date) =>
+  lang === 'de'
+    ? `${d.getDate()}. ${MONTHS.de[d.getMonth()].slice(0, 3)}`
+    : `${d.getDate()} ${MONTHS.en[d.getMonth()].slice(0, 3)}`;
+
+/** 'last done 3 days ago' / 'zuletzt vor 3 Tagen', composed from the dict. */
+export const fmtLastDone = (L: Strings, days: number) =>
+  `${L.lastDone} ${days === 0 ? L.agoToday : days === 1 ? L.oneDayAgo : L.daysAgo.replace('{n}', String(days))}`;

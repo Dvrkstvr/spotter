@@ -13,7 +13,7 @@ import { Exercise } from '@/data/exercises';
 import { useStore } from '@/store/workout-store';
 
 export function PickerOverlay() {
-  const { s, L, patch, allEx, gLabel, kLabel } = useStore();
+  const { s, L, patch, allEx, gLabel, kLabel, lastFor } = useStore();
   const insets = useSafeAreaInsets();
   const close = () => patch({ picker: null, query: '' });
   useBackClose(close);
@@ -32,6 +32,7 @@ export function PickerOverlay() {
         ),
       }));
     } else {
+      const last = lastFor(e.id).sets;
       patch((st) => {
         const fresh = {
           ex: e.id,
@@ -39,7 +40,7 @@ export function PickerOverlay() {
             w: '',
             reps: '',
             done: false,
-            prev: e.lastSets[k] || e.lastSets[0] || '—',
+            prev: last[k] || last[0] || '—',
           })),
         };
         // Adding from a screen with no session open starts one.

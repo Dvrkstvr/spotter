@@ -52,8 +52,11 @@ Keep these; they're decisions, not drift. Each is commented at its site.
   shifts 8px, which on a 7px dot reads as a glitch.
 - `<image-slot>` is filled by the photo picker rather than drag-and-drop.
 - The design's `recent` array is computed but never rendered — not ported.
-- "Today" is pinned to Friday 7 August 2026 (`TODAY_DOW` / `TODAY_DOM`), because
-  the design's seed data is written around that date.
+- "Today" is live (`src/data/date.ts`), not the design's pinned Friday
+  7 August 2026. Sessions are logged by real date (`history` / `lastLog` in
+  the store), and the durable slice of state persists to AsyncStorage — see
+  `PERSIST` in `workout-store.tsx` before adding state you expect to survive
+  a restart.
 
 ## Checks
 

@@ -5,16 +5,19 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { CHECK_D, Icon } from '@/components/icon';
 import { Screen } from '@/components/screen';
+import { daysSince, todayDow, todayISO } from '@/data/date';
 import { DOW } from '@/data/exercises';
-import { color, elevation, font, t, tracking, TODAY_DOM, TODAY_DOW } from '@/design/tokens';
+import { fmtDayShort, fmtLastDone } from '@/data/i18n';
+import { color, elevation, font, t, tracking } from '@/design/tokens';
 import { Btn, CardKicker, H2, H3, H6 } from '@/design/ui';
 import { fmt, useStore } from '@/store/workout-store';
 
 export default function TodayScreen() {
-  const { s, L, patch, ex, routine, start } = useStore();
+  const { s, L, patch, ex, routine, start, doneOn } = useStore();
   const router = useRouter();
 
-  const todayRid = s.schedule[TODAY_DOW];
+  const dow = todayDow();
+  const todayRid = s.schedule[dow];
   const tr = routine(todayRid ?? null);
 
   /**
@@ -23,7 +26,14 @@ export default function TodayScreen() {
    * built from the design's own cues: the accent check from a ticked set, and
    * the demotion of a spent primary button to secondary.
    */
-  const doneToday = s.done.includes(TODAY_DOM);
+  const doneToday = doneOn(todayISO());
+
+  /** Days since this routine was last logged, or null if it never was. */
+  const lastDays = (() => {
+    if (!todayRid) return null;
+    const dates = s.history.filter((h) => h.rid === todayRid).map((h) => h.date);
+    return dates.length ? daysSince(dates.sort().pop()!) : null;
+  })();
 
   const todayRoutine = tr
     ? {
@@ -39,7 +49,7 @@ export default function TodayScreen() {
   const weekRows = DOW.map((d, i) => {
     const rid = s.schedule[i];
     const r = routine(rid ?? null);
-    const isToday = i === TODAY_DOW;
+    const isToday = i === dow;
     return {
       day: d.toUpperCase(),
       dayColor: isToday ? color.accent : color.neutral500,
@@ -55,7 +65,7 @@ export default function TodayScreen() {
         <H2 size={t.h2} style={styles.tight}>
           {L.today}
         </H2>
-        <Text style={styles.todayLabel}>{L.todayDate}</Text>
+        <Text style={styles.todayLabel}>{fmtDayShort(s.lang, new Date())}</Text>
       </View>
 
       <LinearGradient
@@ -74,9 +84,9 @@ export default function TodayScreen() {
               <Text style={styles.doneBadgeText}>{L.completedToday}</Text>
             </View>
           ) : (
-            <Text style={styles.heroLastDone}>
-              {L.lastDone} {L.sevenDays}
-            </Text>
+            lastDays !== null && (
+              <Text style={styles.heroLastDone}>{fmtLastDone(L, lastDays)}</Text>
+            )
           )}
         </View>
 

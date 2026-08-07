@@ -1,40 +1,52 @@
 /**
  * Plan — the month at a glance and the weekly schedule.
  *
- * Reached from Today's "See plan", so it has no tab of its own. The month is
- * August 2026 with 1 August on a Saturday, exactly as the design fixes it.
+ * Reached from Today's "See plan", so it has no tab of its own. The design
+ * fixed the month to August 2026; this shows the real current month.
  */
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Screen } from '@/components/screen';
+import { toISO, todayDom } from '@/data/date';
 import { DOW } from '@/data/exercises';
-import { color, font, t, tracking, TODAY_DOM } from '@/design/tokens';
+import { MONTHS } from '@/data/i18n';
+import { color, font, t, tracking } from '@/design/tokens';
 import { H2, H4, H6 } from '@/design/ui';
 import { useStore } from '@/store/workout-store';
 
-/** Weekday index of the 1st: August 2026 opens on a Saturday. */
-const FIRST_DOW = 5;
-const DAYS_IN_MONTH = 31;
 const GRID_GAP = 3;
 
 export default function PlanScreen() {
-  const { s, L, patch, routine } = useStore();
+  const { s, L, patch, routine, doneOn, loggedThisMonth } = useStore();
   const [gridWidth, setGridWidth] = useState(0);
 
   const cell = gridWidth ? (gridWidth - GRID_GAP * 6) / 7 : 0;
 
-  const selDow = (FIRST_DOW + s.daySel - 1) % 7;
+  /* The live month replaces the design's fixed August 2026. */
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const monthName = MONTHS[s.lang][month];
+  const firstDow = (new Date(year, month, 1).getDay() + 6) % 7; // Mon-based
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const dom = todayDom();
+  const isoOf = (day: number) => toISO(new Date(year, month, day));
+
+  const selDow = (firstDow + s.daySel - 1) % 7;
   const selRoutine = routine(s.schedule[selDow] ?? null);
-  const selDone = s.done.includes(s.daySel);
+  const selDone = doneOn(isoOf(s.daySel));
 
   const daySel = {
-    head: `${DOW[selDow]} ${s.daySel} August`,
+    head:
+      s.lang === 'de'
+        ? `${DOW[selDow]} ${s.daySel}. ${monthName}`
+        : `${DOW[selDow]} ${s.daySel} ${monthName}`,
     title: selRoutine ? selRoutine.name : L.restDay,
     body: selRoutine
       ? selDone
         ? L.dayDone
-        : s.daySel < TODAY_DOM
+        : s.daySel < dom
           ? L.dayPlannedPast
           : L.dayPlanned
       : L.dayFree,
@@ -47,9 +59,9 @@ export default function PlanScreen() {
       </H2>
 
       <View style={styles.monthRow}>
-        <H4>August 2026</H4>
+        <H4>{`${monthName} ${year}`}</H4>
         <Text style={styles.monthMeta}>
-          {s.done.length} {L.loggedMonth}
+          {loggedThisMonth()} {L.loggedMonth}
         </Text>
       </View>
 
@@ -61,14 +73,14 @@ export default function PlanScreen() {
         ))}
 
         {/* Lead-in blanks so the 1st lands on its real weekday. */}
-        {Array.from({ length: FIRST_DOW }, (_, i) => (
+        {Array.from({ length: firstDow }, (_, i) => (
           <View key={`b${i}`} style={{ width: cell, height: cell }} />
         ))}
 
-        {Array.from({ length: DAYS_IN_MONTH }, (_, k) => {
+        {Array.from({ length: daysInMonth }, (_, k) => {
           const day = k + 1;
-          const rid = s.schedule[(FIRST_DOW + day - 1) % 7];
-          const isDone = s.done.includes(day);
+          const rid = s.schedule[(firstDow + day - 1) % 7];
+          const isDone = doneOn(isoOf(day));
           const isSel = day === s.daySel;
           return (
             <Pressable
@@ -89,7 +101,7 @@ export default function PlanScreen() {
               <Text
                 style={[
                   styles.cellNum,
-                  { color: day < TODAY_DOM ? color.neutral600 : color.neutral300 },
+                  { color: day < dom ? color.neutral600 : color.neutral300 },
                 ]}
               >
                 {day}

@@ -3,12 +3,13 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Sheet } from '@/components/sheet';
 import { useBackClose } from '@/hooks/use-back-close';
+import { fmtDayTiny } from '@/data/i18n';
 import { color, font, wash } from '@/design/tokens';
 import { Btn, H4, H6, Input, Tag } from '@/design/ui';
 import { useStore } from '@/store/workout-store';
 
 export function ExerciseSheet() {
-  const { s, L, patch, ex, gLabel, kLabel, setup, mutSetup } = useStore();
+  const { s, L, patch, ex, gLabel, kLabel, setup, mutSetup, lastFor } = useStore();
   const close = () => patch({ exOpen: null });
   useBackClose(close);
 
@@ -16,6 +17,12 @@ export function ExerciseSheet() {
   if (!e) return null;
 
   const rows = setup(e.id);
+  // Really logged numbers when there are any, else the seed. The seed has no
+  // date (the design hardcoded '5 Aug' here), so the date column stays empty.
+  const last = lastFor(e.id);
+  const lastWhen = last.date
+    ? fmtDayTiny(s.lang, new Date(`${last.date}T00:00:00`))
+    : '';
   const usedIn = s.routines.filter((r) => r.items.some((i) => i.ex === e.id)).map((r) => r.name);
 
   return (
@@ -71,11 +78,11 @@ export function ExerciseSheet() {
 
       <H6 style={styles.head}>{L.lastSession}</H6>
       <View style={{ gap: 4 }}>
-        {e.lastSets.map((v, i) => (
+        {last.sets.map((v, i) => (
           <View key={i} style={styles.lastRow}>
             <Text style={styles.lastN}>Set {i + 1}</Text>
             <Text style={styles.lastV}>{v}</Text>
-            <Text style={styles.lastWhen}>{i === 0 ? '5 Aug' : ''}</Text>
+            <Text style={styles.lastWhen}>{i === 0 ? lastWhen : ''}</Text>
           </View>
         ))}
       </View>
