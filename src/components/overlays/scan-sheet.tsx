@@ -4,7 +4,8 @@ import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-nativ
 
 import { Sheet } from '@/components/sheet';
 import { hasRadio, radio } from '@/data/buddy-radio';
-import { scanPeers } from '@/data/buddy-transport';
+import { diffBuddy, shareableSlice } from '@/data/buddy-sync';
+import { connectPeer, scanPeers } from '@/data/buddy-transport';
 import { useBackClose } from '@/hooks/use-back-close';
 import { color, font, wash } from '@/design/tokens';
 import { Btn, H4, Input } from '@/design/ui';
@@ -58,8 +59,18 @@ export function ScanSheet() {
       radio.requestConnection(me, n.id).catch(() => setSentTo(null));
       return;
     }
-    // Mock pairing goes straight into the sync screen.
-    patch({ buddy: n.name, scanning: false, buddySync: true });
+    // Mock pairing connects first — the sync screen only opens if the two
+    // sides actually differ, mirroring the real radio.
+    patch({ buddy: n.name, scanning: false });
+    connectPeer(n.id).then((snap) =>
+      patch((st) => {
+        const diff = diffBuddy(shareableSlice(st), snap);
+        return {
+          buddySnapshot: snap,
+          buddySync: diff.receive.length > 0 || diff.send.length > 0,
+        };
+      })
+    );
   };
 
   const tryCode = (v: string) => {

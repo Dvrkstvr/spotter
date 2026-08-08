@@ -164,6 +164,39 @@ export type SessionInvite = {
 export const routineEquals = (a: Routine, b: Routine) =>
   JSON.stringify({ n: a.names, i: a.items }) === JSON.stringify({ n: b.names, i: b.items });
 
+/**
+ * The dependency closure a routine needs to travel: its custom exercises and
+ * their groups/kinds. Both the session invite and the co-created draft ship
+ * this so the receiver can always render what arrives.
+ */
+export const routineClosure = (s: SyncSide, routine: Routine) => {
+  const custom = s.custom.filter((e) => routine.items.some((i) => i.ex === e.id));
+  return {
+    custom,
+    groups: s.groups.filter((g) => custom.some((e) => e.group === g.key)),
+    kinds: s.kinds.filter((k) => custom.some((e) => e.kind === k.key)),
+  };
+};
+
+/* ── co-created routines (build one together) ──────────────────────────── */
+
+/**
+ * One phone's view of the shared routine draft — always the full state, like
+ * `progress`, so any single message resyncs the peer. The receiver adopts the
+ * structure (name, exercise list, order, set counts) but keeps their own
+ * reps/weight; the sender's reps/weight are shown read-only instead.
+ */
+export type DraftPayload = {
+  routine: Routine;
+  custom: Exercise[];
+  groups: Labelled[];
+  kinds: Labelled[];
+  /** exercise id → display name of whoever added it */
+  addedBy: Record<string, string>;
+  /** the sender currently has the exercise picker open for this draft */
+  picking: boolean;
+};
+
 /* ── wire protocol (real radio) ────────────────────────────────────────── */
 
 /** Messages the two phones exchange once Nearby connects them. */
@@ -173,7 +206,10 @@ export type BuddyMessage =
   | { v: 1; t: 'sessionInvite'; invite: SessionInvite }
   | { v: 1; t: 'sessionJoin' }
   | { v: 1; t: 'sessionDecline' }
-  | { v: 1; t: 'progress'; state: BuddyProgress };
+  | { v: 1; t: 'progress'; state: BuddyProgress }
+  | { v: 1; t: 'draftStart'; draft: DraftPayload }
+  | { v: 1; t: 'draftUpdate'; draft: DraftPayload }
+  | { v: 1; t: 'draftEnd'; reason: 'save' | 'start'; draft: DraftPayload };
 
 const MESSAGE_TYPES = new Set([
   'snapshot',
@@ -182,6 +218,9 @@ const MESSAGE_TYPES = new Set([
   'sessionJoin',
   'sessionDecline',
   'progress',
+  'draftStart',
+  'draftUpdate',
+  'draftEnd',
 ]);
 
 export const parseBuddyMessage = (raw: string): BuddyMessage | null => {

@@ -3,19 +3,41 @@
  *
  * The Edit toggle is faithful to the design, where it only swaps its own label:
  * the rows are always editable and the delete control is always visible.
+ *
+ * When the open routine is the live co-draft (built together with the
+ * connected buddy — see `coDraft` in the store), the editor grows a second
+ * skin: a live header, per-row attribution chips, drag-to-reorder, the
+ * buddy's reps/weight as a read-only line, and Save-for-both / Start-together
+ * in place of the plain start button. Structure syncs both ways; the sets
+ * column is the shared one, reps and kg stay per-person.
  */
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useState } from 'react';
+import {
+  Animated,
+  PanResponder,
+  Pressable,
+  ScrollView,
+  StyleProp,
+  StyleSheet,
+  Text,
+  TextInput,
+  TextStyle,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { GripIcon } from '@/components/icon';
 import { FullScreen } from '@/components/sheet';
 import { useBackClose } from '@/hooks/use-back-close';
-import { DOW } from '@/data/exercises';
-import { color, font, t, tracking } from '@/design/tokens';
+import { radio } from '@/data/buddy-radio';
+import { DOW, Routine } from '@/data/exercises';
+import { color, font, t, tracking, wash } from '@/design/tokens';
 import { Btn, Input, missingName } from '@/design/ui';
-import { fmt, num, useStore } from '@/store/workout-store';
+import { CoDraft, fmt, myName, num, useStore } from '@/store/workout-store';
 
 export function RoutineOverlay() {
-  const { s, L, patch, ex, routine, gInfo, kInfo, exInfo, rInfo, mutRoutine, start } = useStore();
+  const { s, L, patch, ex, routine, gInfo, kInfo, exInfo, rInfo, mutRoutine, start, draftPayload } =
+    useStore();
   const insets = useSafeAreaInsets();
   const close = () => patch({ routineOpen: null });
   useBackClose(close);
@@ -23,8 +45,28 @@ export function RoutineOverlay() {
   const r = routine(s.routineOpen);
   if (!r) return null;
 
+  // The co-draft skin needs the pairing to still exist; if the buddy was
+  // disconnected mid-draft this falls back to the plain editor.
+  const draft = s.coDraft?.rid === r.id && s.buddy ? s.coDraft : null;
+
   const days = DOW.filter((_, i) => s.schedule[i] === r.id).join(' · ') || L.unscheduled;
   const summary = `${days} · ${r.items.reduce((a, i) => a + i.sets, 0)} ${L.setsWord}`;
+
+  // Ending the draft: tell the buddy (the payload makes the message
+  // self-sufficient — their phone merges it even if it missed updates),
+  // then keep the routine. Start makes this phone the session host.
+  const finish = (reason: 'save' | 'start') => {
+    const payload = draftPayload();
+    if (payload && radio && s.buddyEndpoint)
+      radio
+        .sendPayload(s.buddyEndpoint, JSON.stringify({ v: 1, t: 'draftEnd', reason, draft: payload }))
+        .catch(() => {});
+    if (reason === 'save') patch({ coDraft: null, routineOpen: null, editing: false });
+    else {
+      patch({ coDraft: null });
+      start(r.id, 'host');
+    }
+  };
 
   return (
     <FullScreen zIndex={75}>
@@ -61,69 +103,93 @@ export function RoutineOverlay() {
           selectionColor={color.accent}
           style={styles.nameInput}
         />
-        <Text style={styles.summary}>{summary}</Text>
+        {draft ? (
+          <>
+            <View style={styles.liveRow}>
+              <View style={styles.liveDot} />
+              <Text style={styles.liveText}>{L.buildingWith.replace('{name}', s.buddy ?? '')}</Text>
+            </View>
+            <Text style={styles.legend}>{L.draftLegend}</Text>
+          </>
+        ) : (
+          <Text style={styles.summary}>{summary}</Text>
+        )}
 
         <View style={styles.colHead}>
+          {draft && <View style={styles.grip} />}
+          {draft && <View style={styles.chip} />}
           <Text style={[styles.colLabel, styles.colName]}>{L.exercise}</Text>
-          <Text style={[styles.colLabel, styles.colNarrow]}>{L.sets}</Text>
+          <Text style={[styles.colLabel, styles.colNarrow, draft && styles.colShared]}>
+            {L.sets}
+          </Text>
           <Text style={[styles.colLabel, styles.colNarrow]}>{L.reps}</Text>
           <Text style={[styles.colLabel, styles.colWide]}>kg</Text>
           <View style={styles.colDel} />
         </View>
 
-        <View style={{ gap: t.gap }}>
-          {r.items.map((item, n) => {
-            const e = ex(item.ex);
-            const name = e ? exInfo(e) : null;
-            return (
-              <View key={`${item.ex}-${n}`} style={styles.row}>
-                <View style={styles.rowText}>
-                  <Text style={[styles.rowName, name?.missing && missingName]}>{name?.text}</Text>
-                  <Text style={styles.rowKind}>
-                    {e ? `${kInfo(e.kind).text} · ${gInfo(e.group).text}` : ''}
-                  </Text>
+        {draft ? (
+          <DraftRows r={r} draft={draft} buddy={s.buddy ?? ''} />
+        ) : (
+          <View style={{ gap: t.gap }}>
+            {r.items.map((item, n) => {
+              const e = ex(item.ex);
+              const name = e ? exInfo(e) : null;
+              return (
+                <View key={`${item.ex}-${n}`} style={styles.row}>
+                  <View style={styles.rowText}>
+                    <Text style={[styles.rowName, name?.missing && missingName]}>{name?.text}</Text>
+                    <Text style={styles.rowKind}>
+                      {e ? `${kInfo(e.kind).text} · ${gInfo(e.group).text}` : ''}
+                    </Text>
+                  </View>
+                  <Input
+                    style={[styles.numInput, styles.colNarrow]}
+                    keyboardType="number-pad"
+                    defaultValue={String(item.sets)}
+                    onChangeText={(v) =>
+                      mutRoutine(r.id, (copy) => {
+                        copy.items[n].sets = Math.max(1, Math.round(num(v, item.sets)));
+                      })
+                    }
+                  />
+                  <Input
+                    style={[styles.numInput, styles.colNarrow]}
+                    keyboardType="number-pad"
+                    defaultValue={String(item.reps)}
+                    onChangeText={(v) =>
+                      mutRoutine(r.id, (copy) => {
+                        copy.items[n].reps = Math.max(1, Math.round(num(v, item.reps)));
+                      })
+                    }
+                  />
+                  <Input
+                    style={[styles.numInput, styles.colWide]}
+                    keyboardType="decimal-pad"
+                    defaultValue={fmt(item.w)}
+                    onChangeText={(v) =>
+                      mutRoutine(r.id, (copy) => {
+                        copy.items[n].w = Math.max(0, num(v, item.w));
+                      })
+                    }
+                  />
+                  <Pressable
+                    accessibilityLabel="Remove exercise"
+                    onPress={() => mutRoutine(r.id, (copy) => { copy.items.splice(n, 1); })}
+                    style={styles.colDel}
+                  >
+                    <Text style={styles.delGlyph}>×</Text>
+                  </Pressable>
                 </View>
-                <Input
-                  style={[styles.numInput, styles.colNarrow]}
-                  keyboardType="number-pad"
-                  defaultValue={String(item.sets)}
-                  onChangeText={(v) =>
-                    mutRoutine(r.id, (copy) => {
-                      copy.items[n].sets = Math.max(1, Math.round(num(v, item.sets)));
-                    })
-                  }
-                />
-                <Input
-                  style={[styles.numInput, styles.colNarrow]}
-                  keyboardType="number-pad"
-                  defaultValue={String(item.reps)}
-                  onChangeText={(v) =>
-                    mutRoutine(r.id, (copy) => {
-                      copy.items[n].reps = Math.max(1, Math.round(num(v, item.reps)));
-                    })
-                  }
-                />
-                <Input
-                  style={[styles.numInput, styles.colWide]}
-                  keyboardType="decimal-pad"
-                  defaultValue={fmt(item.w)}
-                  onChangeText={(v) =>
-                    mutRoutine(r.id, (copy) => {
-                      copy.items[n].w = Math.max(0, num(v, item.w));
-                    })
-                  }
-                />
-                <Pressable
-                  accessibilityLabel="Remove exercise"
-                  onPress={() => mutRoutine(r.id, (copy) => { copy.items.splice(n, 1); })}
-                  style={styles.colDel}
-                >
-                  <Text style={styles.delGlyph}>×</Text>
-                </Pressable>
-              </View>
-            );
-          })}
-        </View>
+              );
+            })}
+          </View>
+        )}
+
+        {draft?.buddyPicking && (
+          <Text style={styles.pickingHint}>
+            {L.buddyPickingEx.replace('{name}', s.buddy ?? '')}
+          </Text>
+        )}
 
         <Btn
           variant="secondary"
@@ -132,16 +198,197 @@ export function RoutineOverlay() {
           style={styles.addBtn}
           onPress={() => patch({ picker: 'routine', query: '' })}
         />
-        <Btn
-          variant="primary"
-          block
-          label={L.startRoutine}
-          style={styles.startBtn}
-          labelStyle={styles.startLabel}
-          onPress={() => start(r.id)}
-        />
+        {draft ? (
+          <View style={styles.endRow}>
+            <Btn
+              variant="secondary"
+              label={L.saveForBoth}
+              style={styles.endBtn}
+              onPress={() => finish('save')}
+            />
+            <Btn
+              variant="primary"
+              label={L.startTogether}
+              style={styles.endBtn}
+              labelStyle={styles.startLabel}
+              onPress={() => finish('start')}
+            />
+          </View>
+        ) : (
+          <Btn
+            variant="primary"
+            block
+            label={L.startRoutine}
+            style={styles.startBtn}
+            labelStyle={styles.startLabel}
+            onPress={() => start(r.id)}
+          />
+        )}
       </ScrollView>
     </FullScreen>
+  );
+}
+
+/**
+ * The co-draft's rows: grip to drag-reorder (the ReorderRows gesture, with
+ * the same landing-line cue), an initial chip for whoever added the row, and
+ * the buddy's reps/weight as a read-only line. Number cells keep local text
+ * while focused so an incoming broadcast never clobbers mid-typing.
+ */
+function DraftRows({ r, draft, buddy }: { r: Routine; draft: CoDraft; buddy: string }) {
+  const { s, ex, exInfo, gInfo, kInfo, mutRoutine, moveRoutineItem } = useStore();
+
+  const [drag, setDrag] = useState<{ from: number; to: number } | null>(null);
+  const [rowHeight, setRowHeight] = useState(52);
+  const [dy] = useState(() => new Animated.Value(0));
+
+  const landing = (from: number, offset: number) =>
+    Math.max(0, Math.min(r.items.length - 1, from + Math.round(offset / rowHeight)));
+
+  // Rebuilt every render so the closures always see the current row count;
+  // React Native reads handler props at event time (the ReorderRows pattern).
+  const responderFor = (from: number) =>
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 2,
+      onPanResponderGrant: () => {
+        dy.setValue(0);
+        setDrag({ from, to: from });
+      },
+      onPanResponderMove: (_, g) => {
+        dy.setValue(g.dy);
+        const to = landing(from, g.dy);
+        setDrag((d) => (d && d.to !== to ? { ...d, to } : d));
+      },
+      onPanResponderRelease: (_, g) => {
+        const to = landing(from, g.dy);
+        if (to !== from) moveRoutineItem(r.id, from, to);
+        dy.setValue(0);
+        setDrag(null);
+      },
+      onPanResponderTerminate: () => {
+        dy.setValue(0);
+        setDrag(null);
+      },
+    });
+
+  return (
+    <View>
+      {r.items.map((item, n) => {
+        const e = ex(item.ex);
+        const name = e ? exInfo(e) : null;
+        const by = draft.addedBy[item.ex] ?? myName(s);
+        const theirs = by === buddy;
+        const vals = draft.buddyVals[item.ex];
+        const isDragging = drag?.from === n;
+        const isTarget = !!drag && drag.to === n && drag.from !== n;
+        return (
+          <Animated.View
+            key={`${item.ex}-${n}`}
+            onLayout={n === 0 ? (ev) => setRowHeight(ev.nativeEvent.layout.height) : undefined}
+            style={[
+              styles.row,
+              styles.draftRow,
+              { borderTopColor: isTarget ? color.accent : 'transparent' },
+              isDragging && { transform: [{ translateY: dy }], zIndex: 2, elevation: 2 },
+            ]}
+          >
+            <View
+              {...responderFor(n).panHandlers}
+              accessibilityLabel="Drag to reorder"
+              style={styles.grip}
+            >
+              <GripIcon color={isDragging ? color.accent : color.neutral700} />
+            </View>
+            <View style={[styles.chip, theirs ? styles.chipBuddy : styles.chipMe]}>
+              <Text style={[styles.chipText, theirs ? styles.chipTextBuddy : styles.chipTextMe]}>
+                {(by[0] ?? '?').toUpperCase()}
+              </Text>
+            </View>
+            <View style={styles.rowText}>
+              <Text style={[styles.rowName, name?.missing && missingName]} numberOfLines={1}>
+                {name?.text}
+              </Text>
+              <Text style={styles.rowKind} numberOfLines={1}>
+                {e ? `${kInfo(e.kind).text} · ${gInfo(e.group).text}` : ''}
+              </Text>
+              <Text style={styles.buddyLine} numberOfLines={1}>
+                {vals ? `${buddy} · ${vals.reps} × ${fmt(vals.w)} kg` : `${buddy} · —`}
+              </Text>
+            </View>
+            <NumCell
+              style={[styles.numInput, styles.colNarrow, styles.sharedCell]}
+              keyboard="number-pad"
+              value={String(item.sets)}
+              onText={(v) =>
+                mutRoutine(r.id, (copy) => {
+                  copy.items[n].sets = Math.max(1, Math.round(num(v, item.sets)));
+                })
+              }
+            />
+            <NumCell
+              style={[styles.numInput, styles.colNarrow]}
+              keyboard="number-pad"
+              value={String(item.reps)}
+              onText={(v) =>
+                mutRoutine(r.id, (copy) => {
+                  copy.items[n].reps = Math.max(1, Math.round(num(v, item.reps)));
+                })
+              }
+            />
+            <NumCell
+              style={[styles.numInput, styles.colWide]}
+              keyboard="decimal-pad"
+              value={fmt(item.w)}
+              onText={(v) =>
+                mutRoutine(r.id, (copy) => {
+                  copy.items[n].w = Math.max(0, num(v, item.w));
+                })
+              }
+            />
+            <Pressable
+              accessibilityLabel="Remove exercise"
+              onPress={() => mutRoutine(r.id, (copy) => { copy.items.splice(n, 1); })}
+              style={styles.colDel}
+            >
+              <Text style={styles.delGlyph}>×</Text>
+            </Pressable>
+          </Animated.View>
+        );
+      })}
+    </View>
+  );
+}
+
+/**
+ * A number cell that owns its text while focused: the store value shows when
+ * idle (so the buddy's shared-sets change appears), but a broadcast landing
+ * mid-typing can't overwrite what's under the cursor.
+ */
+function NumCell({
+  value,
+  onText,
+  keyboard,
+  style,
+}: {
+  value: string;
+  onText: (v: string) => void;
+  keyboard: 'number-pad' | 'decimal-pad';
+  style?: StyleProp<TextStyle>;
+}) {
+  const [text, setText] = useState<string | null>(null);
+  return (
+    <Input
+      style={style}
+      keyboardType={keyboard}
+      value={text ?? value}
+      onFocus={() => setText(value)}
+      onChangeText={(v) => {
+        setText(v);
+        onText(v);
+      }}
+      onBlur={() => setText(null)}
+    />
   );
 }
 
@@ -166,6 +413,11 @@ const styles = StyleSheet.create({
   },
   summary: { fontFamily: font.regular, fontSize: 12, color: color.neutral500, marginTop: 6 },
 
+  liveRow: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 7 },
+  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: color.accent },
+  liveText: { fontFamily: font.regular, fontSize: 12, color: color.neutral400 },
+  legend: { fontFamily: font.regular, fontSize: 10.5, color: color.neutral600, marginTop: 3 },
+
   colHead: { flexDirection: 'row', gap: 10, paddingTop: 14, paddingHorizontal: 2, paddingBottom: 6 },
   colLabel: {
     fontFamily: font.regular,
@@ -179,6 +431,7 @@ const styles = StyleSheet.create({
   colNarrow: { width: 38 },
   colWide: { width: 56 },
   colDel: { width: 22, height: 26, alignItems: 'center', justifyContent: 'center' },
+  colShared: { color: color.accent700 },
 
   row: {
     flexDirection: 'row',
@@ -191,18 +444,51 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: t.rule,
   },
+  /* Draft rows carry the drag landing line; transparent until targeted so
+     the layout never shifts. bg keeps the dragged row readable in flight. */
+  draftRow: { borderTopWidth: 2, borderTopColor: 'transparent', backgroundColor: color.bg },
   rowText: { flex: 1 },
   rowName: { fontFamily: font.regular, fontSize: 14, color: color.text },
   rowKind: { fontFamily: font.regular, fontSize: 11, color: color.neutral600 },
+  buddyLine: { fontFamily: font.regular, fontSize: 10.5, color: color.accent600, marginTop: 1 },
   numInput: {
     textAlign: 'center',
     paddingVertical: 5,
     paddingHorizontal: 2,
     fontVariant: ['tabular-nums'],
   },
+  sharedCell: {
+    borderColor: color.accent700,
+    color: color.accent400,
+    backgroundColor: wash.accent(8),
+  },
   delGlyph: { fontFamily: font.regular, fontSize: 15, color: color.neutral600 },
 
+  grip: { width: 20, height: 26, alignItems: 'center', justifyContent: 'center' },
+  chip: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chipMe: { backgroundColor: color.neutral800 },
+  chipBuddy: { backgroundColor: color.accent800 },
+  chipText: { fontFamily: font.heading, fontSize: 9 },
+  chipTextMe: { color: color.neutral200 },
+  chipTextBuddy: { color: color.accent200 },
+
+  pickingHint: {
+    fontFamily: font.regular,
+    fontSize: 11.5,
+    color: color.neutral500,
+    fontStyle: 'italic',
+    paddingVertical: 8,
+    paddingHorizontal: 2,
+  },
   addBtn: { marginTop: 12, height: 40 },
   startBtn: { marginTop: 8, height: 44 },
   startLabel: { fontSize: 15 },
+  endRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
+  endBtn: { flex: 1, height: 44 },
 });

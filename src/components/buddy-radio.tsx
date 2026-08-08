@@ -21,10 +21,14 @@
 import { useEffect, useRef } from 'react';
 
 import { ensureRadioPermissions, radio } from '@/data/buddy-radio';
-import { parseBuddyMessage, progressOf, shareableSlice } from '@/data/buddy-sync';
-import { Session, Store, useStore } from '@/store/workout-store';
-
-const myName = (s: Store['s']) => s.profile.name.trim() || 'Workout Diary';
+import {
+  diffBuddy,
+  parseBuddyMessage,
+  progressOf,
+  routineClosure,
+  shareableSlice,
+} from '@/data/buddy-sync';
+import { myName, Session, Store, useStore } from '@/store/workout-store';
 
 export function BuddyRadio() {
   const store = useStore();
@@ -76,13 +80,14 @@ export function BuddyRadio() {
     if (session && !prev && session.rid && st.s.buddyEndpoint && st.s.sessionRole === null) {
       const routine = st.s.routines.find((x) => x.id === session.rid);
       if (routine) {
-        const custom = st.s.custom.filter((e) => routine.items.some((i) => i.ex === e.id));
-        const groups = st.s.groups.filter((g) => custom.some((e) => e.group === g.key));
-        const kinds = st.s.kinds.filter((k) => custom.some((e) => e.kind === k.key));
         st.patch({ sessionShared: true, sessionRole: 'host', buddyJoin: 'pending' });
         r.sendPayload(
           st.s.buddyEndpoint,
-          JSON.stringify({ v: 1, t: 'sessionInvite', invite: { routine, custom, groups, kinds } })
+          JSON.stringify({
+            v: 1,
+            t: 'sessionInvite',
+            invite: { routine, ...routineClosure(st.s, routine) },
+          })
         ).catch(() => {});
       }
     }
@@ -126,6 +131,50 @@ export function BuddyRadio() {
     // `session` (object identity) and `active` are what the broadcast reads;
     // buddyEndpoint re-fires it after a reconnect, which is the resync.
   }, [shouldBroadcast, session, store.s.active, store.s.buddyEndpoint]);
+
+  /* — co-created routine draft: announce once, then broadcast full state — */
+
+  const draftRid = store.s.coDraft?.rid ?? null;
+  const draftRole = store.s.coDraft?.role ?? null;
+
+  // The starter announces the fresh draft; the buddy's phone opens the same
+  // editor on receipt. Joiners never announce — that would boomerang.
+  useEffect(() => {
+    const r = radio;
+    if (!r || !draftRid || draftRole !== 'starter') return;
+    const st = ref.current;
+    const draft = st.draftPayload();
+    if (draft && st.s.buddyEndpoint)
+      r.sendPayload(st.s.buddyEndpoint, JSON.stringify({ v: 1, t: 'draftStart', draft })).catch(
+        () => {}
+      );
+  }, [draftRid, draftRole]);
+
+  const draftRev = store.s.coDraft?.rev ?? 0;
+  const draftPicking =
+    store.s.coDraft !== null &&
+    store.s.picker === 'routine' &&
+    store.s.routineOpen === store.s.coDraft.rid;
+  const shouldShareDraft =
+    radio !== null && store.s.coDraft !== null && store.s.buddyEndpoint !== null;
+
+  // Same shape as the progress broadcast: full state, debounced, so any one
+  // message resyncs the buddy — including the first after a reconnect. Only
+  // local edits bump `rev`; applying the buddy's update doesn't, which is
+  // what keeps the two phones from echoing forever.
+  useEffect(() => {
+    const r = radio;
+    if (!r || !shouldShareDraft) return;
+    const id = setTimeout(() => {
+      const st = ref.current;
+      const draft = st.draftPayload();
+      if (draft && st.s.buddyEndpoint)
+        r.sendPayload(st.s.buddyEndpoint, JSON.stringify({ v: 1, t: 'draftUpdate', draft })).catch(
+          () => {}
+        );
+    }, 250);
+    return () => clearTimeout(id);
+  }, [shouldShareDraft, draftRev, draftPicking, store.s.buddyEndpoint]);
 
   /* — event wiring, once — */
 
@@ -196,10 +245,11 @@ export function BuddyRadio() {
         st.patch({
           buddyEndpoint: e.endpointId,
           scanning: false,
-          // A confirmed first pairing lands in the sync screen; a silent
+          // A confirmed first pairing waits for the peer's snapshot — the
+          // sync screen only opens if the two sides differ. A silent
           // reconnect changes nothing on screen.
           ...(pa && pa.endpointId === e.endpointId
-            ? { buddy: pa.name, pendingAuth: null, buddySync: true }
+            ? { buddy: pa.name, pendingAuth: null, buddySyncPending: true }
             : {}),
         });
         r.sendPayload(
@@ -211,7 +261,11 @@ export function BuddyRadio() {
       r.addListener('onDisconnected', (e) =>
         ref.current.patch((s) =>
           s.buddyEndpoint === e.endpointId
-            ? { buddyEndpoint: null, ...(s.sessionShared ? {} : { buddySnapshot: null }) }
+            ? {
+                buddyEndpoint: null,
+                buddySyncPending: false,
+                ...(s.sessionShared ? {} : { buddySnapshot: null }),
+              }
             : null
         )
       ),
@@ -222,12 +276,27 @@ export function BuddyRadio() {
         const st = ref.current;
         switch (msg.t) {
           case 'snapshot':
-            st.patch({
-              buddy: msg.name,
-              buddySnapshot: {
+            // Inside the functional patch, where the onConnected patch has
+            // already applied — on a fast link the snapshot arrives before
+            // React commits, so reading buddySyncPending via the ref races.
+            st.patch((s) => {
+              const snapshot = {
                 peer: { id: e.endpointId, name: msg.name, device: '' },
                 ...msg.data,
-              },
+              };
+              // Fresh pairing: the snapshot decides — nothing to exchange
+              // means no sync screen at all.
+              const diff = s.buddySyncPending ? diffBuddy(shareableSlice(s), snapshot) : null;
+              return {
+                buddy: msg.name,
+                buddySnapshot: snapshot,
+                ...(diff
+                  ? {
+                      buddySyncPending: false,
+                      buddySync: diff.receive.length > 0 || diff.send.length > 0,
+                    }
+                  : {}),
+              };
             });
             break;
           case 'item':
@@ -249,6 +318,21 @@ export function BuddyRadio() {
               // Any progress proves they're in — covers a lost join message.
               ...(s.buddyJoin === 'pending' ? { buddyJoin: 'joined' as const } : {}),
             }));
+            break;
+          case 'draftStart': {
+            // Both phones tapped "build together" at once → two competing
+            // drafts. Deterministic tiebreak: the lower routine id wins on
+            // both sides (applyDraft drops the loser's empty orphan).
+            const mine = st.s.coDraft;
+            if (!mine || mine.rid === msg.draft.routine.id || msg.draft.routine.id < mine.rid)
+              st.applyDraft(msg.draft, true);
+            break;
+          }
+          case 'draftUpdate':
+            if (st.s.coDraft?.rid === msg.draft.routine.id) st.applyDraft(msg.draft, false);
+            break;
+          case 'draftEnd':
+            st.endDraftFromPeer(msg.reason, msg.draft);
             break;
         }
       }),

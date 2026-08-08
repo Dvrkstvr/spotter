@@ -46,10 +46,11 @@ export function BuddySyncOverlay() {
 
   const buddyName = s.buddy;
 
-  // Mock connect on open (Expo Go). With the real radio the connection was
-  // already requested from the scan sheet; the snapshot lands on its own.
+  // Mock connect on open (Expo Go) — only when the scan sheet didn't already
+  // deliver a snapshot (the Profile Sync button opens this without one). With
+  // the real radio the snapshot lands on its own.
   useEffect(() => {
-    if (hasRadio) return;
+    if (hasRadio || snapshot) return;
     let alive = true;
     const peer = scanPeers().find((p) => p.name === buddyName);
     if (!peer) return;
@@ -59,7 +60,7 @@ export function BuddySyncOverlay() {
     return () => {
       alive = false;
     };
-  }, [buddyName, patch]);
+  }, [buddyName, patch, snapshot]);
 
   // Diff once, when the snapshot lands. Reads the store at that moment;
   // deliberately not re-diffed on every import so the list stays put.

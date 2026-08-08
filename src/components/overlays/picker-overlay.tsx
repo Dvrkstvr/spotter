@@ -10,7 +10,7 @@ import { useBackClose } from '@/hooks/use-back-close';
 import { color, font, wash } from '@/design/tokens';
 import { Btn, Input, missingName } from '@/design/ui';
 import { Exercise } from '@/data/exercises';
-import { useStore } from '@/store/workout-store';
+import { myName, useStore } from '@/store/workout-store';
 
 export function PickerOverlay() {
   const { s, L, patch, allEx, gInfo, kInfo, exInfo, lastFor } = useStore();
@@ -36,6 +36,16 @@ export function PickerOverlay() {
             ? { ...r, items: [...r.items, { ex: e.id, sets: 3, reps: 10, w: e.last }] }
             : r
         ),
+        // Adding to the live co-draft: sign the row and rebroadcast.
+        ...(st.coDraft?.rid === rid
+          ? {
+              coDraft: {
+                ...st.coDraft,
+                rev: st.coDraft.rev + 1,
+                addedBy: { ...st.coDraft.addedBy, [e.id]: myName(st) },
+              },
+            }
+          : {}),
       }));
     } else {
       const last = lastFor(e.id).sets;

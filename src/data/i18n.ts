@@ -69,6 +69,11 @@ export const DICT = {
     planSynced: 'In sync with {name}', planDiffers: "Differs on {name}'s phone",
     planMissing: "Not on {name}'s phone yet",
     backToWorkout: 'Back to workout', liveSession: 'Live session', me: 'You',
+    buildTogether: 'Build one together', buildTogetherSub: 'with {name} — you both add exercises',
+    buildingWith: 'Building together with {name} · live',
+    draftLegend: 'Sets are shared · reps and kg are yours',
+    buddyPickingEx: '{name} is picking an exercise…',
+    saveForBoth: 'Save for both', startTogether: 'Start together',
   },
   de: {
     today: 'Heute', plan: 'Plan', routines: 'Routinen', exercises: 'Übungen', you: 'Profil', settings: 'Einstellungen',
@@ -124,6 +129,11 @@ export const DICT = {
     planSynced: 'Synchron mit {name}', planDiffers: 'Auf {name}s Handy anders',
     planMissing: 'Noch nicht auf {name}s Handy',
     backToWorkout: 'Zurück zum Training', liveSession: 'Live-Session', me: 'Du',
+    buildTogether: 'Zusammen erstellen', buildTogetherSub: 'mit {name} — ihr fügt beide Übungen hinzu',
+    buildingWith: 'Gemeinsam mit {name} · live',
+    draftLegend: 'Sätze geteilt · Wdh. und kg sind deine',
+    buddyPickingEx: '{name} wählt eine Übung aus …',
+    saveForBoth: 'Für beide speichern', startTogether: 'Zusammen starten',
   },
 } as const;
 

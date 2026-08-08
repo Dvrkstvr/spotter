@@ -14,7 +14,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useState } from 'react';
 
 import type { BuddySnapshot } from '@/data/buddy-transport';
-import type { BuddyProgress, SessionInvite, SyncItem } from '@/data/buddy-sync';
+import type { BuddyProgress, DraftPayload, SessionInvite, SyncItem } from '@/data/buddy-sync';
+import { routineClosure } from '@/data/buddy-sync';
 import { todayDom, todayISO } from '@/data/date';
 import {
   DEFAULT_GROUPS,
@@ -52,6 +53,25 @@ export type Labelled = { key: string; labels: LangMap };
  */
 export type Resolved = { text: string; missing: boolean };
 export type Draft = { name: string; group: string; kind: string };
+/**
+ * Collaboration metadata for a routine being built together with the buddy
+ * (the routine itself lives in `routines` like any other). Structure — name,
+ * exercise list, order, set counts — syncs both ways; reps and weight stay
+ * per-person, with the buddy's shown read-only.
+ */
+export type CoDraft = {
+  rid: string;
+  /** the starter announces the draft with draftStart; both broadcast edits */
+  role: 'starter' | 'joiner';
+  /** local edit counter — <BuddyRadio> broadcasts the draft when it moves */
+  rev: number;
+  /** exercise id → display name of whoever added it */
+  addedBy: Record<string, string>;
+  /** the buddy's reps/weight per exercise id */
+  buddyVals: Record<string, { reps: number; w: number }>;
+  /** the buddy currently has the exercise picker open */
+  buddyPicking: boolean;
+};
 export type Profile = { name: string; age: string; weight: string; height: string };
 export type PickerMode = 'routine' | 'session' | null;
 /** One finished session: which local day it landed on, and from which routine. */
@@ -100,6 +120,8 @@ export type State = {
   buddy: string | null;
   /** whether the buddy-sync overlay is open */
   buddySync: boolean;
+  /** pairing confirmed, snapshot not here yet — it decides if the sync screen opens */
+  buddySyncPending: boolean;
   /** live radio state (real transport only; all transient) */
   nearbyPeers: { endpointId: string; name: string }[];
   buddyEndpoint: string | null;
@@ -120,6 +142,8 @@ export type State = {
   buddyProgress: BuddyProgress | null;
   /** per-exercise turn-taking choice; advisory display only */
   turnModes: Record<string, 'alternate' | 'parallel'>;
+  /** live co-created routine draft, or null (transient) */
+  coDraft: CoDraft | null;
   /**
    * Session overlay tucked away behind the tabs (tap the buddy bar) — the
    * session itself keeps running; the tab bar shows a resume strip.
@@ -161,6 +185,7 @@ const initialState: State = {
   scanning: false,
   buddy: null,
   buddySync: false,
+  buddySyncPending: false,
   nearbyPeers: [],
   buddyEndpoint: null,
   pendingAuth: null,
@@ -171,6 +196,7 @@ const initialState: State = {
   buddyJoin: null,
   buddyProgress: null,
   turnModes: {},
+  coDraft: null,
   sessionMin: false,
   pickWorkout: false,
   dayPick: null,
@@ -305,6 +331,45 @@ const sessionFrom = (s: State, r: Routine): Session => {
   };
 };
 
+/** The name this phone shows up as on the buddy's screen. */
+export const myName = (s: State) => s.profile.name.trim() || 'Workout Diary';
+
+/**
+ * Adopt a peer's version of a routine while keeping this phone's own numbers:
+ * structure (name, exercise list, order, set counts) is theirs, reps and
+ * weight stay local wherever the exercise was already in the local copy.
+ */
+const mergeRoutine = (local: Routine | undefined, incoming: Routine): Routine => ({
+  ...incoming,
+  items: incoming.items.map((it) => {
+    const mine = local?.items.find((x) => x.ex === it.ex);
+    return mine ? { ...it, reps: mine.reps, w: mine.w } : { ...it };
+  }),
+});
+
+const upsertRoutine = (routines: Routine[], r: Routine): Routine[] =>
+  routines.some((x) => x.id === r.id)
+    ? routines.map((x) => (x.id === r.id ? r : x))
+    : [...routines, r];
+
+/** Upsert a peer's dependency closure — custom exercises win, groups/kinds only fill gaps. */
+const upsertShared = (
+  s: State,
+  inc: { custom: Exercise[]; groups: Labelled[]; kinds: Labelled[] }
+) => {
+  const custom = [...s.custom];
+  for (const e of inc.custom) {
+    const i = custom.findIndex((x) => x.id === e.id);
+    if (i < 0) custom.push(e);
+    else custom[i] = e;
+  }
+  return {
+    custom,
+    groups: [...s.groups, ...inc.groups.filter((g) => !s.groups.some((x) => x.key === g.key))],
+    kinds: [...s.kinds, ...inc.kinds.filter((k) => !s.kinds.some((x) => x.key === k.key))],
+  };
+};
+
 /* ── store ─────────────────────────────────────────────────────────────── */
 
 function useWorkoutState() {
@@ -426,8 +491,17 @@ function useWorkoutState() {
         fn(copy);
         return copy;
       }),
+      // Editing the live co-draft bumps its rev so <BuddyRadio> rebroadcasts.
+      ...(s.coDraft?.rid === rid ? { coDraft: { ...s.coDraft, rev: s.coDraft.rev + 1 } } : {}),
     }));
   };
+
+  /** Move one routine item — the co-draft editor's drag reorder. */
+  const moveRoutineItem = (rid: string, from: number, to: number) =>
+    mutRoutine(rid, (r) => {
+      const [moved] = r.items.splice(from, 1);
+      r.items.splice(to, 0, moved);
+    });
 
   /** Reorder one of the settings lists. Replaces the design's HTML5 drag state. */
   const reorder = (listKey: 'groups' | 'kinds', from: number, to: number) => {
@@ -525,7 +599,7 @@ function useWorkoutState() {
 
   /* — session lifecycle — */
 
-  const start = (rid: string | null | undefined) => {
+  const start = (rid: string | null | undefined, withBuddy?: 'host' | 'guest') => {
     patch((s) => {
       const r = rid ? s.routines.find((x) => x.id === rid) : null;
       return {
@@ -539,10 +613,12 @@ function useWorkoutState() {
         picker: null,
         pickWorkout: false,
         // Solo by default — <BuddyRadio> flips this to a hosted shared
-        // session right after, if a buddy is connected.
-        sessionShared: false,
-        sessionRole: null,
-        buddyJoin: null,
+        // session right after, if a buddy is connected. `withBuddy` is the
+        // co-draft path, where both sides already agreed: it starts shared
+        // outright, which also tells <BuddyRadio> not to send an invite.
+        sessionShared: withBuddy !== undefined,
+        sessionRole: withBuddy ?? null,
+        buddyJoin: withBuddy ? ('joined' as const) : null,
         buddyProgress: null,
         turnModes: {},
         sessionMin: false,
@@ -560,31 +636,19 @@ function useWorkoutState() {
       const inv = s.buddyInvite;
       if (!inv) return null;
 
-      const custom = [...s.custom];
-      for (const e of inv.custom) {
-        const i = custom.findIndex((x) => x.id === e.id);
-        if (i < 0) custom.push(e);
-        else custom[i] = e;
-      }
-      const groups = [
-        ...s.groups,
-        ...inv.groups.filter((g) => !s.groups.some((x) => x.key === g.key)),
-      ];
-      const kinds = [
-        ...s.kinds,
-        ...inv.kinds.filter((k) => !s.kinds.some((x) => x.key === k.key)),
-      ];
-      const routines = s.routines.some((r) => r.id === inv.routine.id)
-        ? s.routines.map((r) => (r.id === inv.routine.id ? inv.routine : r))
-        : [...s.routines, inv.routine];
+      const deps = upsertShared(s, inv);
+      // The starter's structure wins — that's the sync — but this phone's own
+      // reps/weights survive: numbers are personal (see the co-draft model).
+      const merged = mergeRoutine(
+        s.routines.find((r) => r.id === inv.routine.id),
+        inv.routine
+      );
 
       return {
-        custom,
-        groups,
-        kinds,
-        routines,
+        ...deps,
+        routines: upsertRoutine(s.routines, merged),
         buddyInvite: null,
-        session: sessionFrom({ ...s, custom }, inv.routine),
+        session: sessionFrom({ ...s, custom: deps.custom }, merged),
         active: 0,
         elapsed: 0,
         routineOpen: null,
@@ -602,6 +666,134 @@ function useWorkoutState() {
   };
 
   const declineInvite = () => patch({ buddyInvite: null });
+
+  /* — co-created routines (build one together) — */
+
+  /** Open a fresh shared draft; <BuddyRadio> announces it to the buddy. */
+  const startCoDraft = () => {
+    const L = DICT[state.lang] ?? DICT.en;
+    patch((s) => {
+      const id = `r${Date.now()}`;
+      return {
+        routines: [...s.routines, { id, names: { [s.lang]: L.newRoutine }, items: [] }],
+        routineOpen: id,
+        editing: true,
+        pickWorkout: false,
+        coDraft: {
+          rid: id,
+          role: 'starter' as const,
+          rev: 0,
+          addedBy: {},
+          buddyVals: {},
+          buddyPicking: false,
+        },
+      };
+    });
+  };
+
+  /** The live draft as a wire payload, or null when there is none. */
+  const draftPayload = (): DraftPayload | null => {
+    const d = state.coDraft;
+    const r = d ? state.routines.find((x) => x.id === d.rid) : undefined;
+    if (!d || !r) return null;
+    return {
+      routine: r,
+      ...routineClosure(state, r),
+      addedBy: d.addedBy,
+      picking: state.picker === 'routine' && state.routineOpen === d.rid,
+    };
+  };
+
+  /**
+   * Merge the buddy's draft state in: adopt the structure, keep own
+   * reps/weight, remember theirs for the read-only line. `open` pulls this
+   * phone into the editor — draftStart does that; draftUpdate only ever
+   * applies to a draft this phone already knows (a stale update arriving
+   * after the draft ended must not reopen it).
+   */
+  const applyDraft = (d: DraftPayload, open: boolean) => {
+    patch((s) => {
+      const deps = upsertShared(s, d);
+      const merged = mergeRoutine(
+        s.routines.find((r) => r.id === d.routine.id),
+        d.routine
+      );
+      const known = s.coDraft?.rid === merged.id;
+      // Adopting a different draft (the both-tapped-at-once tiebreak, see
+      // <BuddyRadio>) orphans this phone's own one — drop it if still empty.
+      const stale =
+        s.coDraft && !known ? s.routines.find((x) => x.id === s.coDraft!.rid) : undefined;
+      const base =
+        stale && stale.items.length === 0
+          ? s.routines.filter((x) => x.id !== stale.id)
+          : s.routines;
+      // An update that brought exercises this phone didn't have yet gets one
+      // echo back (a rev bump → rebroadcast), so the adder learns this
+      // phone's reps/weight for them. An echo never carries new items for
+      // the peer, so it can't ping-pong.
+      const local = s.routines.find((r) => r.id === d.routine.id);
+      const gotNew = d.routine.items.some(
+        (it) => !(local?.items.some((x) => x.ex === it.ex) ?? false)
+      );
+      return {
+        ...deps,
+        routines: upsertRoutine(base, merged),
+        coDraft: {
+          rid: merged.id,
+          role: known ? s.coDraft!.role : ('joiner' as const),
+          rev: (known ? s.coDraft!.rev : 0) + (gotNew ? 1 : 0),
+          addedBy: d.addedBy,
+          buddyVals: Object.fromEntries(
+            d.routine.items.map((it) => [it.ex, { reps: it.reps, w: it.w }])
+          ),
+          buddyPicking: d.picking,
+        },
+        ...(open ? { routineOpen: merged.id, editing: true, pickWorkout: false } : {}),
+      };
+    });
+  };
+
+  /**
+   * The buddy ended the draft. 'save' keeps the routine on both phones and
+   * closes the editor; 'start' also launches it as the guest half of a
+   * shared session — no invite round-trip, this phone co-built it.
+   */
+  const endDraftFromPeer = (reason: 'save' | 'start', d: DraftPayload) => {
+    patch((s) => {
+      const deps = upsertShared(s, d);
+      const merged = mergeRoutine(
+        s.routines.find((r) => r.id === d.routine.id),
+        d.routine
+      );
+      const closed = {
+        ...deps,
+        routines: upsertRoutine(s.routines, merged),
+        coDraft: null,
+        routineOpen: s.routineOpen === merged.id ? null : s.routineOpen,
+        // The draft's picker must not outlive it — a tap in an orphaned
+        // routine picker would fall through to the add-to-session branch.
+        picker:
+          s.picker === 'routine' && s.routineOpen === merged.id ? null : s.picker,
+      };
+      if (reason === 'save') return closed;
+      return {
+        ...closed,
+        session: sessionFrom({ ...s, custom: deps.custom }, merged),
+        active: 0,
+        elapsed: 0,
+        routineOpen: null,
+        summary: null,
+        picker: null,
+        pickWorkout: false,
+        sessionShared: true,
+        sessionRole: 'guest' as const,
+        buddyJoin: 'joined' as const,
+        buddyProgress: null,
+        turnModes: {},
+        sessionMin: false,
+      };
+    });
+  };
 
   /** Ticked sets, total sets, and total volume for the live session. */
   const totals = () => {
@@ -728,11 +920,16 @@ function useWorkoutState() {
     mutSetup,
     mutSession,
     mutRoutine,
+    moveRoutineItem,
     reorder,
     importFromPeer,
     start,
     acceptInvite,
     declineInvite,
+    startCoDraft,
+    draftPayload,
+    applyDraft,
+    endDraftFromPeer,
     totals,
     clock,
     finishSession,

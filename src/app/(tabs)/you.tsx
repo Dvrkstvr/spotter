@@ -107,7 +107,7 @@ export default function YouScreen() {
             labelStyle={styles.disconnect}
             onPress={() => {
               radio?.stopAll().catch(() => {});
-              patch({ buddy: null, buddyEndpoint: null, buddySnapshot: null });
+              patch({ buddy: null, buddyEndpoint: null, buddySnapshot: null, coDraft: null });
             }}
           />
         </View>
