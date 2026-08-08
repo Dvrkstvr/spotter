@@ -64,6 +64,18 @@ skip-if-already-there, so rerunning it reuses running emulators and the open
 relay. Needs the Android emulator plus AVDs installed once (Android Studio's
 Device Manager is the easy way; the script prints the alternatives).
 
+When the emulators are already running but showing stale code (or the
+standalone app), put them back on the current sim-radio bundle with
+
+```bash
+npm run update:emu
+```
+
+which replaces any Metro holding port 8081 with a fresh sim-enabled one and
+cold-restarts Expo Go on every emulator so it refetches the JS — a stale
+Metro keeps the port and serves old code otherwise, silently. Also
+double-clickable as `update-emulators.bat`.
+
 Without emulators the two halves also run by hand — the relay plus a
 sim-enabled Metro, with the app in Expo Go on one or two phones:
 

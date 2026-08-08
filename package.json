@@ -39,6 +39,7 @@
     "start": "expo start",
     "start:sim": "set EXPO_PUBLIC_SIM_RADIO=1&& expo start --go",
     "start:emu": "node scripts/start-emulated.mjs",
+    "update:emu": "node scripts/update-emulators.mjs",
     "buddy-relay": "node scripts/buddy-relay.mjs",
     "build:apk": "node scripts/build-apk.mjs",
     "typecheck": "tsc --noEmit",
