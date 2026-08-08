@@ -8,6 +8,8 @@
  * those are resolved here to literal rgba() via `mix()`.
  */
 
+import { Easing } from 'react-native';
+
 /** color-mix(in srgb, <hex> <pct>%, transparent) */
 function mix(hex: string, pct: number): string {
   const n = parseInt(hex.slice(1), 16);
@@ -67,6 +69,25 @@ export const wash = {
 } as const;
 
 export const radius = { sm: 4, md: 8, lg: 14 } as const;
+
+/**
+ * Motion grammar. The rule: the more often a moment happens, the quieter its
+ * animation. Each entry pairs a duration with an easing for Animated.timing;
+ * `payoff` is the one overshoot in the system — an Animated.spring config
+ * reserved for once-per-workout moments (seal pop, finish celebration).
+ */
+export const motion = {
+  /** Press feedback on every Pressable — felt, never seen. */
+  tap: { duration: 120, easing: Easing.out(Easing.ease) },
+  /** State flips: check draws, colour lifts, washes. (riseIn's timing.) */
+  quick: { duration: 200, easing: Easing.ease },
+  /** Things that travel: bars, sheets, the tab dash. (sheetIn's curve.) */
+  move: { duration: 240, easing: Easing.bezier(0.2, 0.8, 0.3, 1) },
+  /** Hold-to-confirm. Linear on purpose: the fill must report progress truthfully. */
+  hold: { duration: 700, easing: Easing.linear },
+  /** The overshoot spring, for Animated.spring. */
+  payoff: { friction: 6, tension: 80 },
+} as const;
 
 /**
  * CSS `position:absolute; inset:0` as a spreadable object. React Native 0.86 no

@@ -32,8 +32,16 @@ The design system is **Nocturne** — dark-only, Inter, a blurple accent. Its
 
 ## Rules that matter here
 
-- **Never hardcode a colour, radius, or spacing.** Everything comes from
-  `src/design/tokens.ts`. If a value isn't there, it belongs there.
+- **Never hardcode a colour, radius, spacing, or animation timing.** Everything
+  comes from `src/design/tokens.ts`. If a value isn't there, it belongs there.
+- **Motion goes through `motion.*` in tokens** — `tap` / `quick` / `move` /
+  `hold` / `payoff`. The governing rule is *the more often a moment happens, the
+  quieter its animation*: a set gets ticked forty times a session, so it gets
+  `quick`; `payoff` is the system's one overshoot and is reserved for
+  once-per-workout moments (the seal pop, the summary). Spend it sparingly or it
+  stops meaning anything. Prefer the native driver — that rules out animating
+  `width`/`height`/colours, so animate `scaleX` on a left-anchored fill or
+  cross-fade two layers instead.
 - **`color-mix()` has no RN equivalent** — use the `wash.*` helpers in tokens,
   which resolve to literal rgba. Don't inline your own.
 - **CSS letter-spacing is em, RN's is px.** Always go through `tracking(size, em)`.
@@ -57,8 +65,14 @@ Keep these; they're decisions, not drift. Each is commented at its site.
 - `tab` is not in the store — expo-router owns which screen is showing.
 - The buddy strip follows connected-buddy state, where the design gates it on a
   canvas prop.
-- The scanning dot pulses opacity only; the design loops a keyframe that also
-  shifts 8px, which on a 7px dot reads as a glitch.
+- The scanning dot radiates radar rings. The design loops its `riseIn` keyframe
+  here, which also shifts 8px — on a 7px dot that reads as a glitch.
+- The tab bar has an active-tab dash (2px, slides on `move`); the design has no
+  indicator at all. It fades out entirely on `plan`, which no tab owns.
+- Finish and Discard are hold-to-confirm (`src/components/hold-btn.tsx`), where
+  the design fires both on a tap. Finish only holds while sets are still open.
+  Commit happens in the timing callback and only when it reports `finished`, so
+  a released hold can never end a workout.
 - `<image-slot>` is filled by the photo picker rather than drag-and-drop.
 - The design's `recent` array is computed but never rendered — not ported.
 - "Today" is live (`src/data/date.ts`), not the design's pinned Friday

@@ -1,13 +1,13 @@
 /** Share mode — discover others sharing nearby and pair with a typed code. */
 import { useEffect, useState } from 'react';
-import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Sheet } from '@/components/sheet';
 import { hasRadio, radio } from '@/data/buddy-radio';
 import { diffBuddy, shareableSlice } from '@/data/buddy-sync';
 import { connectPeer, scanPeers } from '@/data/buddy-transport';
 import { useBackClose } from '@/hooks/use-back-close';
-import { color, font, wash } from '@/design/tokens';
+import { color, font, motion, wash } from '@/design/tokens';
 import { Btn, H4, Input } from '@/design/ui';
 import { useStore } from '@/store/workout-store';
 
@@ -154,30 +154,68 @@ export function ScanSheet() {
 }
 
 /**
- * The scanning indicator. The design loops its `riseIn` keyframe here, which
- * also shifts 8px — on a 7px dot that reads as a glitch, so only the opacity
- * half of it is kept.
+ * The scanning indicator — a steady dot radiating radar rings. (The design
+ * looped its `riseIn` keyframe here; the motion pass replaced that with rings
+ * expanding from the dot, which reads as "searching outward" rather than
+ * blinking.)
  */
 function SearchingDot() {
+  return (
+    <View style={styles.radar}>
+      {[0, 1, 2].map((i) => (
+        <RadarRing key={i} offset={i * 533} />
+      ))}
+      <View style={styles.dot} />
+    </View>
+  );
+}
+
+function RadarRing({ offset }: { offset: number }) {
   const [p] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(p, { toValue: 1, duration: 1100, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        Animated.timing(p, { toValue: 0, duration: 1100, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-      ])
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [p]);
+    const anim = Animated.sequence([
+      Animated.delay(offset),
+      Animated.loop(
+        Animated.timing(p, {
+          toValue: 1,
+          duration: 1600,
+          easing: motion.quick.easing,
+          useNativeDriver: true,
+        })
+      ),
+    ]);
+    anim.start();
+    return () => anim.stop();
+  }, [offset, p]);
 
-  return <Animated.View style={[styles.dot, { opacity: p }]} />;
+  return (
+    <Animated.View
+      style={[
+        styles.ring,
+        {
+          opacity: p.interpolate({ inputRange: [0, 0.15, 1], outputRange: [0, 0.5, 0] }),
+          transform: [
+            { scale: p.interpolate({ inputRange: [0, 1], outputRange: [0.5, 2.4] }) },
+          ],
+        },
+      ]}
+    />
+  );
 }
 
 const styles = StyleSheet.create({
   searchingRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
+  radar: { width: 14, height: 14, alignItems: 'center', justifyContent: 'center' },
   dot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: color.accent },
+  ring: {
+    position: 'absolute',
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: color.accent,
+  },
   searching: { fontFamily: font.regular, fontSize: 11.5, color: color.neutral500 },
   shareHint: { fontFamily: font.regular, fontSize: 11, color: color.neutral600, marginTop: 6 },
 

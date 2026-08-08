@@ -9,14 +9,16 @@
  * the connected buddy in state, which is the same strip driven by real data.
  */
 import { Tabs } from 'expo-router';
-import { ComponentProps } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { ComponentProps, ReactNode, useEffect, useRef, useState } from 'react';
+import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Icon } from '@/components/icon';
 import { TABS } from '@/data/exercises';
-import { color, font, tracking, wash } from '@/design/tokens';
+import { color, font, motion, tracking, wash } from '@/design/tokens';
 import { useStore } from '@/store/workout-store';
+
+const DASH_W = 28;
 
 /** Tab id → expo-router route name. */
 const ROUTE: Record<string, string> = {
@@ -39,6 +41,38 @@ export function TabBar({ state, navigation }: TabBarProps) {
   const current = state.routes[state.index]?.name;
 
   const minimized = s.session !== null && s.sessionMin;
+
+  // Deviation: the design has no active-tab indicator. The 2px accent dash
+  // that slides along the top hairline is a motion-pass addition — it fades
+  // out entirely while a non-tab screen (plan) is showing.
+  const focusedIdx = TABS.findIndex((tab) => ROUTE[tab.id] === current);
+  const [barW, setBarW] = useState(0);
+  const [dashX] = useState(() => new Animated.Value(0));
+  const [dashO] = useState(() => new Animated.Value(0));
+  const dashPlaced = useRef(false);
+
+  useEffect(() => {
+    if (!barW) return;
+    if (focusedIdx < 0) {
+      Animated.timing(dashO, { toValue: 0, ...motion.quick, useNativeDriver: true }).start();
+      return;
+    }
+    const tabW = (barW - 12) / TABS.length;
+    const x = 6 + focusedIdx * tabW + tabW / 2 - DASH_W / 2;
+    if (dashPlaced.current) {
+      Animated.timing(dashX, {
+        toValue: x,
+        duration: motion.move.duration,
+        easing: motion.move.easing,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      // First layout: appear in place rather than sliding in from x=0.
+      dashPlaced.current = true;
+      dashX.setValue(x);
+    }
+    Animated.timing(dashO, { toValue: 1, ...motion.quick, useNativeDriver: true }).start();
+  }, [barW, focusedIdx, dashX, dashO]);
 
   return (
     <View>
@@ -67,7 +101,14 @@ export function TabBar({ state, navigation }: TabBarProps) {
         )
       )}
 
-      <View style={[styles.bar, { paddingBottom: 8 + insets.bottom }]}>
+      <View
+        style={[styles.bar, { paddingBottom: 8 + insets.bottom }]}
+        onLayout={(e) => setBarW(e.nativeEvent.layout.width)}
+      >
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.dash, { opacity: dashO, transform: [{ translateX: dashX }] }]}
+        />
         {TABS.map((tab) => {
           const route = ROUTE[tab.id];
           const focused = current === route;
@@ -84,7 +125,9 @@ export function TabBar({ state, navigation }: TabBarProps) {
               }}
               style={styles.tab}
             >
-              <Icon d={tab.d} color={tint} size={21} />
+              <TabGlyph focused={focused}>
+                <Icon d={tab.d} color={tint} size={21} />
+              </TabGlyph>
               <Text style={[styles.tabLabel, { color: tint }]}>
                 {L[tab.id === 'library' ? 'exercises' : tab.id]}
               </Text>
@@ -94,6 +137,30 @@ export function TabBar({ state, navigation }: TabBarProps) {
       </View>
     </View>
   );
+}
+
+/** A 3px rise-and-settle when a tab becomes active. */
+function TabGlyph({ focused, children }: { focused: boolean; children: ReactNode }) {
+  const [y] = useState(() => new Animated.Value(0));
+  const prev = useRef(focused);
+
+  useEffect(() => {
+    if (prev.current === focused) return;
+    prev.current = focused;
+    if (focused) {
+      Animated.sequence([
+        Animated.timing(y, {
+          toValue: -3,
+          duration: 100,
+          easing: motion.tap.easing,
+          useNativeDriver: true,
+        }),
+        Animated.spring(y, { toValue: 0, ...motion.payoff, useNativeDriver: true }),
+      ]).start();
+    }
+  }, [focused, y]);
+
+  return <Animated.View style={{ transform: [{ translateY: y }] }}>{children}</Animated.View>;
 }
 
 const styles = StyleSheet.create({
@@ -116,6 +183,17 @@ const styles = StyleSheet.create({
     fontFamily: font.regular,
     fontSize: 10,
     letterSpacing: tracking(10, 0.02),
+  },
+  /** Covers the bar's top hairline (top 0 keeps it inside the bar's bounds,
+      out of reach of Android's outside-the-parent clipping). */
+  dash: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: DASH_W,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: color.accent,
   },
   buddyBar: {
     flexDirection: 'row',

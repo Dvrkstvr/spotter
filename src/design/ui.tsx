@@ -8,6 +8,7 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { ReactNode, useState } from 'react';
 import {
+  Animated,
   Pressable,
   PressableProps,
   StyleProp,
@@ -21,7 +22,9 @@ import {
   ViewStyle,
 } from 'react-native';
 
-import { color, fill, font, radius, space, tracking, wash } from './tokens';
+import { color, fill, font, motion, radius, space, tracking, wash } from './tokens';
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 /* ── type ──────────────────────────────────────────────────────────────── */
 
@@ -130,7 +133,12 @@ export type BtnProps = Omit<PressableProps, 'style' | 'children'> & {
   labelStyle?: StyleProp<TextStyle>;
 };
 
-/** .btn plus .btn-primary / .btn-secondary / .btn-ghost / .btn-block */
+/**
+ * .btn plus .btn-primary / .btn-secondary / .btn-ghost / .btn-block
+ *
+ * Every button shares the press grammar: a 120ms settle to 0.965 scale on
+ * press-in, released on the same curve — juice felt in the thumb, not the eye.
+ */
 export function Btn({
   variant = 'secondary',
   block,
@@ -139,20 +147,41 @@ export function Btn({
   style,
   labelStyle,
   disabled,
+  onPressIn,
+  onPressOut,
   ...rest
 }: BtnProps) {
   const v = BTN_VARIANTS[variant];
+  const [scale] = useState(() => new Animated.Value(1));
+  const [pressed, setPressed] = useState(false);
+  const settle = (to: number) =>
+    Animated.timing(scale, {
+      toValue: to,
+      ...motion.tap,
+      useNativeDriver: true,
+    }).start();
   return (
-    <Pressable
+    <AnimatedPressable
       accessibilityRole="button"
       disabled={disabled}
-      style={({ pressed }) => [
+      onPressIn={(e) => {
+        setPressed(true);
+        settle(0.965);
+        onPressIn?.(e);
+      }}
+      onPressOut={(e) => {
+        setPressed(false);
+        settle(1);
+        onPressOut?.(e);
+      }}
+      style={[
         styles.btn,
         v.box,
         block && styles.btnBlock,
         disabled && styles.btnDisabled,
         pressed && !disabled && { backgroundColor: v.pressed },
         style,
+        { transform: [{ scale }] },
       ]}
       {...rest}
     >
@@ -162,7 +191,7 @@ export function Btn({
         </Text>
       )}
       {children}
-    </Pressable>
+    </AnimatedPressable>
   );
 }
 
