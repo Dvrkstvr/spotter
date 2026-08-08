@@ -9,18 +9,36 @@
  * count, whose turn it is. All of it advisory — nothing here ever blocks
  * input on what the other phone does (or forgets) to tap.
  */
+import { LinearGradient } from 'expo-linear-gradient';
 import { useKeepAwake } from 'expo-keep-awake';
 import { useRouter } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ReactNode, useEffect, useRef, useState } from 'react';
+import {
+  Animated,
+  Pressable,
+  ScrollView,
+  StyleProp,
+  StyleSheet,
+  Text,
+  TextStyle,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Path } from 'react-native-svg';
 
-import { CHECK_D, Icon } from '@/components/icon';
+import { HoldBtn } from '@/components/hold-btn';
+import { CHECK_D } from '@/components/icon';
 import { FullScreen } from '@/components/sheet';
 import { useBackClose } from '@/hooks/use-back-close';
 import { useBuddyLive } from '@/hooks/use-buddy-live';
-import { color, font, t, tracking, wash } from '@/design/tokens';
+import { color, fill as absFill, font, motion, radius, t, tracking, wash } from '@/design/tokens';
 import { Btn, H3, Input, missingName, Tag } from '@/design/ui';
 import { prevNums, useStore } from '@/store/workout-store';
+
+const AnimatedPath = Animated.createAnimatedComponent(Path);
+
+/** CHECK_D's path length in its 24×24 viewBox — the draw-on dash budget. */
+const CHECK_LEN = 25;
 
 export function SessionOverlay() {
   const { s, L, patch, ex, gInfo, kInfo, exInfo, setup, mutSession, totals, finishSession } =
@@ -38,6 +56,23 @@ export function SessionOverlay() {
   useBackClose(() => {}, { swallow: true });
 
   const session = s.session;
+
+  // The counter's 3px tick whenever another set lands. Hooks stay above the
+  // early return; the effect just never fires without a session.
+  const [tick] = useState(() => new Animated.Value(0));
+  const doneCount = session ? totals().done : 0;
+  const prevDoneCount = useRef(doneCount);
+  useEffect(() => {
+    if (prevDoneCount.current === doneCount) return;
+    const rose = doneCount > prevDoneCount.current;
+    prevDoneCount.current = doneCount;
+    if (!rose) return;
+    Animated.sequence([
+      Animated.timing(tick, { toValue: -3, duration: 80, easing: motion.tap.easing, useNativeDriver: true }),
+      Animated.spring(tick, { toValue: 0, ...motion.payoff, useNativeDriver: true }),
+    ]).start();
+  }, [doneCount, tick]);
+
   if (!session) return null;
 
   const tot = totals();
@@ -53,13 +88,11 @@ export function SessionOverlay() {
               {session.name}
             </H3>
           </View>
-          <Text style={styles.count}>
+          <Animated.Text style={[styles.count, { transform: [{ translateY: tick }] }]}>
             {tot.done} {L.ofSets} {tot.all} {L.setsWord}
-          </Text>
+          </Animated.Text>
         </View>
-        <View style={styles.track}>
-          <View style={[styles.fill, { width: `${progressPct}%` }]} />
-        </View>
+        <ProgressBar pct={progressPct} />
       </View>
 
       <ScrollView
@@ -97,14 +130,15 @@ export function SessionOverlay() {
                       {kInfo(meta.kind).text} · {gInfo(meta.group).text}
                     </Text>
                   </View>
-                  <Text
+                  <PopOnTrue
+                    on={allDone}
                     style={[
                       styles.cardCount,
                       { color: allDone ? color.accent400 : color.neutral600 },
                     ]}
                   >
                     {doneN}/{entry.sets.length}
-                  </Text>
+                  </PopOnTrue>
                 </Pressable>
 
                 {active && (
@@ -141,68 +175,32 @@ export function SessionOverlay() {
                     </View>
 
                     <View style={{ gap: 5 }}>
-                      {entry.sets.map((set, j) => {
-                        const ghost = prevNums(set.prev);
-                        return (
-                          <View key={j} style={[styles.setRow, { opacity: set.done ? 0.6 : 1 }]}>
-                            <Text style={styles.setIndex}>{j + 1}</Text>
-                            <Pressable
-                              onPress={() =>
-                                mutSession(i, (e) => {
-                                  e.sets[j].w = ghost.w;
-                                  e.sets[j].reps = ghost.r;
-                                })
+                      {entry.sets.map((set, j) => (
+                        <SetRow
+                          key={j}
+                          index={j}
+                          set={set}
+                          onCopy={(w, r) =>
+                            mutSession(i, (e) => {
+                              e.sets[j].w = w;
+                              e.sets[j].reps = r;
+                            })
+                          }
+                          onW={(v) => mutSession(i, (e) => { e.sets[j].w = v; })}
+                          onReps={(v) => mutSession(i, (e) => { e.sets[j].reps = v; })}
+                          onToggle={(w, r) =>
+                            mutSession(i, (e) => {
+                              const cur = e.sets[j];
+                              // Ticking an untouched set logs last time's numbers.
+                              if (!cur.done && !cur.w && !cur.reps) {
+                                cur.w = w;
+                                cur.reps = r;
                               }
-                              style={styles.colPrev}
-                            >
-                              <Text style={styles.prevText}>{set.prev}</Text>
-                            </Pressable>
-                            <Input
-                              style={[styles.setInput, styles.colFlex]}
-                              keyboardType="decimal-pad"
-                              placeholder={ghost.w}
-                              value={set.w}
-                              onChangeText={(v) => mutSession(i, (e) => { e.sets[j].w = v; })}
-                            />
-                            <Input
-                              style={[styles.setInput, styles.colFlex]}
-                              keyboardType="number-pad"
-                              placeholder={ghost.r}
-                              value={set.reps}
-                              onChangeText={(v) => mutSession(i, (e) => { e.sets[j].reps = v; })}
-                            />
-                            <Pressable
-                              accessibilityRole="checkbox"
-                              accessibilityState={{ checked: set.done }}
-                              onPress={() =>
-                                mutSession(i, (e) => {
-                                  const cur = e.sets[j];
-                                  // Ticking an untouched set logs last time's numbers.
-                                  if (!cur.done && !cur.w && !cur.reps) {
-                                    cur.w = ghost.w;
-                                    cur.reps = ghost.r;
-                                  }
-                                  cur.done = !cur.done;
-                                })
-                              }
-                              style={[
-                                styles.check,
-                                {
-                                  backgroundColor: set.done ? color.accent800 : 'transparent',
-                                  borderColor: set.done ? color.accent600 : color.divider,
-                                },
-                              ]}
-                            >
-                              <Icon
-                                d={CHECK_D}
-                                size={15}
-                                strokeWidth={2.2}
-                                color={set.done ? color.accent100 : color.neutral700}
-                              />
-                            </Pressable>
-                          </View>
-                        );
-                      })}
+                              cur.done = !cur.done;
+                            })
+                          }
+                        />
+                      ))}
 
                       <Pressable
                         onPress={() =>
@@ -235,6 +233,7 @@ export function SessionOverlay() {
                     </Pressable>
                   </View>
                 )}
+                <SealFx sealed={allDone} />
               </View>
             );
           })}
@@ -274,22 +273,358 @@ export function SessionOverlay() {
       )}
 
       <View style={[styles.footer, { paddingBottom: 10 + insets.bottom }]}>
-        <Btn
-          variant="secondary"
-          label={L.discard}
+        {/* Throwing a session away is always a held gesture; finishing only
+            needs the guard while sets are still open. */}
+        <HoldBtn
+          label={L.holdDiscard}
+          onConfirm={() => patch({ session: null })}
           style={styles.discard}
-          onPress={() => patch({ session: null })}
         />
-        <Btn
+        <HoldBtn
           variant="primary"
-          label={L.finish}
+          hold={tot.done < tot.all}
+          label={tot.done < tot.all ? L.holdFinish : L.finish}
+          onConfirm={finishSession}
           style={styles.finish}
           labelStyle={styles.finishLabel}
-          onPress={finishSession}
         />
       </View>
     </FullScreen>
   );
+}
+
+/* ── animated pieces ─────────────────────────────────────────────────────
+   The driving Animated.Values live in lazy state (they are read while
+   rendering, which the React Compiler does not allow of refs); "did this
+   prop just flip" refs are only touched inside effects. */
+
+/** One set row: dim on done, accent flash on tick, ghost figures that fly. */
+function SetRow({
+  index,
+  set,
+  onCopy,
+  onW,
+  onReps,
+  onToggle,
+}: {
+  index: number;
+  set: { w: string; reps: string; done: boolean; prev: string };
+  onCopy: (w: string, r: string) => void;
+  onW: (v: string) => void;
+  onReps: (v: string) => void;
+  onToggle: (w: string, r: string) => void;
+}) {
+  const ghost = prevNums(set.prev);
+  const [dim] = useState(() => new Animated.Value(set.done ? 0.6 : 1));
+  const [flash] = useState(() => new Animated.Value(0));
+  const [fly] = useState(() => new Animated.Value(0));
+  const [catchV] = useState(() => new Animated.Value(0));
+  const [flying, setFlying] = useState(false);
+  const [rowW, setRowW] = useState(0);
+  const prevDone = useRef(set.done);
+
+  useEffect(() => {
+    if (prevDone.current === set.done) return;
+    prevDone.current = set.done;
+    Animated.timing(dim, {
+      toValue: set.done ? 0.6 : 1,
+      ...motion.quick,
+      useNativeDriver: true,
+    }).start();
+    if (set.done) {
+      flash.setValue(1);
+      Animated.timing(flash, {
+        toValue: 0,
+        duration: 550,
+        easing: motion.quick.easing,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [set.done, dim, flash]);
+
+  const copy = () => {
+    onCopy(ghost.w, ghost.r);
+    setFlying(true);
+    fly.setValue(0);
+    Animated.timing(fly, {
+      toValue: 1,
+      duration: 320,
+      easing: motion.move.easing,
+      useNativeDriver: true,
+    }).start(({ finished }) => finished && setFlying(false));
+    catchV.setValue(1);
+    Animated.timing(catchV, {
+      toValue: 0,
+      duration: 450,
+      delay: 150,
+      easing: motion.quick.easing,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  // Row geometry: [16 index][8][66 prev][8][kg flex][8][reps flex][8][34 check].
+  const inputW = Math.max(0, (rowW - 148) / 2);
+  const flyDx = 74 + inputW / 2;
+
+  return (
+    <View onLayout={(e) => setRowW(e.nativeEvent.layout.width)}>
+      <Animated.View pointerEvents="none" style={[styles.rowFlash, { opacity: flash }]} />
+      <Animated.View style={[styles.setRow, { opacity: dim }]}>
+        <Text style={styles.setIndex}>{index + 1}</Text>
+        <Pressable onPress={copy} style={styles.colPrev}>
+          <Text style={styles.prevText}>{set.prev}</Text>
+        </Pressable>
+        <Input
+          style={[styles.setInput, styles.colFlex]}
+          keyboardType="decimal-pad"
+          placeholder={ghost.w}
+          value={set.w}
+          onChangeText={onW}
+        />
+        <Input
+          style={[styles.setInput, styles.colFlex]}
+          keyboardType="number-pad"
+          placeholder={ghost.r}
+          value={set.reps}
+          onChangeText={onReps}
+        />
+        <AnimatedCheck done={set.done} onPress={() => onToggle(ghost.w, ghost.r)} />
+      </Animated.View>
+      <Animated.View pointerEvents="none" style={[styles.inputCatch, { opacity: catchV }]} />
+      {flying && (
+        <View pointerEvents="none" style={styles.flyerLane}>
+          <Animated.Text
+            style={[
+              styles.flyerText,
+              {
+                opacity: fly.interpolate({ inputRange: [0, 0.7, 1], outputRange: [0.95, 0.6, 0] }),
+                transform: [
+                  { translateX: fly.interpolate({ inputRange: [0, 1], outputRange: [0, flyDx] }) },
+                ],
+              },
+            ]}
+          >
+            {set.prev}
+          </Animated.Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+/** The tick target: accent fill fades up while the checkmark strokes itself on. */
+function AnimatedCheck({ done, onPress }: { done: boolean; onPress: () => void }) {
+  // JS-driven: strokeDashoffset is an SVG prop, not a transform/opacity.
+  const [draw] = useState(() => new Animated.Value(done ? 1 : 0));
+  const prev = useRef(done);
+
+  useEffect(() => {
+    if (prev.current === done) return;
+    prev.current = done;
+    Animated.timing(draw, {
+      toValue: done ? 1 : 0,
+      duration: done ? 220 : motion.tap.duration,
+      easing: motion.quick.easing,
+      useNativeDriver: false,
+    }).start();
+  }, [done, draw]);
+
+  return (
+    <Pressable
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked: done }}
+      onPress={onPress}
+      style={[styles.check, { borderColor: done ? color.accent600 : color.divider }]}
+    >
+      <Animated.View pointerEvents="none" style={[styles.checkFill, { opacity: draw }]} />
+      <Svg width={15} height={15} viewBox="0 0 24 24" fill="none">
+        {/* The faint preview check the design shows on unticked sets. */}
+        <Path
+          d={CHECK_D}
+          stroke={color.neutral700}
+          strokeWidth={2.2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <AnimatedPath
+          d={CHECK_D}
+          stroke={color.accent100}
+          strokeWidth={2.2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeDasharray={CHECK_LEN}
+          strokeDashoffset={draw.interpolate({
+            inputRange: [0, 1],
+            outputRange: [CHECK_LEN, 0],
+          })}
+        />
+      </Svg>
+    </Pressable>
+  );
+}
+
+/** The header bar: eased fill with a bright leading edge; one glow at 100%. */
+function ProgressBar({ pct }: { pct: number }) {
+  const [pr] = useState(() => new Animated.Value(pct / 100));
+  const [edge] = useState(() => new Animated.Value(0));
+  const [glow] = useState(() => new Animated.Value(0));
+  const [trackW, setTrackW] = useState(0);
+  const prev = useRef(pct);
+
+  useEffect(() => {
+    if (prev.current === pct) return;
+    prev.current = pct;
+    // Twice the move duration: this is the one element that travels far.
+    Animated.timing(pr, {
+      toValue: pct / 100,
+      duration: motion.move.duration * 2,
+      easing: motion.move.easing,
+      useNativeDriver: true,
+    }).start();
+    edge.setValue(0.9);
+    Animated.timing(edge, {
+      toValue: 0,
+      duration: 500,
+      easing: motion.quick.easing,
+      useNativeDriver: true,
+    }).start();
+    if (pct >= 100) {
+      glow.setValue(0.7);
+      Animated.timing(glow, {
+        toValue: 0,
+        duration: 900,
+        easing: motion.quick.easing,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [pct, pr, edge, glow]);
+
+  return (
+    <View style={styles.track} onLayout={(e) => setTrackW(e.nativeEvent.layout.width)}>
+      <Animated.View style={[styles.fill, { transform: [{ scaleX: pr }] }]} />
+      {trackW > 0 && (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.fillEdge,
+            {
+              opacity: edge,
+              transform: [
+                {
+                  translateX: pr.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [-8, trackW - 8],
+                  }),
+                },
+              ],
+            },
+          ]}
+        />
+      )}
+      <Animated.View pointerEvents="none" style={[styles.fillGlow, { opacity: glow }]} />
+    </View>
+  );
+}
+
+/**
+ * The card's sealed state: a hairline of light sweeps the top edge, then the
+ * border settles on accent-700. Plays when the last set goes green, unwinds
+ * quietly if a set is unticked.
+ */
+function SealFx({ sealed }: { sealed: boolean }) {
+  const [sweep] = useState(() => new Animated.Value(0));
+  const [border] = useState(() => new Animated.Value(sealed ? 1 : 0));
+  const [w, setW] = useState(0);
+  const prev = useRef(sealed);
+
+  useEffect(() => {
+    if (prev.current === sealed) return;
+    prev.current = sealed;
+    if (sealed) {
+      sweep.setValue(0);
+      Animated.timing(sweep, {
+        toValue: 1,
+        duration: 550,
+        easing: motion.move.easing,
+        useNativeDriver: true,
+      }).start();
+      Animated.timing(border, {
+        toValue: 1,
+        duration: 500,
+        delay: 250,
+        easing: motion.quick.easing,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      sweep.setValue(0);
+      Animated.timing(border, { toValue: 0, ...motion.quick, useNativeDriver: true }).start();
+    }
+  }, [sealed, sweep, border]);
+
+  const sweepW = w * 0.4;
+  return (
+    <>
+      <Animated.View pointerEvents="none" style={[styles.sealBorder, { opacity: border }]} />
+      <View
+        pointerEvents="none"
+        style={styles.sealTrack}
+        onLayout={(e) => setW(e.nativeEvent.layout.width)}
+      >
+        {w > 0 && (
+          <Animated.View
+            style={{
+              width: sweepW,
+              height: '100%',
+              opacity: sweep.interpolate({
+                inputRange: [0, 0.05, 0.95, 1],
+                outputRange: [0, 1, 1, 0],
+              }),
+              transform: [
+                {
+                  translateX: sweep.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [-sweepW, w],
+                  }),
+                },
+              ],
+            }}
+          >
+            <LinearGradient
+              colors={['transparent', color.accent300, 'transparent']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={{ flex: 1 }}
+            />
+          </Animated.View>
+        )}
+      </View>
+    </>
+  );
+}
+
+/** Text that does the payoff pop when its flag flips true (the n/n count). */
+function PopOnTrue({
+  on,
+  style,
+  children,
+}: {
+  on: boolean;
+  style: StyleProp<TextStyle>;
+  children: ReactNode;
+}) {
+  const [scale] = useState(() => new Animated.Value(1));
+  const prev = useRef(on);
+
+  useEffect(() => {
+    if (prev.current === on) return;
+    prev.current = on;
+    if (on) {
+      scale.setValue(0.7);
+      Animated.spring(scale, { toValue: 1, ...motion.payoff, useNativeDriver: true }).start();
+    }
+  }, [on, scale]);
+
+  return <Animated.Text style={[style, { transform: [{ scale }] }]}>{children}</Animated.Text>;
 }
 
 const styles = StyleSheet.create({
@@ -317,7 +652,22 @@ const styles = StyleSheet.create({
     marginTop: 10,
     overflow: 'hidden',
   },
-  fill: { height: '100%', borderRadius: 2, backgroundColor: color.accent },
+  fill: {
+    height: '100%',
+    width: '100%',
+    borderRadius: 2,
+    backgroundColor: color.accent,
+    transformOrigin: 'left',
+  },
+  fillEdge: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: 8,
+    borderRadius: 2,
+    backgroundColor: color.accent300,
+  },
+  fillGlow: { ...absFill, borderRadius: 2, backgroundColor: wash.accent(45) },
 
   scroll: { flex: 1 },
   body: { paddingTop: 6, paddingHorizontal: 16, paddingBottom: 12 },
@@ -361,6 +711,26 @@ const styles = StyleSheet.create({
   colCheck: { width: 34 },
 
   setRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  rowFlash: { ...absFill, borderRadius: radius.sm, backgroundColor: wash.accent(12) },
+  /** Over the two inputs — left of them sit 16+66 plus two 8px gaps, right the 34px check plus one. */
+  inputCatch: {
+    position: 'absolute',
+    left: 98,
+    right: 42,
+    top: 0,
+    bottom: 0,
+    borderWidth: 1,
+    borderColor: color.accent,
+    borderRadius: radius.md,
+  },
+  flyerLane: { ...absFill, justifyContent: 'center', paddingLeft: 24 },
+  flyerText: {
+    fontFamily: font.regular,
+    fontSize: 11.5,
+    color: color.accent2,
+    fontVariant: ['tabular-nums'],
+    alignSelf: 'flex-start',
+  },
   setIndex: { width: 16, fontFamily: font.regular, fontSize: 12, color: color.neutral600 },
   prevText: {
     fontFamily: font.regular,
@@ -382,7 +752,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
+    overflow: 'hidden',
   },
+  checkFill: { ...absFill, backgroundColor: color.accent800 },
+  sealBorder: {
+    ...absFill,
+    borderWidth: 1,
+    borderRadius: t.cardRadius,
+    borderColor: color.accent700,
+  },
+  sealTrack: { position: 'absolute', top: 0, left: 0, right: 0, height: 1.5, overflow: 'hidden' },
 
   addSet: {
     flexDirection: 'row',
@@ -451,7 +830,10 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: color.divider,
   },
-  discard: { flex: 1, height: 44 },
-  finish: { flex: 2, height: 44 },
+  /** The design splits 1:2, but "Hold to discard" needs more room than the
+      design's tap-label "Discard" — 1.4:1.6 keeps Finish dominant without
+      truncating the hold labels. */
+  discard: { flex: 1.4, height: 44 },
+  finish: { flex: 1.6, height: 44 },
   finishLabel: { fontSize: 15 },
 });

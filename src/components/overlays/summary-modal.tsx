@@ -1,11 +1,17 @@
-/** Post-workout summary — sets, volume, time, and where it was filed. */
+/**
+ * Post-workout summary — sets, volume, time, and where it was filed.
+ *
+ * The payoff moment: the stats rise in staggered and count up from zero under
+ * a single confetti burst cut from the accent ramp. Once per workout, then
+ * done — celebration stays scarce so it stays meaningful.
+ */
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
 
 import { RiseIn } from '@/components/motion';
 import { useBackClose } from '@/hooks/use-back-close';
-import { color, elevation, font, radius, tracking, wash } from '@/design/tokens';
+import { color, elevation, fill, font, radius, tracking, wash } from '@/design/tokens';
 import { Btn, CardKicker, H3, Input } from '@/design/ui';
 import { useStore } from '@/store/workout-store';
 
@@ -32,11 +38,11 @@ export function SummaryModal() {
         </H3>
 
         <View style={styles.stats}>
-          {summary.stats.map((stat) => (
-            <View key={stat.k} style={styles.stat}>
+          {summary.stats.map((stat, i) => (
+            <RiseIn key={stat.k} delay={150 + i * 90} style={styles.stat}>
               <Text style={styles.statKey}>{stat.k}</Text>
-              <Text style={styles.statValue}>{stat.v}</Text>
-            </View>
+              <StatValue v={stat.v} delay={150 + i * 90} />
+            </RiseIn>
           ))}
         </View>
 
@@ -63,7 +69,128 @@ export function SummaryModal() {
 
         {/* The design labels this button "Done" literally, not from the dictionary. */}
         <Btn variant="primary" block label="Done" style={styles.doneBtn} onPress={close} />
+        <Confetti />
       </RiseIn>
+    </View>
+  );
+}
+
+/** Numeric stats count up from zero; strings (the clock) hold still. */
+function StatValue({ v, delay }: { v: number | string; delay: number }) {
+  const target = typeof v === 'number' ? v : null;
+  const [shown, setShown] = useState<number | string>(target === null ? v : 0);
+
+  useEffect(() => {
+    if (target === null) return;
+    let raf = 0;
+    const t0 = performance.now() + delay;
+    const dur = 600;
+    const step = (now: number) => {
+      const p = Math.min(Math.max((now - t0) / dur, 0), 1);
+      setShown(Math.round(target * (1 - Math.pow(1 - p, 3))));
+      if (p < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [target, delay]);
+
+  return <Text style={styles.statValue}>{shown}</Text>;
+}
+
+const CONFETTI_COLORS = [
+  color.accent300,
+  color.accent,
+  color.accent2,
+  color.accent600,
+  color.neutral400,
+  color.accent100,
+];
+
+/** Flight time in seconds, and the shared-progress keyframe stops. */
+const FLIGHT = 1.7;
+const STOPS = [0, 0.25, 0.5, 0.75, 1];
+const GRAVITY = 480;
+
+/**
+ * One burst from the card's top edge, ~30 pieces. A single shared progress
+ * value drives every particle through keyframed interpolations — one native
+ * animation, thirty tumbling Views, gone in under two seconds.
+ */
+function Confetti() {
+  const [p] = useState(() => new Animated.Value(0));
+  const [w, setW] = useState(0);
+  const [parts] = useState(() =>
+    Array.from({ length: 30 }, () => {
+      const ang = -Math.PI / 2 + (Math.random() - 0.5) * 2.1;
+      const speed = 70 + Math.random() * 170;
+      return {
+        fx: Math.random() - 0.5,
+        vx: Math.cos(ang) * speed,
+        vy: Math.sin(ang) * speed,
+        w: 3.5 + Math.random() * 3,
+        h: 7 + Math.random() * 4,
+        color: CONFETTI_COLORS[(Math.random() * CONFETTI_COLORS.length) | 0],
+        spin: (Math.random() - 0.5) * 720,
+      };
+    })
+  );
+
+  useEffect(() => {
+    if (!w) return;
+    Animated.timing(p, {
+      toValue: 1,
+      duration: FLIGHT * 1000,
+      delay: 150,
+      easing: Easing.linear,
+      useNativeDriver: true,
+    }).start();
+  }, [p, w]);
+
+  return (
+    <View
+      pointerEvents="none"
+      style={styles.confetti}
+      onLayout={(e) => setW(e.nativeEvent.layout.width)}
+    >
+      {w > 0 &&
+        parts.map((pt, i) => (
+          <Animated.View
+            key={i}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: w / 2 + pt.fx * w * 0.9,
+              width: pt.w,
+              height: pt.h,
+              borderRadius: 1,
+              backgroundColor: pt.color,
+              opacity: p.interpolate({ inputRange: [0, 0.02, 0.7, 1], outputRange: [0, 1, 1, 0] }),
+              transform: [
+                {
+                  translateX: p.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0, pt.vx * FLIGHT * 0.9],
+                  }),
+                },
+                {
+                  // Ballistic arc, sampled at the keyframe stops.
+                  translateY: p.interpolate({
+                    inputRange: STOPS,
+                    outputRange: STOPS.map(
+                      (s) => pt.vy * s * FLIGHT + 0.5 * GRAVITY * s * FLIGHT * s * FLIGHT
+                    ),
+                  }),
+                },
+                {
+                  rotate: p.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: ['0deg', `${pt.spin}deg`],
+                  }),
+                },
+              ],
+            }}
+          />
+        ))}
     </View>
   );
 }
@@ -106,4 +233,6 @@ const styles = StyleSheet.create({
   saveInput: { flex: 1, width: undefined },
   saveLabel: { fontSize: 12.5 },
   doneBtn: { marginTop: 16, height: 42 },
+  /** Anchor over the whole card; particles spawn on its top edge and overflow freely. */
+  confetti: { ...fill },
 });

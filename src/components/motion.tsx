@@ -12,16 +12,21 @@
  * are read while rendering, which the React Compiler does not allow of refs.
  */
 import { ReactNode, useEffect, useState } from 'react';
-import { Animated, Easing, StyleProp, ViewStyle } from 'react-native';
+import { Animated, StyleProp, ViewStyle } from 'react-native';
+
+import { motion } from '@/design/tokens';
 
 /** riseIn — fade up 8px. */
 export function RiseIn({
   children,
-  duration = 200,
+  duration = motion.quick.duration,
+  delay = 0,
   style,
 }: {
   children: ReactNode;
   duration?: number;
+  /** Stagger support — the content stays hidden until the delay elapses. */
+  delay?: number;
   style?: StyleProp<ViewStyle>;
 }) {
   const [p] = useState(() => new Animated.Value(0));
@@ -30,10 +35,11 @@ export function RiseIn({
     Animated.timing(p, {
       toValue: 1,
       duration,
-      easing: Easing.ease,
+      delay,
+      easing: motion.quick.easing,
       useNativeDriver: true,
     }).start();
-  }, [duration, p]);
+  }, [delay, duration, p]);
 
   return (
     <Animated.View
@@ -65,8 +71,8 @@ export function SheetIn({
     if (!height) return;
     Animated.timing(p, {
       toValue: 1,
-      duration: 240,
-      easing: Easing.bezier(0.2, 0.8, 0.3, 1),
+      duration: motion.move.duration,
+      easing: motion.move.easing,
       useNativeDriver: true,
     }).start();
   }, [height, p]);
