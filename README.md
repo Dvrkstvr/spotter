@@ -19,10 +19,16 @@ Two ways, and both stay supported:
 
   That runs `expo run:android` — Gradle-builds the native project and installs
   it on a connected device. A shareable release APK comes from
-  `cd android && ./gradlew assembleRelease` (lands in
-  `android/app/build/outputs/apk/release/`). The build uses the Android
-  SDK/NDK that ships with Unity, assembled into `E:\android-sdk` as directory
-  junctions (see `android/local.properties`).
+
+  ```bash
+  npm run build:apk
+  ```
+
+  which Gradle-builds `assembleRelease` (regenerating `android/` first if it's
+  missing) and drops `_builds/workout-diary-<date>-<hash>.apk` — the file to
+  sideload on both phones. The build uses the Android SDK/NDK that ships with
+  Unity, assembled into `E:\android-sdk` as directory junctions (see
+  `android/local.properties`).
 
 - **Expo Go** (JS-only iteration, mock buddy radio):
 
@@ -35,9 +41,10 @@ Two ways, and both stay supported:
 
 iOS config is untouched but unexercised — nothing has been checked on it.
 
-Both also exist as double-clickable batch files in the repo root:
-`start-app.bat` (plain Metro) and `start-emulated.bat` (the full buddy-testing
-setup below; takes the emulator count as an optional argument).
+These also exist as double-clickable batch files in the repo root:
+`start-app.bat` (plain Metro), `start-emulated.bat` (the full buddy-testing
+setup below; takes the emulator count as an optional argument), and
+`build-apk.bat` (the release APK into `_builds\`).
 
 ### Testing the buddy features without two phones
 

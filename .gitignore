@@ -42,5 +42,8 @@ example
 /ios
 /android
 
+# release APKs (npm run build:apk)
+/_builds
+
 # native module build output
 modules/**/android/build/
