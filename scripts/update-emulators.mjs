@@ -99,10 +99,22 @@ openWindow('start "metro (sim radio)" cmd /k "set EXPO_PUBLIC_SIM_RADIO=1&& npx 
   PATH: `${path.join(sdk, 'platform-tools')};${process.env.PATH}`,
 });
 
+// The port opens before Metro can actually serve — reloading then makes
+// Expo Go silently fall back to its cached (stale) bundle. /status says
+// when it's really ready.
+const metroReady = async () => {
+  try {
+    const res = await fetch(`http://127.0.0.1:${METRO_PORT}/status`);
+    return (await res.text()).includes('packager-status:running');
+  } catch {
+    return false;
+  }
+};
+
 const deadline = Date.now() + 120_000;
-while (!(await portUp(METRO_PORT)) && Date.now() < deadline)
+while (!(await metroReady()) && Date.now() < deadline)
   await new Promise((res) => setTimeout(res, 2000));
-if (!(await portUp(METRO_PORT))) {
+if (!(await metroReady())) {
   log('Metro never came up — check its window');
   process.exit(1);
 }

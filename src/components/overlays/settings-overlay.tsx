@@ -5,13 +5,15 @@
  * everywhere, and leaving a label blank turns that entry into a divider in the
  * exercise library and its filter row.
  */
-import { ScrollView, StyleSheet, View } from 'react-native';
+import Constants from 'expo-constants';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ReorderRows } from '@/components/reorder-rows';
 import { FullScreen } from '@/components/sheet';
 import { useBackClose } from '@/hooks/use-back-close';
-import { color, t, tracking } from '@/design/tokens';
+import { hasRadio, isSimRadio } from '@/data/buddy-radio';
+import { color, font, t, tracking } from '@/design/tokens';
 import { Btn, H2, H6, Seg } from '@/design/ui';
 import { resolveNames, useStore } from '@/store/workout-store';
 
@@ -39,6 +41,17 @@ export function SettingsOverlay() {
 
   const groupRows = rowsFor(s.groups, 'group');
   const kindRows = rowsFor(s.kinds, 'kind');
+
+  // Which of the three transports this install actually runs — the single
+  // most useful diagnostic across two phones and the emulator rig.
+  const buildLabel = hasRadio ? (isSimRadio ? L.buildSim : L.buildStandalone) : L.buildDemo;
+
+  const aboutRows: [string, string][] = [
+    [L.version, Constants.expoConfig?.version ?? '—'],
+    [L.buildKind, buildLabel],
+    [L.expoSdk, Constants.expoConfig?.sdkVersion ?? '54.0.0'],
+    [L.sessionsLogged, String(s.history.length)],
+  ];
 
   const setLabel = (listKey: 'groups' | 'kinds', i: number, v: string) =>
     patch((st) => ({
@@ -108,6 +121,19 @@ export function SettingsOverlay() {
             patch((st) => ({ kinds: [...st.kinds, { key: `k${Date.now()}`, labels: {} }] }))
           }
         />
+
+        <H6 style={styles.head}>{L.about}</H6>
+        {aboutRows.map(([label, value]) => (
+          <View key={label} style={styles.aboutRow}>
+            <Text style={styles.aboutLabel}>{label}</Text>
+            <Text style={styles.aboutValue} numberOfLines={1}>
+              {value}
+            </Text>
+          </View>
+        ))}
+        <Text style={styles.copyright}>
+          {L.copyright.replace('{year}', String(new Date().getFullYear()))}
+        </Text>
       </ScrollView>
     </FullScreen>
   );
@@ -123,4 +149,16 @@ const styles = StyleSheet.create({
   firstHead: { marginTop: 20 },
   ghostLabel: { fontSize: 12.5 },
   addBtn: { alignSelf: 'flex-start', marginTop: 7 },
+
+  aboutRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: t.rule,
+  },
+  aboutLabel: { flex: 1, fontFamily: font.regular, fontSize: 12.5, color: color.neutral500 },
+  aboutValue: { fontFamily: font.regular, fontSize: 12.5, color: color.neutral300 },
+  copyright: { fontFamily: font.regular, fontSize: 11.5, color: color.neutral600, marginTop: 14 },
 });
