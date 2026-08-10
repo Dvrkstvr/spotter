@@ -11,7 +11,7 @@
  * transferred — each just flips to its Added/Sent mark.
  */
 import { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CHECK_D, Icon } from '@/components/icon';
@@ -21,11 +21,13 @@ import { hasRadio, radio } from '@/data/buddy-radio';
 import { connectPeer, scanPeers, sendToPeer } from '@/data/buddy-transport';
 import { BuddyDiff, diffBuddy, SyncItem, syncItemId } from '@/data/buddy-sync';
 import { Strings } from '@/data/i18n';
+import { themed, useColors, useThemed } from '@/design/theme';
 import { color, font, t, tracking } from '@/design/tokens';
 import { Btn, H2, H6, missingName, Tag } from '@/design/ui';
 import { resolveNames, useStore } from '@/store/workout-store';
 
 export function BuddySyncOverlay() {
+  const styles = useThemed(sheet);
   const { s, L, patch, importFromPeer } = useStore();
   const insets = useSafeAreaInsets();
 
@@ -171,6 +173,8 @@ function Section({
   L: Strings;
   lang: 'en' | 'de';
 }) {
+  const styles = useThemed(sheet);
+  const c = useColors();
   if (items.length === 0) return null;
 
   const typeLabel: Record<SyncItem['type'], string> = {
@@ -204,7 +208,7 @@ function Section({
           <View key={id} style={styles.row}>
             <Tag tone="neutral" label={typeLabel[item.type]} />
             <View style={styles.rowText}>
-              <Text style={[styles.rowName, name.missing && missingName]} numberOfLines={1}>
+              <Text style={[styles.rowName, name.missing && missingName(c)]} numberOfLines={1}>
                 {name.text}
               </Text>
               {item.kind === 'translation' && (
@@ -215,7 +219,7 @@ function Section({
             </View>
             {isDone ? (
               <View style={styles.doneMark}>
-                <Icon d={CHECK_D} size={12} strokeWidth={2.2} color={color.accent400} />
+                <Icon d={CHECK_D} size={12} strokeWidth={2.2} color={c.accent400} />
                 <Text style={styles.doneMarkText}>{doneMark}</Text>
               </View>
             ) : (
@@ -233,7 +237,7 @@ function Section({
   );
 }
 
-const styles = StyleSheet.create({
+const sheet = themed(() => ({
   header: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingBottom: 6 },
   backLabel: { fontSize: 13 },
   scroll: { flex: 1 },
@@ -261,4 +265,4 @@ const styles = StyleSheet.create({
   transferLabel: { fontSize: 12.5 },
   doneMark: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 6 },
   doneMarkText: { fontFamily: font.regular, fontSize: 11.5, color: color.accent400 },
-});
+}));

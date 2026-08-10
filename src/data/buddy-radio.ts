@@ -44,6 +44,13 @@ export type Radio = {
   rejectConnection(endpointId: string): Promise<void>;
   sendPayload(endpointId: string, data: string): Promise<void>;
   disconnectFrom(endpointId: string): Promise<void>;
+  /**
+   * Nearby's stopAllEndpoints: drops every link *and* invalidates advertising
+   * and discovery until they are started again. <BuddyRadio> owns those two,
+   * and restarts them the moment a pairing ends — so app code never calls
+   * this. Ending one link is `disconnectFrom`; the surface stays here only
+   * because it mirrors the native module.
+   */
   stopAll(): Promise<void>;
 };
 
@@ -73,6 +80,30 @@ export const radio: Radio | null = native ?? (simUrl ? createSimRadio(simUrl) : 
 export const isSimRadio = radio !== null && native === null;
 
 export const hasRadio = radio !== null;
+
+/**
+ * Say goodbye before pulling the plug.
+ *
+ * A silent drop is what the buddy's phone spends the next hour trying to
+ * reconnect through — and now that the roster re-pairs on sight, a teardown
+ * they never heard about would simply undo itself. The disconnect waits for
+ * the payload.
+ *
+ * Exactly one link goes. `stopAll` would be the obvious call and is the wrong
+ * one: it also invalidates advertising and discovery, which `endPairing` has
+ * <BuddyRadio> restarting in the same breath — the two race, and a lost race
+ * leaves this phone unable to see or be seen until the app is restarted.
+ *
+ * Every path that ends a link goes through here: Disconnect, forgetting a
+ * buddy, declining a join, and switching the buddy half of the app off.
+ */
+export function sayGoodbye(endpointId: string | null): void {
+  if (!radio || !endpointId) return;
+  radio
+    .sendPayload(endpointId, JSON.stringify({ v: 1, t: 'bye' }))
+    .catch(() => {})
+    .then(() => radio.disconnectFrom(endpointId).catch(() => {}));
+}
 
 /**
  * Ask for whatever runtime permissions this Android version wants before

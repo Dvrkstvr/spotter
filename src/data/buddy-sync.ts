@@ -119,6 +119,18 @@ export const shareableSlice = (s: SyncSide): SyncSide => ({
 
 /* ── shared sessions ───────────────────────────────────────────────────── */
 
+/** Whether a shared exercise is taken in turns or lifted at the same time. */
+export type TurnMode = 'alternate' | 'parallel';
+
+/**
+ * One exercise's turn choice, as a last-writer-wins register: every local
+ * change bumps `rev`, and the higher `rev` wins on both phones (ties go to
+ * the host). That is the whole conflict resolution — it rides along inside
+ * `progress`, so a phone that missed the toggle catches up on the next
+ * broadcast, and adopting a value never bumps a rev, so the two can't echo.
+ */
+export type TurnChoice = { mode: TurnMode; rev: number };
+
 /**
  * One phone's live session state, as broadcast to the buddy. Always the full
  * state, never an event stream — receiving any one message is enough to be
@@ -130,6 +142,8 @@ export type BuddyProgress = {
   active: string | null;
   list: { ex: string; done: boolean[] }[];
   finished: boolean;
+  /** their turn-mode registers, merged by rev on arrival */
+  modes: Record<string, TurnChoice>;
 };
 
 type ProgressSource = {
@@ -140,13 +154,39 @@ type ProgressSource = {
 export const progressOf = (
   session: ProgressSource,
   activeIndex: number,
+  modes: Record<string, TurnChoice>,
   finished = false
 ): BuddyProgress => ({
   rid: session.rid,
   active: finished ? null : (session.list[activeIndex]?.ex ?? null),
   list: session.list.map((e) => ({ ex: e.ex, done: e.sets.map((x) => x.done) })),
   finished,
+  modes,
 });
+
+/**
+ * Merge a peer's registers into ours. Higher rev wins; an equal rev with a
+ * different value goes to the host, so a simultaneous toggle settles in one
+ * round instead of flapping.
+ */
+export const mergeTurns = (
+  mine: Record<string, TurnChoice>,
+  theirs: Record<string, TurnChoice> | undefined,
+  role: 'host' | 'guest' | null
+): Record<string, TurnChoice> | null => {
+  if (!theirs) return null;
+  const out = { ...mine };
+  let changed = false;
+  for (const [ex, t] of Object.entries(theirs)) {
+    if (!t || (t.mode !== 'alternate' && t.mode !== 'parallel')) continue;
+    const m = out[ex];
+    const wins = !m || t.rev > m.rev || (t.rev === m.rev && t.mode !== m.mode && role === 'guest');
+    if (!wins || (m && m.mode === t.mode && m.rev === t.rev)) continue;
+    out[ex] = t;
+    changed = true;
+  }
+  return changed ? out : null;
+};
 
 /**
  * Everything the buddy needs to run the starter's routine: the routine
@@ -209,7 +249,23 @@ export type BuddyMessage =
   | { v: 1; t: 'progress'; state: BuddyProgress }
   | { v: 1; t: 'draftStart'; draft: DraftPayload }
   | { v: 1; t: 'draftUpdate'; draft: DraftPayload }
-  | { v: 1; t: 'draftEnd'; reason: 'save' | 'start'; draft: DraftPayload };
+  | { v: 1; t: 'draftEnd'; reason: 'save' | 'start'; draft: DraftPayload }
+  /**
+   * Someone tapped Disconnect. Not the same as the link dropping: a drop is
+   * something to reconnect through, this is a decision. The receiver tears
+   * the pairing down instead of going looking for them again.
+   */
+  | { v: 1; t: 'bye' }
+  /**
+   * "Shall we train together?" — the other direction from `sessionInvite`,
+   * and the only thing that ever opens a link between two paired phones: the
+   * radio connects for it, but nobody is *in* anything until this is
+   * answered. If the asked phone is already running a routine, an accepted
+   * ask is answered with a plain `sessionInvite` on top, so joining a workout
+   * in progress runs the one code path it always did.
+   */
+  | { v: 1; t: 'joinAsk' }
+  | { v: 1; t: 'joinReply'; ok: boolean };
 
 const MESSAGE_TYPES = new Set([
   'snapshot',
@@ -221,6 +277,9 @@ const MESSAGE_TYPES = new Set([
   'draftStart',
   'draftUpdate',
   'draftEnd',
+  'bye',
+  'joinAsk',
+  'joinReply',
 ]);
 
 export const parseBuddyMessage = (raw: string): BuddyMessage | null => {

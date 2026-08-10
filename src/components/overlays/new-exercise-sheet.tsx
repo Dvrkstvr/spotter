@@ -1,13 +1,16 @@
 /** New exercise — name, muscle group, equipment. Saved into the user's own list. */
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 import { Sheet } from '@/components/sheet';
 import { useBackClose } from '@/hooks/use-back-close';
-import { color, font, wash } from '@/design/tokens';
+import { themed, useColors, useThemed } from '@/design/theme';
+import { color, font } from '@/design/tokens';
 import { Btn, Field, H4, H6, Input, missingName, Seg } from '@/design/ui';
 import { resolveNames, useStore } from '@/store/workout-store';
 
 export function NewExerciseSheet() {
+  const styles = useThemed(sheet);
+  const c = useColors();
   const { s, L, patch } = useStore();
   const close = () => patch({ creating: null });
   useBackClose(close);
@@ -76,16 +79,16 @@ export function NewExerciseSheet() {
                 style={[
                   styles.chip,
                   {
-                    backgroundColor: on ? wash.accent(16) : 'transparent',
-                    borderColor: on ? color.accent : color.divider,
+                    backgroundColor: on ? c.wash.accent(16) : 'transparent',
+                    borderColor: on ? c.accent : c.divider,
                   },
                 ]}
               >
                 <Text
                   style={[
                     styles.chipLabel,
-                    { color: on ? color.accent200 : color.neutral400 },
-                    k.r.missing && missingName,
+                    { color: on ? c.accent200 : c.neutral400 },
+                    k.r.missing && missingName(c),
                   ]}
                 >
                   {k.r.text}
@@ -103,7 +106,7 @@ export function NewExerciseSheet() {
   );
 }
 
-const styles = StyleSheet.create({
+const sheet = themed(() => ({
   field: { marginTop: 14 },
   head: { marginTop: 16, marginBottom: 7, color: color.neutral500 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
@@ -111,4 +114,4 @@ const styles = StyleSheet.create({
   chipLabel: { fontFamily: font.regular, fontSize: 11.5 },
   actions: { flexDirection: 'row', gap: 8, marginTop: 18 },
   action: { flex: 1, height: 42 },
-});
+}));

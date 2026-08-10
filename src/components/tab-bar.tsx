@@ -10,11 +10,12 @@
  */
 import { Tabs } from 'expo-router';
 import { ComponentProps, ReactNode, useEffect, useRef, useState } from 'react';
-import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Icon } from '@/components/icon';
 import { TABS } from '@/data/exercises';
+import { themed, useColors, useThemed } from '@/design/theme';
 import { color, font, motion, tracking, wash } from '@/design/tokens';
 import { useStore } from '@/store/workout-store';
 
@@ -36,6 +37,8 @@ const ROUTE: Record<string, string> = {
 type TabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>['tabBar']>>[0];
 
 export function TabBar({ state, navigation }: TabBarProps) {
+  const styles = useThemed(sheet);
+  const c = useColors();
   const { s, L, patch, clock } = useStore();
   const insets = useSafeAreaInsets();
   const current = state.routes[state.index]?.name;
@@ -89,7 +92,16 @@ export function TabBar({ state, navigation }: TabBarProps) {
         </Pressable>
       ) : (
         s.buddy && (
-          <View style={styles.buddyBar}>
+          // Same tap target as the session overlay's bar, and the same
+          // destination: the buddy section on Profile. A pairing is worth
+          // reaching whether or not a workout is running.
+          <Pressable
+            onPress={() => {
+              patch({ routineOpen: null, buddyFocus: true });
+              navigation.navigate(ROUTE.you);
+            }}
+            style={styles.buddyBar}
+          >
             <View style={styles.buddyAvatar}>
               <Text style={styles.buddyInitial}>{s.buddy[0]}</Text>
             </View>
@@ -97,8 +109,19 @@ export function TabBar({ state, navigation }: TabBarProps) {
               {s.buddy}
             </Text>
             <Text style={styles.buddyStatus}>{L.trainingWith}</Text>
-          </View>
+            <Text style={styles.buddyChevron}>›</Text>
+          </Pressable>
         )
+      )}
+
+      {/* They tapped Disconnect and the strip above them just vanished —
+          say why once, then let it go. The session screen has its own. */}
+      {!minimized && !s.buddy && s.buddyLeft && (
+        <Pressable onPress={() => patch({ buddyLeft: null })} style={styles.leftNote}>
+          <Text style={styles.leftNoteText}>
+            {L.buddyLeftNote.replace('{name}', s.buddyLeft)}
+          </Text>
+        </Pressable>
       )}
 
       <View
@@ -112,7 +135,7 @@ export function TabBar({ state, navigation }: TabBarProps) {
         {TABS.map((tab) => {
           const route = ROUTE[tab.id];
           const focused = current === route;
-          const tint = focused ? color.accent : color.neutral600;
+          const tint = focused ? c.accent : c.neutral600;
           return (
             <Pressable
               key={tab.id}
@@ -163,7 +186,7 @@ function TabGlyph({ focused, children }: { focused: boolean; children: ReactNode
   return <Animated.View style={{ transform: [{ translateY: y }] }}>{children}</Animated.View>;
 }
 
-const styles = StyleSheet.create({
+const sheet = themed(() => ({
   bar: {
     flexDirection: 'row',
     paddingTop: 6,
@@ -219,4 +242,13 @@ const styles = StyleSheet.create({
   liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: color.accent },
   buddyName: { flex: 1, fontFamily: font.regular, fontSize: 12.5, color: color.text },
   buddyStatus: { fontFamily: font.regular, fontSize: 11, color: color.accent400 },
-});
+  buddyChevron: { fontFamily: font.regular, fontSize: 14, color: color.accent },
+  leftNote: {
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    backgroundColor: color.surface,
+    borderTopWidth: 1,
+    borderTopColor: color.divider,
+  },
+  leftNoteText: { fontFamily: font.regular, fontSize: 11.5, color: color.neutral500 },
+}));

@@ -6,18 +6,22 @@
  *
  * `hold={false}` degrades to a plain tap for the cases that need no guarding
  * (Finish with every set already ticked).
+ *
+ * `dashed` borrows the set row's grammar — a dashed outline is something that
+ * isn't yours yet — so the bottom CTA can say "there's still work here" before
+ * you touch it, rather than only revealing the guard once you press.
  */
 import { useState } from 'react';
 import {
   Animated,
   Pressable,
   StyleProp,
-  StyleSheet,
   Text,
   TextStyle,
   ViewStyle,
 } from 'react-native';
 
+import { themed, useThemed } from '@/design/theme';
 import { color, fill, font, motion, radius, space, wash } from '@/design/tokens';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -32,6 +36,7 @@ export function HoldBtn({
   onConfirm,
   variant = 'secondary',
   hold = true,
+  dashed = false,
   style,
   labelStyle,
 }: {
@@ -39,9 +44,11 @@ export function HoldBtn({
   onConfirm: () => void;
   variant?: keyof typeof VARIANTS;
   hold?: boolean;
+  dashed?: boolean;
   style?: StyleProp<ViewStyle>;
   labelStyle?: StyleProp<TextStyle>;
 }) {
+  const styles = useThemed(sheet);
   const v = VARIANTS[variant];
   const [fillV] = useState(() => new Animated.Value(0));
   const [scale] = useState(() => new Animated.Value(1));
@@ -82,7 +89,13 @@ export function HoldBtn({
       onPressIn={start}
       onPressOut={release}
       onPress={hold ? undefined : onConfirm}
-      style={[styles.btn, { borderColor: v.border }, style, { transform: [{ scale }] }]}
+      style={[
+        styles.btn,
+        { borderColor: v.border },
+        dashed && styles.dashed,
+        style,
+        { transform: [{ scale }] },
+      ]}
     >
       <Animated.View
         pointerEvents="none"
@@ -105,7 +118,7 @@ export function HoldBtn({
   );
 }
 
-const styles = StyleSheet.create({
+const sheet = themed(() => ({
   btn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -117,6 +130,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     overflow: 'hidden',
   },
+  dashed: { borderStyle: 'dashed' },
   fill: { ...fill, transformOrigin: 'left' },
   label: { fontFamily: font.heading, fontSize: 14, lineHeight: 14 * 1.2 },
-});
+}));

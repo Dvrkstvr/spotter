@@ -13,9 +13,16 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useState } from 'react';
 
+import type {
+  BuddyProgress,
+  DraftPayload,
+  SessionInvite,
+  SyncItem,
+  TurnChoice,
+  TurnMode,
+} from '@/data/buddy-sync';
 import type { BuddySnapshot } from '@/data/buddy-transport';
-import type { BuddyProgress, DraftPayload, SessionInvite, SyncItem } from '@/data/buddy-sync';
-import { routineClosure } from '@/data/buddy-sync';
+import { mergeTurns, routineClosure } from '@/data/buddy-sync';
 import { todayDom, todayISO } from '@/data/date';
 import {
   DEFAULT_GROUPS,
@@ -26,8 +33,10 @@ import {
   INFO,
   Routine,
   SetupPair,
+  V2_GROUP_KEYS,
 } from '@/data/exercises';
 import { DICT, fmtDayLong, Lang, LangMap, Strings } from '@/data/i18n';
+import { isThemeName, ThemeMode, ThemeName } from '@/design/tokens';
 
 /* ── types ─────────────────────────────────────────────────────────────── */
 
@@ -89,7 +98,6 @@ export type State = {
   /** day-of-week index → routine id */
   schedule: Record<number, string>;
   routineOpen: string | null;
-  editing: boolean;
   exOpen: string | null;
   picker: PickerMode;
   session: Session | null;
@@ -109,15 +117,48 @@ export type State = {
   lastLog: Record<string, LastLog>;
   daySel: number;
   custom: Exercise[];
+  /**
+   * Edits to the *seeded* library, by exercise id — the user's name, muscle
+   * group and equipment win over what `EX` shipped with, and `resetEx` puts
+   * the seed back. Exercises the user created are edited in `custom` itself
+   * instead, so the buddy keeps receiving them the way they were made.
+   */
+  exEdits: Record<string, { names?: LangMap; group?: string; kind?: string }>;
+  /** Rewritten cues by exercise id — same override model as `setups`. */
+  cueEdits: Record<string, string[]>;
   creating: Draft | null;
   profile: Profile;
   setups: Record<string, SetupPair[]>;
   videos: Record<string, string>;
   instrOpen: string | null;
   lang: Lang;
+  /** Which palette, and whether the OS gets to pick between light and dark. */
+  themeMode: ThemeMode;
+  theme: ThemeName;
+  /**
+   * How long a logged set buys you, in seconds. 0 turns the rest cue off
+   * entirely — the row stays yours and nothing counts down.
+   */
+  restSeconds: number;
+  /** Vibrate on the moments worth feeling: a set ticked, a rest run out. */
+  haptics: boolean;
+  /**
+   * Train alone. The whole buddy half of the app — the radio, the roster, the
+   * bars, every sheet that can interrupt you — is hidden and switched off.
+   * `knownBuddies` survives it: this is a curtain, not a divorce.
+   */
+  privateMode: boolean;
   settingsOpen: boolean;
   scanning: boolean;
   buddy: string | null;
+  /**
+   * Everyone this phone has paired with, by display name. The pairing is the
+   * durable half of a buddy — the connection isn't — so this is what survives
+   * a restart and what the radio goes looking for. Nothing removes a name but
+   * the user: the list is how you see who is around when you run into each
+   * other, which only works if it outlasts every link that ever dropped.
+   */
+  knownBuddies: string[];
   /** whether the buddy-sync overlay is open */
   buddySync: boolean;
   /** pairing confirmed, snapshot not here yet — it decides if the sync screen opens */
@@ -132,6 +173,10 @@ export type State = {
   /* — shared workout (all transient; see IMPROVEMENTS.md #8) — */
   /** incoming "train together?" invite awaiting a decision */
   buddyInvite: SessionInvite | null;
+  /** they asked to train together — their name, awaiting your answer */
+  joinAsk: string | null;
+  /** your own outstanding ask, and who it went to */
+  joinSent: { to: string; state: 'waiting' | 'declined' } | null;
   /** whether the live session is shared with the buddy */
   sessionShared: boolean;
   /** who initiated the shared session — ties on turn order go to the host */
@@ -140,8 +185,27 @@ export type State = {
   buddyJoin: 'pending' | 'joined' | 'declined' | null;
   /** the buddy's live session state, as last broadcast */
   buddyProgress: BuddyProgress | null;
-  /** per-exercise turn-taking choice; advisory display only */
-  turnModes: Record<string, 'alternate' | 'parallel'>;
+  /**
+   * Per-exercise turn-taking choice, one last-writer-wins register each —
+   * advisory display only, but the same on both phones (see `mergeTurns`).
+   */
+  turnModes: Record<string, TurnChoice>;
+  /** the buddy tapped Disconnect; a line says so until it's dismissed */
+  buddyLeft: string | null;
+  /**
+   * Why your next set isn't yours yet. `at` is the session clock the wait
+   * started on — counting in `elapsed` ticks rather than wall time keeps the
+   * countdown pure and re-renders it for free. `skipped` is the user saying
+   * they're ready before the clock agrees.
+   *
+   * `own` separates the two waits that look alike: a rest you earned by
+   * finishing a set — every logged set earns one, buddy or not — runs its
+   * full length whatever the buddy does, while a
+   * wait that only exists because it's their turn ends the moment the turn
+   * comes back — otherwise the guest of a fresh session would be held three
+   * minutes for a set they never did.
+   */
+  rest: { at: number; skipped: boolean; own: boolean } | null;
   /** live co-created routine draft, or null (transient) */
   coDraft: CoDraft | null;
   /**
@@ -149,6 +213,11 @@ export type State = {
    * session itself keeps running; the tab bar shows a resume strip.
    */
   sessionMin: boolean;
+  /**
+   * Set by whichever buddy bar was tapped; Profile scrolls its buddy section
+   * into view once and clears it. Transient, one-shot.
+   */
+  buddyFocus: boolean;
   pickWorkout: boolean;
   /** day-of-week index whose scheduled routine is being picked, or null */
   dayPick: number | null;
@@ -162,7 +231,6 @@ const initialState: State = {
   routines: DEFAULT_ROUTINES.map((r) => ({ ...r, items: r.items.map((i) => ({ ...i })) })),
   schedule: { 0: 'chest', 2: 'back', 4: 'both' },
   routineOpen: null,
-  editing: false,
   exOpen: null,
   picker: null,
   session: null,
@@ -175,15 +243,26 @@ const initialState: State = {
   lastLog: {},
   daySel: todayDom(),
   custom: [],
+  exEdits: {},
+  cueEdits: {},
   creating: null,
   profile: { name: '', age: '', weight: '', height: '' },
   setups: {},
   videos: {},
   instrOpen: null,
   lang: 'en',
+  // Dark, not 'system': the app was dark-only until now, so a phone that has
+  // been logging for months must not turn white because of an update. Anyone
+  // who wants the OS to decide can say so in Settings.
+  themeMode: 'dark',
+  theme: 'blurple',
+  restSeconds: 180,
+  haptics: true,
+  privateMode: false,
   settingsOpen: false,
   scanning: false,
   buddy: null,
+  knownBuddies: [],
   buddySync: false,
   buddySyncPending: false,
   nearbyPeers: [],
@@ -191,13 +270,18 @@ const initialState: State = {
   pendingAuth: null,
   buddySnapshot: null,
   buddyInvite: null,
+  joinAsk: null,
+  joinSent: null,
   sessionShared: false,
   sessionRole: null,
   buddyJoin: null,
   buddyProgress: null,
   turnModes: {},
+  buddyLeft: null,
+  rest: null,
   coDraft: null,
   sessionMin: false,
+  buddyFocus: false,
   pickWorkout: false,
   dayPick: null,
   groups: DEFAULT_GROUPS.map((g) => ({ ...g })),
@@ -215,13 +299,24 @@ type Patch = Partial<State> | ((s: State) => Partial<State> | null);
  * connection, and a connection does not survive an app restart.
  */
 
-const STORAGE_KEY = 'workout-diary/v2';
-/** v2 added per-language names; v1 blobs are migrated on first load. */
+// Keeps the pre-Spotter name: this key is where the training already logged on
+// a phone lives. Renaming it to match the app would read as a first run and
+// silently strand every session behind the old key.
+/** The number a backup is stamped with, so an old one can be lifted forward. */
+export const STORAGE_VERSION = 3;
+
+const STORAGE_KEY = 'workout-diary/v3';
+/** v3 widened the seeded muscle groups; v2 added per-language names. */
+const STORAGE_KEY_V2 = 'workout-diary/v2';
 const STORAGE_KEY_V1 = 'workout-diary/v1';
 
+// Additive only: `filterPersisted` skips keys a stored blob doesn't have, so a
+// phone that has been logging since v2 keeps its data and starts the new maps
+// empty. Anything that changes the *shape* of an existing key needs a version.
 const PERSIST = [
   'routines', 'schedule', 'history', 'lastLog', 'custom', 'profile',
-  'setups', 'videos', 'lang', 'groups', 'kinds', 'images',
+  'setups', 'videos', 'lang', 'groups', 'kinds', 'images', 'exEdits', 'cueEdits',
+  'knownBuddies', 'themeMode', 'theme', 'restSeconds', 'haptics', 'privateMode',
 ] as const satisfies readonly (keyof State)[];
 
 type Persisted = Pick<State, (typeof PERSIST)[number]>;
@@ -237,7 +332,36 @@ const filterPersisted = (raw: unknown): Partial<State> => {
   if (typeof raw !== 'object' || raw === null) return {};
   const out: Record<string, unknown> = {};
   for (const k of PERSIST) if (k in raw) out[k] = (raw as Record<string, unknown>)[k];
+  // A theme that no longer exists would leave the palette wherever it was;
+  // drop the name and let the seeded default win instead.
+  if ('theme' in out && !isThemeName(out.theme)) delete out.theme;
   return out as Partial<State>;
+};
+
+/**
+ * v2 → v3: the seeded muscle groups went from three to the full body.
+ *
+ * Everything the phone already has is kept exactly as it is — renamed,
+ * reordered, added — and only the keys that are *new* in v3 are inserted, so a
+ * group someone deleted on purpose stays deleted. They land ahead of a
+ * trailing catch-all, because "Other" should keep the last word.
+ */
+const migrateV2 = (data: Partial<State>): Partial<State> => {
+  const have = data.groups;
+  if (!Array.isArray(have)) return data;
+  const fresh = DEFAULT_GROUPS.filter(
+    (d) => !V2_GROUP_KEYS.includes(d.key) && !have.some((g) => g?.key === d.key)
+  ).map((d) => ({ key: d.key, labels: { ...d.labels } }));
+  if (fresh.length === 0) return data;
+  const trailingOther = have.length > 0 && have[have.length - 1]?.key === 'Other' ? 1 : 0;
+  return {
+    ...data,
+    groups: [
+      ...have.slice(0, have.length - trailingOther),
+      ...fresh,
+      ...have.slice(have.length - trailingOther),
+    ],
+  };
 };
 
 /**
@@ -332,7 +456,7 @@ const sessionFrom = (s: State, r: Routine): Session => {
 };
 
 /** The name this phone shows up as on the buddy's screen. */
-export const myName = (s: State) => s.profile.name.trim() || 'Workout Diary';
+export const myName = (s: State) => s.profile.name.trim() || 'Spotter';
 
 /**
  * Adopt a peer's version of a routine while keeping this phone's own numbers:
@@ -396,9 +520,13 @@ function useWorkoutState() {
     AsyncStorage.getItem(STORAGE_KEY)
       .then(async (raw) => {
         if (raw) return filterPersisted(JSON.parse(raw));
-        // No v2 blob yet — lift a v1 one if it exists, then leave it behind.
+        // No v3 blob yet — walk back through the older keys, lifting whatever
+        // is there through every migration since. Each key is left where it
+        // is; the next save writes v3 alongside it.
+        const v2 = await AsyncStorage.getItem(STORAGE_KEY_V2);
+        if (v2) return migrateV2(filterPersisted(JSON.parse(v2)));
         const v1 = await AsyncStorage.getItem(STORAGE_KEY_V1);
-        return v1 ? migrateV1(JSON.parse(v1)) : null;
+        return v1 ? migrateV2(migrateV1(JSON.parse(v1))) : null;
       })
       .then((data) => {
         if (alive && data) patch(data);
@@ -422,7 +550,13 @@ function useWorkoutState() {
 
   /* — lookups — */
 
-  const allEx = () => [...EX, ...state.custom];
+  /** A seeded exercise as the user has since renamed/refiled it. */
+  const edited = (e: Exercise): Exercise => {
+    const o = state.exEdits[e.id];
+    return o ? { ...e, ...o, names: { ...e.names, ...o.names } } : e;
+  };
+
+  const allEx = () => [...EX.map(edited), ...state.custom];
   const ex = (id: string) => allEx().find((e) => e.id === id);
   const routine = (id: string | null | undefined) => state.routines.find((r) => r.id === id);
 
@@ -459,7 +593,8 @@ function useWorkoutState() {
   const setup = (id: string): SetupPair[] =>
     state.setups[id] ?? (INFO[id]?.setup ?? []).map((p) => [...p] as SetupPair);
 
-  const cues = (id: string) => INFO[id]?.cues ?? [];
+  /** The cues for an exercise — the user's rewrite, else the seeded ones. */
+  const cues = (id: string) => state.cueEdits[id] ?? INFO[id]?.cues ?? [];
 
   const mutSetup = (id: string, fn: (rows: SetupPair[]) => void) => {
     patch((s) => {
@@ -468,6 +603,44 @@ function useWorkoutState() {
       return { setups: { ...s.setups, [id]: cur } };
     });
   };
+
+  const mutCues = (id: string, fn: (rows: string[]) => void) => {
+    patch((s) => {
+      const cur = [...(s.cueEdits[id] ?? INFO[id]?.cues ?? [])];
+      fn(cur);
+      return { cueEdits: { ...s.cueEdits, [id]: cur } };
+    });
+  };
+
+  /**
+   * Rename an exercise or refile it under another group/equipment. A custom
+   * exercise is edited where it lives, so the change travels to the buddy
+   * with it; a seeded one gets an entry in `exEdits` instead — `EX` is a
+   * constant, and an override is also what makes "reset" meaningful.
+   */
+  const editEx = (id: string, d: { names?: LangMap; group?: string; kind?: string }) => {
+    const merged = <T extends { names?: LangMap }>(cur: T): T => ({
+      ...cur,
+      ...d,
+      ...(d.names ? { names: { ...cur.names, ...d.names } } : {}),
+    });
+    patch((s) =>
+      s.custom.some((e) => e.id === id)
+        ? { custom: s.custom.map((e) => (e.id === id ? merged(e) : e)) }
+        : { exEdits: { ...s.exEdits, [id]: merged(s.exEdits[id] ?? {}) } }
+    );
+  };
+
+  /** Whether a seeded exercise carries user edits — i.e. whether Reset does anything. */
+  const exEdited = (id: string) => state.exEdits[id] !== undefined || state.cueEdits[id] !== undefined;
+
+  /** Put a seeded exercise back the way it shipped, cues included. */
+  const resetEx = (id: string) =>
+    patch((s) => {
+      const { [id]: _dropEdits, ...exEdits } = s.exEdits;
+      const { [id]: _dropCues, ...cueEdits } = s.cueEdits;
+      return { exEdits, cueEdits };
+    });
 
   /* — mutation — */
 
@@ -621,6 +794,8 @@ function useWorkoutState() {
         buddyJoin: withBuddy ? ('joined' as const) : null,
         buddyProgress: null,
         turnModes: {},
+        buddyLeft: null,
+        rest: null,
         sessionMin: false,
       };
     });
@@ -660,12 +835,124 @@ function useWorkoutState() {
         buddyJoin: null,
         buddyProgress: null,
         turnModes: {},
+        // The clock this rest was stamped against is being set back to zero.
+        rest: null,
         sessionMin: false,
       };
     });
   };
 
   const declineInvite = () => patch({ buddyInvite: null });
+
+  /* — turn taking (shared, advisory) — */
+
+  /** The agreed mode for an exercise; alternate until someone says otherwise. */
+  const turnMode = (exId: string): TurnMode => state.turnModes[exId]?.mode ?? 'alternate';
+
+  /** Flip it here and bump the rev — <BuddyRadio> carries it over on the next broadcast. */
+  const toggleTurnMode = (exId: string) =>
+    patch((s) => {
+      const cur = s.turnModes[exId];
+      return {
+        turnModes: {
+          ...s.turnModes,
+          [exId]: {
+            mode: cur?.mode === 'parallel' ? 'alternate' : 'parallel',
+            rev: (cur?.rev ?? 0) + 1,
+          },
+        },
+      };
+    });
+
+  /** Adopt the buddy's registers where theirs win. Returns nothing to patch if none do. */
+  const mergeTurnModes = (theirs: Record<string, TurnChoice> | undefined) =>
+    patch((s) => {
+      const merged = mergeTurns(s.turnModes, theirs, s.sessionRole);
+      return merged ? { turnModes: merged } : null;
+    });
+
+  /* — backup — */
+
+  /** The durable slice, ready to be wrapped in an envelope and written out. */
+  const exportState = (): Record<string, unknown> =>
+    pickPersisted(state) as unknown as Record<string, unknown>;
+
+  /**
+   * Take a backup's word for everything durable.
+   *
+   * A restore *replaces* rather than merges: the seeded defaults go down
+   * first, so a key the backup doesn't carry resets instead of surviving from
+   * whatever this phone happened to have. Older backups come through the same
+   * migrations a stored blob would. Transient state — the live session, open
+   * overlays, anything buddy-shaped — is deliberately untouched.
+   *
+   * Returns how many sessions came back, which is the only number worth
+   * showing: it is what the user is really checking for.
+   */
+  const importState = (env: { v: number; data: Record<string, unknown> }): number => {
+    let data = filterPersisted(env.data);
+    if (env.v < 3) data = migrateV2(env.v < 2 ? migrateV1(env.data) : data);
+    const restored = { ...pickPersisted(initialState), ...data };
+    patch(restored);
+    // The envelope proves the file is ours, not that every key inside it
+    // survived whatever edited it since.
+    return Array.isArray(restored.history) ? restored.history.length : 0;
+  };
+
+  /** Remember a buddy we just paired with, so the radio can find them again. */
+  const rememberBuddy = (name: string) =>
+    patch((s) =>
+      s.knownBuddies.includes(name) ? null : { knownBuddies: [...s.knownBuddies, name] }
+    );
+
+  /**
+   * Tear the pairing down — both when this phone taps Disconnect and when the
+   * buddy's `bye` arrives. Everything buddy-shaped goes, including the shared
+   * half of a live session; the session itself is untouched, so whoever was
+   * mid-workout keeps their numbers and finishes alone.
+   *
+   * They keep their place on `knownBuddies` — you are still paired, and the
+   * list is how you spot each other later. Clearing `buddy` is all a
+   * disconnect needs to stick: nothing on the roster is connected to without
+   * being asked, so there is nothing to reconnect behind your back.
+   */
+  const endPairing = (left: string | null = null) =>
+    patch(() => ({
+      buddy: null,
+      buddyEndpoint: null,
+      buddySnapshot: null,
+      buddySync: false,
+      buddySyncPending: false,
+      pendingAuth: null,
+      nearbyPeers: [],
+      buddyInvite: null,
+      joinAsk: null,
+      joinSent: null,
+      buddyLeft: left,
+      sessionShared: false,
+      sessionRole: null,
+      buddyJoin: null,
+      buddyProgress: null,
+      turnModes: {},
+      coDraft: null,
+    }));
+
+  /**
+   * Unpair for good — the one thing that does take a name off the list. The
+   * connected buddy goes through the full teardown first.
+   */
+  const forgetBuddy = (name: string) => {
+    if (state.buddy === name) endPairing();
+    patch((s) => ({ knownBuddies: s.knownBuddies.filter((n) => n !== name) }));
+  };
+
+  /**
+   * Ask a buddy for a session. The radio never connects to someone off the
+   * roster on its own, so this is also what opens the link — which is the
+   * point: no one lands in a connection they didn't answer for.
+   */
+  const requestSession = (name: string) =>
+    patch({ buddy: name, joinSent: { to: name, state: 'waiting' } });
 
   /* — co-created routines (build one together) — */
 
@@ -677,7 +964,6 @@ function useWorkoutState() {
       return {
         routines: [...s.routines, { id, names: { [s.lang]: L.newRoutine }, items: [] }],
         routineOpen: id,
-        editing: true,
         pickWorkout: false,
         coDraft: {
           rid: id,
@@ -748,7 +1034,7 @@ function useWorkoutState() {
           ),
           buddyPicking: d.picking,
         },
-        ...(open ? { routineOpen: merged.id, editing: true, pickWorkout: false } : {}),
+        ...(open ? { routineOpen: merged.id, pickWorkout: false } : {}),
       };
     });
   };
@@ -790,6 +1076,8 @@ function useWorkoutState() {
         buddyJoin: 'joined' as const,
         buddyProgress: null,
         turnModes: {},
+        // Same reset as `start`: a rest is stamped against `elapsed`.
+        rest: null,
         sessionMin: false,
       };
     });
@@ -836,7 +1124,12 @@ function useWorkoutState() {
 
       return {
         session: null,
-        history: [...s.history, { date: today, rid: s.session.rid }],
+        // Finish is the only way out of a session now that Discard is gone, so
+        // it has to carry what Discard did: a session where nothing was ticked
+        // never happened, and must not land on the calendar as a training day.
+        history: tot.done
+          ? [...s.history, { date: today, rid: s.session.rid }]
+          : s.history,
         lastLog,
         summary: {
           name: s.session.name,
@@ -904,6 +1197,9 @@ function useWorkoutState() {
   return {
     s: state,
     L,
+    /** False until the stored blob is in — the splash waits on it, so a
+        light-mode phone doesn't flash the dark palette on every launch. */
+    hydrated,
     patch,
     allEx,
     ex,
@@ -918,14 +1214,27 @@ function useWorkoutState() {
     setup,
     cues,
     mutSetup,
+    mutCues,
+    editEx,
+    exEdited,
+    resetEx,
     mutSession,
     mutRoutine,
     moveRoutineItem,
     reorder,
     importFromPeer,
+    exportState,
+    importState,
     start,
     acceptInvite,
     declineInvite,
+    turnMode,
+    toggleTurnMode,
+    mergeTurnModes,
+    rememberBuddy,
+    endPairing,
+    forgetBuddy,
+    requestSession,
     startCoDraft,
     draftPayload,
     applyDraft,

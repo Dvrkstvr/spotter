@@ -1,7 +1,7 @@
 /** Today — the planned workout, the week at a glance, and a way to start anything else. */
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 import { CHECK_D, Icon } from '@/components/icon';
 import { Screen } from '@/components/screen';
@@ -9,11 +9,14 @@ import { routineEquals } from '@/data/buddy-sync';
 import { daysSince, todayDow, todayISO } from '@/data/date';
 import { DOW } from '@/data/exercises';
 import { fmtDayShort, fmtLastDone } from '@/data/i18n';
+import { themed, useColors, useThemed } from '@/design/theme';
 import { color, elevation, font, t, tracking } from '@/design/tokens';
 import { Btn, CardKicker, H2, H3, H6, missingName } from '@/design/ui';
 import { fmt, useStore } from '@/store/workout-store';
 
 export default function TodayScreen() {
+  const styles = useThemed(sheet);
+  const c = useColors();
   const { s, L, patch, ex, routine, start, doneOn, rInfo, exInfo } = useStore();
   const router = useRouter();
 
@@ -68,10 +71,10 @@ export default function TodayScreen() {
     const isToday = i === dow;
     return {
       day: d.toUpperCase(),
-      dayColor: isToday ? color.accent : color.neutral500,
+      dayColor: isToday ? c.accent : c.neutral500,
       name: rn ? rn.text : L.rest,
       missing: rn?.missing ?? false,
-      nameColor: r ? (isToday ? color.text : color.neutral300) : color.neutral600,
+      nameColor: r ? (isToday ? c.text : c.neutral300) : c.neutral600,
       meta: r ? `${r.items.length} ${L.exCount}` : '',
     };
   });
@@ -86,7 +89,7 @@ export default function TodayScreen() {
       </View>
 
       <LinearGradient
-        colors={[...t.heroGradient.colors]}
+        colors={[c.accent900, c.surface]}
         locations={[...t.heroGradient.locations]}
         start={t.heroGradient.start}
         end={t.heroGradient.end}
@@ -97,7 +100,7 @@ export default function TodayScreen() {
           <View style={styles.spacer} />
           {doneToday ? (
             <View style={styles.doneBadge}>
-              <Icon d={CHECK_D} size={12} strokeWidth={2.2} color={color.accent400} />
+              <Icon d={CHECK_D} size={12} strokeWidth={2.2} color={c.accent400} />
               <Text style={styles.doneBadgeText}>{L.completedToday}</Text>
             </View>
           ) : (
@@ -108,7 +111,7 @@ export default function TodayScreen() {
         </View>
 
         <View style={styles.heroNameRow}>
-          <H3 size={t.h3} style={[styles.tight, todayRoutine.missing && missingName]}>
+          <H3 size={t.h3} style={[styles.tight, todayRoutine.missing && missingName(c)]}>
             {todayRoutine.name}
           </H3>
           <Text style={styles.heroSummary}>{todayRoutine.summary}</Text>
@@ -117,12 +120,12 @@ export default function TodayScreen() {
         {planSync && (
           <View style={styles.planSyncRow}>
             {planSync.ok && (
-              <Icon d={CHECK_D} size={10} strokeWidth={2.2} color={color.accent400} />
+              <Icon d={CHECK_D} size={10} strokeWidth={2.2} color={c.accent400} />
             )}
             <Text
               style={[
                 styles.planSyncText,
-                { color: planSync.ok ? color.accent400 : color.neutral500 },
+                { color: planSync.ok ? c.accent400 : c.neutral500 },
               ]}
             >
               {planSync.text.replace('{name}', s.buddy ?? '')}
@@ -133,7 +136,7 @@ export default function TodayScreen() {
         <View style={styles.heroLines}>
           {todayRoutine.lines.map((l, i) => (
             <View key={i} style={styles.heroLine}>
-              <Text style={[styles.heroLineName, l.missing && missingName]} numberOfLines={1}>
+              <Text style={[styles.heroLineName, l.missing && missingName(c)]} numberOfLines={1}>
                 {l.text}
               </Text>
               <Text style={styles.heroLineScheme}>{l.scheme}</Text>
@@ -141,14 +144,21 @@ export default function TodayScreen() {
           ))}
         </View>
 
-        <Btn
-          variant={doneToday ? 'secondary' : 'primary'}
-          block
-          label={doneToday ? L.startAgain : `${L.start} ${todayRoutine.name}`}
-          onPress={() => start(todayRid)}
-          style={styles.startBtn}
-          labelStyle={styles.startLabel}
-        />
+        {/* A rest day has nothing to start — "Start Rest day" was a button that
+            promised a workout and delivered an empty one. The freeform row
+            below the week is still there for the day it turns into one. */}
+        {tr ? (
+          <Btn
+            variant={doneToday ? 'secondary' : 'primary'}
+            block
+            label={doneToday ? L.startAgain : `${L.start} ${todayRoutine.name}`}
+            onPress={() => start(todayRid)}
+            style={styles.startBtn}
+            labelStyle={styles.startLabel}
+          />
+        ) : (
+          <Text style={styles.restNote}>{L.restNote}</Text>
+        )}
       </LinearGradient>
 
       <View style={styles.sectionRow}>
@@ -167,7 +177,7 @@ export default function TodayScreen() {
           <View key={i} style={styles.row}>
             <Text style={[styles.rowDay, { color: w.dayColor }]}>{w.day}</Text>
             <Text
-              style={[styles.rowName, { color: w.nameColor }, w.missing && missingName]}
+              style={[styles.rowName, { color: w.nameColor }, w.missing && missingName(c)]}
               numberOfLines={1}
             >
               {w.name}
@@ -193,7 +203,7 @@ export default function TodayScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const sheet = themed(() => ({
   titleRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
   tight: { letterSpacing: tracking(t.h2, -0.02) },
   todayLabel: { fontFamily: font.regular, fontSize: 12, color: color.neutral500 },
@@ -229,6 +239,14 @@ const styles = StyleSheet.create({
   },
   startBtn: { marginTop: 14, height: 44 },
   startLabel: { fontSize: 15 },
+  /** Stands where the Start button would be, so the card keeps its shape. */
+  restNote: {
+    fontFamily: font.regular,
+    fontSize: 13.5,
+    color: color.accent400,
+    marginTop: 14,
+    paddingVertical: 6,
+  },
 
   sectionRow: {
     flexDirection: 'row',
@@ -269,4 +287,4 @@ const styles = StyleSheet.create({
   chooseLabel: { flex: 1, fontFamily: font.regular, fontSize: 14, color: color.text },
   chooseCount: { fontFamily: font.regular, fontSize: 11.5, color: color.neutral600 },
   chevron: { fontFamily: font.regular, fontSize: 15, color: color.accent },
-});
+}));

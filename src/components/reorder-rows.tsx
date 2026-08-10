@@ -10,10 +10,11 @@
  * the "leave empty for a divider" placeholder.
  */
 import { useState } from 'react';
-import { Animated, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, PanResponder, Pressable, Text, View } from 'react-native';
 
 import { GripIcon } from '@/components/icon';
 import { Input } from '@/design/ui';
+import { themed, useColors, useThemed } from '@/design/theme';
 import { color, font } from '@/design/tokens';
 
 export type ReorderRow = {
@@ -39,6 +40,8 @@ export function ReorderRows({
   onDelete: (index: number) => void;
   onReorder: (from: number, to: number) => void;
 }) {
+  const styles = useThemed(sheet);
+  const c = useColors();
   const [drag, setDrag] = useState<{ from: number; to: number } | null>(null);
   const [rowHeight, setRowHeight] = useState(36);
   const [dy] = useState(() => new Animated.Value(0));
@@ -87,7 +90,7 @@ export function ReorderRows({
             onLayout={i === 0 ? (e) => setRowHeight(e.nativeEvent.layout.height) : undefined}
             style={[
               styles.row,
-              { borderTopColor: isTarget ? color.accent : 'transparent' },
+              { borderTopColor: isTarget ? c.accent : 'transparent' },
               isDragging && {
                 transform: [{ translateY: dy }],
                 zIndex: 2,
@@ -100,7 +103,7 @@ export function ReorderRows({
               accessibilityLabel="Drag to reorder"
               style={styles.grip}
             >
-              <GripIcon color={isDragging ? color.accent : color.neutral700} />
+              <GripIcon color={isDragging ? c.accent : c.neutral700} />
             </View>
             <Input
               style={styles.input}
@@ -124,7 +127,7 @@ export function ReorderRows({
   );
 }
 
-const styles = StyleSheet.create({
+const sheet = themed(() => ({
   row: { flexDirection: 'row', alignItems: 'center', gap: 6, borderTopWidth: 2 },
   grip: { width: 20, height: 26, alignItems: 'center', justifyContent: 'center' },
   input: { flex: 1, paddingVertical: 5, paddingHorizontal: 9 },
@@ -137,4 +140,4 @@ const styles = StyleSheet.create({
   },
   del: { width: 22, height: 26, alignItems: 'center', justifyContent: 'center' },
   delGlyph: { fontFamily: font.regular, fontSize: 15, color: color.neutral600 },
-});
+}));

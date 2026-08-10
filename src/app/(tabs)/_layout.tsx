@@ -1,6 +1,7 @@
 import { Tabs } from 'expo-router';
 
 import { TabBar } from '@/components/tab-bar';
+import { themed, useThemed } from '@/design/theme';
 import { color } from '@/design/tokens';
 
 /**
@@ -9,10 +10,11 @@ import { color } from '@/design/tokens';
  * how the design behaves.
  */
 export default function TabsLayout() {
+  const styles = useThemed(sheet);
   return (
     <Tabs
       tabBar={(props) => <TabBar {...props} />}
-      screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: color.bg } }}
+      screenOptions={{ headerShown: false, sceneStyle: styles.scene }}
     >
       <Tabs.Screen name="index" />
       <Tabs.Screen name="plan" />
@@ -22,3 +24,7 @@ export default function TabsLayout() {
     </Tabs>
   );
 }
+
+const sheet = themed(() => ({
+  scene: { backgroundColor: color.bg },
+}));

@@ -1,8 +1,9 @@
 /**
  * Routine editor — rename it, tune sets/reps/weight per exercise, start it.
  *
- * The Edit toggle is faithful to the design, where it only swaps its own label:
- * the rows are always editable and the delete control is always visible.
+ * Deviation: the design has an Edit toggle here, but it only ever swapped its
+ * own label — the rows are always editable and the delete control is always
+ * visible. A button that does nothing is worse than no button, so it's gone.
  *
  * When the open routine is the live co-draft (built together with the
  * connected buddy — see `coDraft` in the store), the editor grows a second
@@ -18,7 +19,6 @@ import {
   Pressable,
   ScrollView,
   StyleProp,
-  StyleSheet,
   Text,
   TextInput,
   TextStyle,
@@ -31,11 +31,14 @@ import { FullScreen } from '@/components/sheet';
 import { useBackClose } from '@/hooks/use-back-close';
 import { radio } from '@/data/buddy-radio';
 import { DOW, Routine } from '@/data/exercises';
+import { themed, useColors, useThemed } from '@/design/theme';
 import { color, font, t, tracking, wash } from '@/design/tokens';
 import { Btn, Input, missingName } from '@/design/ui';
 import { CoDraft, fmt, myName, num, useStore } from '@/store/workout-store';
 
 export function RoutineOverlay() {
+  const styles = useThemed(sheet);
+  const c = useColors();
   const { s, L, patch, ex, routine, gInfo, kInfo, exInfo, rInfo, mutRoutine, start, draftPayload } =
     useStore();
   const insets = useSafeAreaInsets();
@@ -61,7 +64,7 @@ export function RoutineOverlay() {
       radio
         .sendPayload(s.buddyEndpoint, JSON.stringify({ v: 1, t: 'draftEnd', reason, draft: payload }))
         .catch(() => {});
-    if (reason === 'save') patch({ coDraft: null, routineOpen: null, editing: false });
+    if (reason === 'save') patch({ coDraft: null, routineOpen: null });
     else {
       patch({ coDraft: null });
       start(r.id, 'host');
@@ -73,12 +76,6 @@ export function RoutineOverlay() {
       <View style={[styles.header, { paddingTop: 12 + insets.top }]}>
         <Btn variant="ghost" label={L.backRoutines} labelStyle={styles.headLabel} onPress={close} />
         <View style={styles.spacer} />
-        <Btn
-          variant="ghost"
-          label={s.editing ? L.editDone : L.edit}
-          labelStyle={styles.headLabel}
-          onPress={() => patch((st) => ({ editing: !st.editing }))}
-        />
       </View>
 
       <ScrollView
@@ -93,14 +90,14 @@ export function RoutineOverlay() {
         <TextInput
           value={r.names[s.lang] ?? ''}
           placeholder={rInfo(r).missing ? rInfo(r).text : ''}
-          placeholderTextColor={color.neutral600}
+          placeholderTextColor={c.neutral600}
           onChangeText={(v) =>
             mutRoutine(r.id, (copy) => {
               copy.names = { ...copy.names, [s.lang]: v };
             })
           }
-          cursorColor={color.accent}
-          selectionColor={color.accent}
+          cursorColor={c.accent}
+          selectionColor={c.accent}
           style={styles.nameInput}
         />
         {draft ? (
@@ -137,7 +134,7 @@ export function RoutineOverlay() {
               return (
                 <View key={`${item.ex}-${n}`} style={styles.row}>
                   <View style={styles.rowText}>
-                    <Text style={[styles.rowName, name?.missing && missingName]}>{name?.text}</Text>
+                    <Text style={[styles.rowName, name?.missing && missingName(c)]}>{name?.text}</Text>
                     <Text style={styles.rowKind}>
                       {e ? `${kInfo(e.kind).text} · ${gInfo(e.group).text}` : ''}
                     </Text>
@@ -236,6 +233,8 @@ export function RoutineOverlay() {
  * while focused so an incoming broadcast never clobbers mid-typing.
  */
 function DraftRows({ r, draft, buddy }: { r: Routine; draft: CoDraft; buddy: string }) {
+  const styles = useThemed(sheet);
+  const c = useColors();
   const { s, ex, exInfo, gInfo, kInfo, mutRoutine, moveRoutineItem } = useStore();
 
   const [drag, setDrag] = useState<{ from: number; to: number } | null>(null);
@@ -289,7 +288,7 @@ function DraftRows({ r, draft, buddy }: { r: Routine; draft: CoDraft; buddy: str
             style={[
               styles.row,
               styles.draftRow,
-              { borderTopColor: isTarget ? color.accent : 'transparent' },
+              { borderTopColor: isTarget ? c.accent : 'transparent' },
               isDragging && { transform: [{ translateY: dy }], zIndex: 2, elevation: 2 },
             ]}
           >
@@ -298,7 +297,7 @@ function DraftRows({ r, draft, buddy }: { r: Routine; draft: CoDraft; buddy: str
               accessibilityLabel="Drag to reorder"
               style={styles.grip}
             >
-              <GripIcon color={isDragging ? color.accent : color.neutral700} />
+              <GripIcon color={isDragging ? c.accent : c.neutral700} />
             </View>
             <View style={[styles.chip, theirs ? styles.chipBuddy : styles.chipMe]}>
               <Text style={[styles.chipText, theirs ? styles.chipTextBuddy : styles.chipTextMe]}>
@@ -306,7 +305,7 @@ function DraftRows({ r, draft, buddy }: { r: Routine; draft: CoDraft; buddy: str
               </Text>
             </View>
             <View style={styles.rowText}>
-              <Text style={[styles.rowName, name?.missing && missingName]} numberOfLines={1}>
+              <Text style={[styles.rowName, name?.missing && missingName(c)]} numberOfLines={1}>
                 {name?.text}
               </Text>
               <Text style={styles.rowKind} numberOfLines={1}>
@@ -392,7 +391,7 @@ function NumCell({
   );
 }
 
-const styles = StyleSheet.create({
+const sheet = themed(() => ({
   header: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingBottom: 6 },
   headLabel: { fontSize: 13 },
   spacer: { flex: 1 },
@@ -491,4 +490,4 @@ const styles = StyleSheet.create({
   startLabel: { fontSize: 15 },
   endRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
   endBtn: { flex: 1, height: 44 },
-});
+}));
