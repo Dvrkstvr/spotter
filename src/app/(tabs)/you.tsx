@@ -1,18 +1,52 @@
 /** Profile — who you are, your buddy, and a count of what you've built. */
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
 import { GEAR_D, Icon } from '@/components/icon';
 import { ImageSlot } from '@/components/image-slot';
 import { Screen } from '@/components/screen';
-import { hasRadio, radio } from '@/data/buddy-radio';
+import { hasRadio, radio, sayGoodbye } from '@/data/buddy-radio';
 import { useBuddyLive } from '@/hooks/use-buddy-live';
+import { themed, useColors, useThemed } from '@/design/theme';
 import { color, font, radius, t, tracking } from '@/design/tokens';
 import { Btn, H2, H6, missingName } from '@/design/ui';
-import { useStore } from '@/store/workout-store';
+import { myName, useStore } from '@/store/workout-store';
 
 export default function YouScreen() {
-  const { s, L, patch, allEx, loggedThisMonth, ex, exInfo } = useStore();
+  const styles = useThemed(sheet);
+  const c = useColors();
+  const {
+    s,
+    L,
+    patch,
+    allEx,
+    loggedThisMonth,
+    ex,
+    exInfo,
+    turnMode,
+    toggleTurnMode,
+    endPairing,
+    forgetBuddy,
+    requestSession,
+  } = useStore();
   const buddyLive = useBuddyLive();
+
+  // Arriving from a buddy bar (tab bar or session overlay): put the buddy
+  // section under the thumb rather than making the user hunt for it. Waits
+  // for the layout — on a first visit the section's y isn't known yet.
+  const scrollRef = useRef<ScrollView>(null);
+  const [buddyY, setBuddyY] = useState(0);
+  useEffect(() => {
+    if (!s.buddyFocus || buddyY <= 0) return;
+    scrollRef.current?.scrollTo({ y: Math.max(0, buddyY - 12), animated: true });
+    patch({ buddyFocus: false });
+  }, [s.buddyFocus, buddyY, patch]);
+
+  const sayBye = () => sayGoodbye(s.buddyEndpoint);
+
+  // The radio stops looking once a link is up, so while one is, "not nearby"
+  // is a claim this phone can't make about anybody else. Say nothing instead.
+  const looking = radio !== null && s.buddyEndpoint === null;
 
   const sub =
     [
@@ -36,7 +70,7 @@ export default function YouScreen() {
   ];
 
   return (
-    <Screen>
+    <Screen scrollRef={scrollRef}>
       <View style={styles.head}>
         <H2 size={t.h2} style={styles.tight}>
           {L.you}
@@ -47,7 +81,7 @@ export default function YouScreen() {
           onPress={() => patch({ settingsOpen: true })}
           style={styles.gear}
         >
-          <Icon d={GEAR_D} color={color.neutral400} size={21} />
+          <Icon d={GEAR_D} color={c.neutral400} size={21} />
         </Pressable>
       </View>
 
@@ -78,50 +112,134 @@ export default function YouScreen() {
         ))}
       </View>
 
-      <H6 style={styles.sectionHead}>{L.buddy}</H6>
-      {s.buddy ? (
-        <View style={styles.buddyCard}>
-          <View style={styles.buddyAvatar}>
-            <Text style={styles.buddyInitial}>{s.buddy[0]}</Text>
+      {/* Training alone takes the whole buddy half of this screen with it —
+          the roster below included. Nothing is forgotten, it is only put
+          away: the names come back the moment the switch does. */}
+      {!s.privateMode && (
+        <>
+        <H6
+          style={styles.sectionHead}
+          onLayout={(e) => setBuddyY(e.nativeEvent.layout.y)}
+        >
+          {L.buddy}
+        </H6>
+        {s.buddy ? (
+          <View style={styles.buddyCard}>
+            <View style={styles.buddyAvatar}>
+              <Text style={styles.buddyInitial}>{s.buddy[0]}</Text>
+            </View>
+            <View style={styles.buddyText}>
+              <Text style={styles.buddyName}>{s.buddy}</Text>
+              {/* Paired is standing; this line tracks the live link. */}
+              <Text style={styles.buddyStatus}>
+                {!hasRadio || s.buddyEndpoint ? L.connected : L.linkLost}
+              </Text>
+            </View>
+            <Btn
+              variant="ghost"
+              label={L.sync}
+              labelStyle={styles.syncLabel}
+              // Still connected → straight to the sync screen; connection gone
+              // → find the buddy nearby again first. Mock connects instantly.
+              onPress={() =>
+                patch(hasRadio && !s.buddyEndpoint ? { scanning: true } : { buddySync: true })
+              }
+            />
+            <Btn
+              variant="ghost"
+              label={L.disconnect}
+              labelStyle={styles.disconnect}
+              onPress={() => {
+                sayBye();
+                endPairing();
+              }}
+            />
           </View>
-          <View style={styles.buddyText}>
-            <Text style={styles.buddyName}>{s.buddy}</Text>
-            {/* Paired is standing; this line tracks the live link. */}
-            <Text style={styles.buddyStatus}>
-              {!hasRadio || s.buddyEndpoint ? L.connected : L.linkLost}
-            </Text>
+        ) : (
+          <View>
+            <Text style={styles.buddySub}>{L.buddySub}</Text>
+            <Btn
+              variant="secondary"
+              block
+              label={L.invite}
+              style={styles.inviteBtn}
+              onPress={() => patch({ scanning: true })}
+            />
           </View>
-          <Btn
-            variant="ghost"
-            label={L.sync}
-            labelStyle={styles.syncLabel}
-            // Still connected → straight to the sync screen; connection gone
-            // → find the buddy nearby again first. Mock connects instantly.
-            onPress={() =>
-              patch(hasRadio && !s.buddyEndpoint ? { scanning: true } : { buddySync: true })
-            }
-          />
-          <Btn
-            variant="ghost"
-            label={L.disconnect}
-            labelStyle={styles.disconnect}
-            onPress={() => {
-              radio?.stopAll().catch(() => {});
-              patch({ buddy: null, buddyEndpoint: null, buddySnapshot: null, coDraft: null });
-            }}
-          />
-        </View>
-      ) : (
-        <View>
-          <Text style={styles.buddySub}>{L.buddySub}</Text>
-          <Btn
-            variant="secondary"
-            block
-            label={L.invite}
-            style={styles.inviteBtn}
-            onPress={() => patch({ scanning: true })}
-          />
-        </View>
+        )}
+
+        {/* Everyone this phone is paired with. The radio keeps looking for them
+            while the app is open, so a row goes live on its own when they walk
+            in — and asking is the way into a workout already running. */}
+        {s.knownBuddies.length > 0 && (
+          <>
+            <H6 style={styles.sectionHead}>{L.pairedBuddies}</H6>
+            <View>
+              {s.knownBuddies.map((name) => {
+                const linked = s.buddy === name && (!hasRadio || s.buddyEndpoint !== null);
+                const peer = s.nearbyPeers.find((p) => p.name === name);
+                // Asking is what opens a link, so there's nothing left to ask
+                // once one is up: the request only shows to a buddy in range
+                // while this phone is connected to nobody. (That's every row —
+                // a link stops discovery, so nobody else is in range either.)
+                const canAsk = radio !== null && s.buddyEndpoint === null && !!peer;
+                return (
+                  <View key={name} style={styles.knownRow}>
+                    <Text style={styles.knownName} numberOfLines={1}>
+                      {name}
+                    </Text>
+                    <Text style={[styles.knownState, linked && { color: c.accent400 }]}>
+                      {linked
+                        ? L.connected
+                        : peer
+                          ? L.buddyNearby
+                          : looking
+                            ? L.buddyAway
+                            : ''}
+                    </Text>
+                    {canAsk && (
+                      <Btn
+                        variant="ghost"
+                        label={L.requestSession}
+                        labelStyle={styles.knownAction}
+                        // The connection is opened to ask over, never for its own
+                        // sake. <BuddyRadio> sends the ask once the link is up.
+                        onPress={() => {
+                          requestSession(name);
+                          if (peer)
+                            radio?.requestConnection(myName(s), peer.endpointId).catch(() => {});
+                        }}
+                      />
+                    )}
+                    <Pressable
+                      accessibilityLabel={L.forgetBuddy}
+                      // Forgetting whoever is on the line is a disconnect, and a
+                      // disconnect they aren't told about doesn't hold.
+                      onPress={() => {
+                        if (s.buddy === name) sayBye();
+                        forgetBuddy(name);
+                      }}
+                      style={styles.forget}
+                    >
+                      <Text style={styles.forgetGlyph}>×</Text>
+                    </Pressable>
+                  </View>
+                );
+              })}
+            </View>
+            {s.joinSent && (
+              <Pressable onPress={() => patch({ joinSent: null })}>
+                <Text style={styles.askNote}>
+                  {(s.joinSent.state === 'waiting' ? L.askSent : L.askDeclined).replace(
+                    '{name}',
+                    s.joinSent.to
+                  )}
+                </Text>
+              </Pressable>
+            )}
+          </>
+        )}
+        </>
       )}
 
       {/* Full co-session detail — the session overlay's buddy bar stays
@@ -137,23 +255,11 @@ export default function YouScreen() {
               {buddyLive.turn && <Text style={styles.liveTurn}>{buddyLive.turn}</Text>}
               {buddyLive.modeEx && (
                 <Pressable
-                  onPress={() =>
-                    patch((st) => ({
-                      turnModes: {
-                        ...st.turnModes,
-                        [buddyLive.modeEx!]:
-                          (st.turnModes[buddyLive.modeEx!] ?? 'alternate') === 'alternate'
-                            ? 'parallel'
-                            : 'alternate',
-                      },
-                    }))
-                  }
+                  onPress={() => toggleTurnMode(buddyLive.modeEx!)}
                   style={styles.modeChip}
                 >
                   <Text style={styles.modeChipLabel}>
-                    {(s.turnModes[buddyLive.modeEx] ?? 'alternate') === 'alternate'
-                      ? L.modeAlternate
-                      : L.modeParallel}
+                    {turnMode(buddyLive.modeEx) === 'alternate' ? L.modeAlternate : L.modeParallel}
                   </Text>
                 </Pressable>
               )}
@@ -187,14 +293,14 @@ export default function YouScreen() {
                   <Text
                     style={[
                       styles.liveRowName,
-                      myActive && { color: color.accent200 },
-                      name.missing && missingName,
+                      myActive && { color: c.accent200 },
+                      name.missing && missingName(c),
                     ]}
                     numberOfLines={1}
                   >
                     {name.text}
                   </Text>
-                  <Text style={[styles.liveRowN, myActive && { color: color.accent400 }]}>
+                  <Text style={[styles.liveRowN, myActive && { color: c.accent400 }]}>
                     {mine}/{entry.sets.length}
                   </Text>
                   <View style={styles.liveTheirCell}>
@@ -202,7 +308,7 @@ export default function YouScreen() {
                       style={[
                         styles.liveRowN,
                         styles.liveTheirN,
-                        theirActive && { color: color.accent400 },
+                        theirActive && { color: c.accent400 },
                       ]}
                     >
                       {theirs ? `${theirDone}/${theirs.done.length}` : '—'}
@@ -239,13 +345,15 @@ function TextField({
   placeholder: string;
   onChange: (v: string) => void;
 }) {
+  const styles = useThemed(sheet);
+  const c = useColors();
   return (
     <TextInput
       value={value}
       placeholder={placeholder}
-      placeholderTextColor={color.neutral600}
-      cursorColor={color.accent}
-      selectionColor={color.accent}
+      placeholderTextColor={c.neutral600}
+      cursorColor={c.accent}
+      selectionColor={c.accent}
       onChangeText={onChange}
       style={styles.nameInput}
     />
@@ -261,13 +369,15 @@ function MeasureInput({
   keyboard: 'number-pad' | 'decimal-pad';
   onChange: (v: string) => void;
 }) {
+  const styles = useThemed(sheet);
+  const c = useColors();
   return (
     <TextInput
       value={value}
       placeholder="—"
-      placeholderTextColor={color.neutral600}
-      cursorColor={color.accent}
-      selectionColor={color.accent}
+      placeholderTextColor={c.neutral600}
+      cursorColor={c.accent}
+      selectionColor={c.accent}
       keyboardType={keyboard}
       onChangeText={onChange}
       style={styles.measureInput}
@@ -275,7 +385,7 @@ function MeasureInput({
   );
 }
 
-const styles = StyleSheet.create({
+const sheet = themed(() => ({
   head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   tight: { letterSpacing: tracking(t.h2, -0.02) },
   gear: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center' },
@@ -402,6 +512,22 @@ const styles = StyleSheet.create({
   buddySub: { fontFamily: font.regular, fontSize: 12.5, color: color.neutral500, marginBottom: 9 },
   inviteBtn: { height: 40, marginTop: 0 },
 
+  knownRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: t.rowPadV,
+    paddingHorizontal: t.rowPadH,
+    borderBottomWidth: 1,
+    borderBottomColor: t.rule,
+  },
+  knownName: { flex: 1, fontFamily: font.regular, fontSize: 14, color: color.text },
+  knownState: { fontFamily: font.regular, fontSize: 11, color: color.neutral600 },
+  knownAction: { fontSize: 12 },
+  forget: { width: 22, height: 26, alignItems: 'center', justifyContent: 'center' },
+  forgetGlyph: { fontFamily: font.regular, fontSize: 15, color: color.neutral600 },
+  askNote: { fontFamily: font.regular, fontSize: 11.5, color: color.neutral500, marginTop: 9 },
+
   stats: { flexDirection: 'row', gap: 8, paddingBottom: 14 },
   stat: { flex: 1, paddingVertical: 11, paddingHorizontal: 12, borderRadius: radius.md, backgroundColor: color.surface },
   statKey: {
@@ -418,4 +544,4 @@ const styles = StyleSheet.create({
     marginTop: 3,
     fontVariant: ['tabular-nums'],
   },
-});
+}));

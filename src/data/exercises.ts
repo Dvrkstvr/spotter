@@ -23,15 +23,17 @@ export const EX: Exercise[] = [
   { id: 'pec', name: 'Pec Deck', group: 'Chest', kind: 'Machine', last: 45, lastSets: ['45 × 12', '45 × 12', '45 × 10'] },
   { id: 'fly', name: 'Cable Fly', group: 'Chest', kind: 'Cable', last: 15, lastSets: ['15 × 12', '15 × 12', '15 × 11'] },
   { id: 'pushup', name: 'Push-up', group: 'Chest', kind: 'Bodyweight', last: 0, lastSets: ['BW × 20', 'BW × 18', 'BW × 15'] },
-  { id: 'lat', name: 'Lat Pulldown', group: 'Back', kind: 'Cable', last: 52.5, lastSets: ['52.5 × 10', '52.5 × 10', '50 × 10'] },
+  { id: 'lat', name: 'Lat Pulldown', group: 'Lats', kind: 'Cable', last: 52.5, lastSets: ['52.5 × 10', '52.5 × 10', '50 × 10'] },
   { id: 'row', name: 'Seated Row', group: 'Back', kind: 'Cable', last: 47.5, lastSets: ['47.5 × 10', '47.5 × 10', '45 × 11'] },
   { id: 'bbrow', name: 'Barbell Row', group: 'Back', kind: 'Barbell', last: 60, lastSets: ['60 × 8', '60 × 8', '60 × 8', '55 × 9'] },
   { id: 'pullup', name: 'Pull-up', group: 'Back', kind: 'Bodyweight', last: 0, lastSets: ['BW × 8', 'BW × 7', 'BW × 6', 'BW × 5'] },
-  { id: 'sapd', name: 'Straight-arm Pulldown', group: 'Back', kind: 'Cable', last: 25, lastSets: ['25 × 12', '25 × 12', '22.5 × 12'] },
-  { id: 'rear', name: 'Reverse Pec Deck', group: 'Back', kind: 'Machine', last: 35, lastSets: ['35 × 12', '35 × 12', '32.5 × 12'] },
-  { id: 'lateral', name: 'Lateral Raise', group: 'Other', kind: 'Dumbbell', last: 10, lastSets: ['10 × 15', '10 × 13', '10 × 12'] },
-  { id: 'curl', name: 'Bicep Curl', group: 'Other', kind: 'Dumbbell', last: 14, lastSets: ['14 × 12', '14 × 11', '12 × 12'] },
-  { id: 'tri', name: 'Triceps Pushdown', group: 'Other', kind: 'Cable', last: 27.5, lastSets: ['27.5 × 12', '27.5 × 12', '25 × 12'] },
+  { id: 'sapd', name: 'Straight-arm Pulldown', group: 'Lats', kind: 'Cable', last: 25, lastSets: ['25 × 12', '25 × 12', '22.5 × 12'] },
+  // Filed under the muscle it trains, not the machine it shares: the reverse
+  // pec deck is a rear-delt movement that happens to sit on a chest frame.
+  { id: 'rear', name: 'Reverse Pec Deck', group: 'Shoulders', kind: 'Machine', last: 35, lastSets: ['35 × 12', '35 × 12', '32.5 × 12'] },
+  { id: 'lateral', name: 'Lateral Raise', group: 'Shoulders', kind: 'Dumbbell', last: 10, lastSets: ['10 × 15', '10 × 13', '10 × 12'] },
+  { id: 'curl', name: 'Bicep Curl', group: 'Biceps', kind: 'Dumbbell', last: 14, lastSets: ['14 × 12', '14 × 11', '12 × 12'] },
+  { id: 'tri', name: 'Triceps Pushdown', group: 'Triceps', kind: 'Cable', last: 27.5, lastSets: ['27.5 × 12', '27.5 × 12', '25 × 12'] },
 ];
 
 /** A machine setting: [what to set, what to set it to]. */
@@ -94,12 +96,44 @@ export const DEFAULT_ROUTINES: Routine[] = [
   },
 ];
 
-/** Both languages seeded, so switching language translates the defaults. */
+/**
+ * Both languages seeded, so switching language translates the defaults.
+ *
+ * Ordered head to toe, the way a body is read rather than the way a gym is
+ * laid out: push, pull, the arms that serve both, the middle, then legs, with
+ * the two that aren't muscles at all — and the catch-all — last. `Other` stays
+ * on the list because anything filed under a key that isn't here renders as
+ * the raw key, so removing it would strand exercises rather than tidy them.
+ */
 export const DEFAULT_GROUPS: { key: string; labels: LangMap }[] = [
   { key: 'Chest', labels: { en: 'Chest', de: 'Brust' } },
   { key: 'Back', labels: { en: 'Back', de: 'Rücken' } },
+  { key: 'Lats', labels: { en: 'Lats', de: 'Latissimus' } },
+  { key: 'Traps', labels: { en: 'Traps', de: 'Trapez' } },
+  { key: 'LowerBack', labels: { en: 'Lower back', de: 'Unterer Rücken' } },
+  { key: 'Shoulders', labels: { en: 'Shoulders', de: 'Schultern' } },
+  { key: 'Neck', labels: { en: 'Neck', de: 'Nacken' } },
+  { key: 'Biceps', labels: { en: 'Biceps', de: 'Bizeps' } },
+  { key: 'Triceps', labels: { en: 'Triceps', de: 'Trizeps' } },
+  { key: 'Forearms', labels: { en: 'Forearms', de: 'Unterarme' } },
+  { key: 'Core', labels: { en: 'Core', de: 'Rumpf' } },
+  { key: 'Obliques', labels: { en: 'Obliques', de: 'Schräge Bauchmuskeln' } },
+  { key: 'Quads', labels: { en: 'Quads', de: 'Quadrizeps' } },
+  { key: 'Hamstrings', labels: { en: 'Hamstrings', de: 'Beinbeuger' } },
+  { key: 'Glutes', labels: { en: 'Glutes', de: 'Gesäß' } },
+  { key: 'Adductors', labels: { en: 'Adductors', de: 'Adduktoren' } },
+  { key: 'Calves', labels: { en: 'Calves', de: 'Waden' } },
+  { key: 'FullBody', labels: { en: 'Full body', de: 'Ganzkörper' } },
+  { key: 'Cardio', labels: { en: 'Cardio', de: 'Cardio' } },
   { key: 'Other', labels: { en: 'Other', de: 'Sonstiges' } },
 ];
+
+/**
+ * What `DEFAULT_GROUPS` held before the list was widened. The v2 → v3
+ * migration adds only the keys that aren't in here, so a group someone
+ * deleted on purpose stays deleted.
+ */
+export const V2_GROUP_KEYS = ['Chest', 'Back', 'Other'];
 
 export const DEFAULT_KINDS: { key: string; labels: LangMap }[] = [
   { key: 'Barbell', labels: { en: 'Barbell', de: 'Langhantel' } },

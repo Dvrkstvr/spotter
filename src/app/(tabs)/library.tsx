@@ -5,15 +5,18 @@
  * heading, which is why the settings rows advertise "leave empty for a divider".
  */
 import { Fragment } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 import { Screen } from '@/components/screen';
 import { Exercise } from '@/data/exercises';
-import { color, font, t, tracking, wash } from '@/design/tokens';
+import { themed, useColors, useThemed } from '@/design/theme';
+import { color, font, t, tracking } from '@/design/tokens';
 import { Btn, H2, H6, Hr, Input, missingName } from '@/design/ui';
 import { fmt, resolveNames, useStore } from '@/store/workout-store';
 
 export default function LibraryScreen() {
+  const styles = useThemed(sheet);
+  const c = useColors();
   const { s, L, patch, allEx, kInfo, exInfo } = useStore();
 
   const q = s.query.trim().toLowerCase();
@@ -79,16 +82,16 @@ export default function LibraryScreen() {
               style={[
                 styles.chip,
                 {
-                  backgroundColor: f.key === s.filter ? wash.accent(16) : 'transparent',
-                  borderColor: f.key === s.filter ? color.accent : color.divider,
+                  backgroundColor: f.key === s.filter ? c.wash.accent(16) : 'transparent',
+                  borderColor: f.key === s.filter ? c.accent : c.divider,
                 },
               ]}
             >
               <Text
                 style={[
                   styles.chipLabel,
-                  { color: f.key === s.filter ? color.accent200 : color.neutral400 },
-                  f.missing && missingName,
+                  { color: f.key === s.filter ? c.accent200 : c.neutral400 },
+                  f.missing && missingName(c),
                 ]}
               >
                 {f.label}
@@ -105,7 +108,7 @@ export default function LibraryScreen() {
           {g.isDivider ? (
             <Hr style={styles.groupRule} />
           ) : (
-            <H6 style={[styles.groupHead, g.missing && missingName]}>{g.name}</H6>
+            <H6 style={[styles.groupHead, g.missing && missingName(c)]}>{g.name}</H6>
           )}
           <View style={{ gap: t.gap }}>
             {g.items.map((e) => {
@@ -114,8 +117,8 @@ export default function LibraryScreen() {
               return (
                 <Pressable key={e.id} onPress={() => patch({ exOpen: e.id })} style={styles.row}>
                   <View style={styles.rowText}>
-                    <Text style={[styles.rowName, name.missing && missingName]}>{name.text}</Text>
-                    <Text style={[styles.rowKind, kind.missing && missingName]}>{kind.text}</Text>
+                    <Text style={[styles.rowName, name.missing && missingName(c)]}>{name.text}</Text>
+                    <Text style={[styles.rowKind, kind.missing && missingName(c)]}>{kind.text}</Text>
                   </View>
                   <Text style={styles.rowLast}>
                     {e.last ? `${fmt(e.last)} kg` : e.kind === 'Bodyweight' ? L.bodyweight : '—'}
@@ -132,7 +135,7 @@ export default function LibraryScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const sheet = themed(() => ({
   head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   tight: { letterSpacing: tracking(t.h2, -0.02) },
   newLabel: { fontSize: 13 },
@@ -166,4 +169,4 @@ const styles = StyleSheet.create({
     color: color.neutral400,
     fontVariant: ['tabular-nums'],
   },
-});
+}));

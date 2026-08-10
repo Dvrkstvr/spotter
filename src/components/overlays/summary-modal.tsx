@@ -11,11 +11,13 @@ import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
 
 import { RiseIn } from '@/components/motion';
 import { useBackClose } from '@/hooks/use-back-close';
+import { themed, useThemed } from '@/design/theme';
 import { color, elevation, fill, font, radius, tracking, wash } from '@/design/tokens';
 import { Btn, CardKicker, H3, Input } from '@/design/ui';
 import { useStore } from '@/store/workout-store';
 
 export function SummaryModal() {
+  const styles = useThemed(sheet);
   const { s, L, patch, saveAsRoutine } = useStore();
   const router = useRouter();
   const [routineName, setRoutineName] = useState('');
@@ -77,6 +79,7 @@ export function SummaryModal() {
 
 /** Numeric stats count up from zero; strings (the clock) hold still. */
 function StatValue({ v, delay }: { v: number | string; delay: number }) {
+  const styles = useThemed(sheet);
   const target = typeof v === 'number' ? v : null;
   const [shown, setShown] = useState<number | string>(target === null ? v : 0);
 
@@ -117,6 +120,7 @@ const GRAVITY = 480;
  * animation, thirty tumbling Views, gone in under two seconds.
  */
 function Confetti() {
+  const styles = useThemed(sheet);
   const [p] = useState(() => new Animated.Value(0));
   const [w, setW] = useState(0);
   const [parts] = useState(() =>
@@ -195,7 +199,7 @@ function Confetti() {
   );
 }
 
-const styles = StyleSheet.create({
+const sheet = themed(() => ({
   backdrop: {
     zIndex: 90,
     alignItems: 'center',
@@ -235,4 +239,4 @@ const styles = StyleSheet.create({
   doneBtn: { marginTop: 16, height: 42 },
   /** Anchor over the whole card; particles spawn on its top edge and overflow freely. */
   confetti: { ...fill },
-});
+}));

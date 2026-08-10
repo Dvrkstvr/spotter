@@ -181,6 +181,171 @@ forgotten tick must never freeze the buddy's screen mid-workout.
       (accent = active on each side). The tab-bar buddy strip becomes the
       "Back to workout" resume strip (name + running clock) while minimized.
 
+## 9. Polish round (9 Aug 2026)
+
+Six things Calvin wanted right after the app settled into real use.
+
+- [x] **Rest day says something instead of offering nothing.** The hero's
+      "Start Rest day" button became a line — `restNote`, "Enjoy your day to
+      the fullest." The freeform row under the week is unchanged, so a rest day
+      that turns into a session is still one tap.
+- [x] **The tab bar's buddy strip is tappable**, like the session's already
+      was: both set `buddyFocus`, and Profile scrolls its buddy section into
+      view once and clears the flag (`Screen` grew an optional `scrollRef`).
+- [x] **Session screen overhaul.** One exercise per screen; the set you're on
+      is a raised row with 22px numbers; the list, Add exercise, Discard and
+      Finish moved into the overview sheet behind the "3 / 5" chip; one primary
+      button at the bottom (Log set → Next exercise → Finish workout) that
+      lands directly above Android's keyboard, since `softwareKeyboardLayoutMode`
+      is `resize`. Swipe left/right between exercises. Decided against a custom
+      in-app keypad for now (Calvin's call) — the layout is the fix, the OS
+      keyboard stays.
+  - [x] **9a. The turn is in the exercise**, not only in the bottom bar: turn
+        line, their set count, and the alternate/parallel chip that sets it,
+        all in one row between the exercise and its sets.
+  - [x] **9b. Turn modes sync.** `turnModes` became `Record<string, TurnChoice>`
+        — a last-writer-wins register per exercise (higher `rev` wins, ties to
+        the host) carried inside the existing full-state `progress` broadcast.
+        Adopting never bumps a rev, which is what stops the two phones echoing.
+- [x] **Disconnect ends it for both.** A new `bye` message: the tapping phone
+      sends it before `stopAll`, the receiver runs `endPairing` and stops
+      looking for them. Live sessions are deliberately left running — see the
+      deviation note in AGENTS.md.
+- [x] **Exercises are editable**, seeded library included: name (per language),
+      muscle group, equipment in the exercise sheet's edit mode; cues in the
+      How-to sheet's. Custom exercises are edited in place; seeded ones through
+      the `exEdits` / `cueEdits` override maps, with Reset to the original.
+      Logged history stays read-only (Calvin's call). Both maps are additive
+      `PERSIST` keys, so no storage version bump.
+- [x] **The routine editor's dead Edit button is gone**, and with it the
+      `editing` flag it was the only reader of.
+
+Open, deliberately not done: deleting a custom exercise.
+
+## 10. Logging without the keyboard (9 Aug 2026)
+
+Second round on the session screen, once the layout was there to react to.
+
+- [x] **Enter walks the row.** Weight → `returnKeyType="next"` +
+      `submitBehavior="submit"` hands focus to reps without dropping the
+      keyboard; reps → `done` logs the set. Which meant picking one logging
+      control: the per-set tick box stayed and the "Log set" button went, since
+      the box is also the only way to un-tick. The footer is navigation only
+      now (Next exercise / Finish workout).
+- [x] **Hold-drag to change a number.** `NumCell` watches touches in the
+      capture phase and claims the gesture only after the finger has been
+      still for 220 ms — so a tap still focuses the field and a straight drag
+      still scrolls. Then up/down steps 0.5 kg or 1 rep per 12 px, starting
+      from last time's figure when the cell is empty. The list's
+      `scrollEnabled` goes off for the duration.
+- [x] **Add set is a hold**, styled as the ledger row it was (the fill is the
+      only thing that reads as a button, and only while held).
+- [x] **Their turn looks like their turn.** Your next set goes dashed and
+      loses the accent while the buddy is mid-set, with `3:00` counting down
+      on it and "Start now ›" for when it isn't three minutes. `rest` in the
+      store, counted in `elapsed` ticks.
+- [x] **"Waiting for you" no longer fires when nobody is waiting.** If the
+      buddy finished the exercise and so have you, the line reads "Both done —
+      ready for the next exercise" (`stBothDone`) instead — the parallel-mode
+      case that made it wrong.
+
+### Fixes on top (same day)
+
+- [x] **The guest was stuck on "waiting for {name} to join".** Two halves: the
+      host's session started before the guest accepted, so nothing re-fired
+      the progress broadcast — `buddyJoin` joined the broadcast effect's deps.
+      And the pending line is role-aware now: the host waits for an answer
+      (`stPending`), the guest is only waiting for the first message
+      (`stJoining`). The starter going first needed no new control — the
+      turn tie already goes to the host, and "Start now ›" is the guest's way
+      out of waiting.
+- [x] **The rest ended when the buddy finished, not when it was over.** The
+      clock now starts on *your own* logged set and runs its full three
+      minutes whatever they do. `rest.own` tells the two waits apart: a rest
+      you earned outlasts the turn coming back, a wait that exists only
+      because it's their turn ends with it — otherwise a guest who had lifted
+      nothing yet would be held three minutes at the start of a session.
+
+## 11. One way out, and a way back in (9 Aug 2026)
+
+- [x] **Discard is gone**; Finish is the only exit from a session and now
+      carries Discard's job too — `finishSession` skips the `history` entry
+      when nothing was ticked, so an accidental start doesn't land on the
+      calendar as a training day. The empty-session note says so.
+- [x] **Ask to join.** `joinAsk` / `joinReply` are the other direction from
+      `sessionInvite`, for the buddy who missed it or arrived late. A yes is
+      answered with the ordinary invite, which the asker's phone accepts
+      without a second prompt (`joinSent === 'waiting'`) — one join path, not
+      two. A no, or an ask to someone who isn't training, comes back as a line
+      on Profile. `join-ask-sheet.tsx`, z 89, beside the invite.
+- [x] **A roster of paired buddies** (`knownBuddies`, persisted) under Share
+      session: name, live state (Connected / Nearby / Not nearby), Ask to join
+      or Connect, and × to forget. Pairing remembers; both Disconnect and ×
+      send `bye` first, or the other phone reconnects through the teardown.
+- [x] **The roster is permanent** (asked for right after): a name only leaves
+      it by ×. Seeing who is around when you happen to be in the same gym is
+      the point of the list, and that needs it to outlast every dropped link —
+      so Disconnect can't be an unpairing. Rows say nothing rather than "Not
+      nearby" while a link is up, since the radio has stopped looking and
+      can't know.
+- [x] **Every link is a handshake** (asked for right after that): the Connect
+      button became **Request a session**, and the radio no longer connects to
+      anyone on the roster on its own — the one exception is back to the buddy
+      of the session in progress, where a drop has to heal by itself. Asking
+      is what opens the link, the ask is answered on the other phone, and a no
+      takes the link down with it (flushed before the disconnect, or their
+      phone reads the refusal as a drop and comes back to ask again). Dropped
+      mid-ask counts as a no, for the same reason.
+      This also deleted `avoided` and `resumeBuddy` from the round before:
+      with nothing auto-connecting, clearing `buddy` is all a disconnect
+      needs to stick.
+- [x] **The radio stays findable** whenever the roster isn't empty (Calvin's
+      call over the cheaper "only while you're looking"): known names are
+      auto-accepted with no code, so two paired phones re-find each other after
+      a restart with nobody tapping anything.
+
+## 12. Settings, properly (10 Aug 2026)
+
+Calvin: "tidy up the settings view and add some more functionality — light and
+dark mode, maybe even some colour themes. Also add all of the muscle groups
+and translate them properly into German." Plus, chosen from the options: a
+private mode, a rest-timer length, backup & restore, and haptics.
+
+- [x] **Light mode and six colour themes, derived from Nocturne rather than
+      authored next to it.** The ported palette turned out to be a system
+      (one shared lightness ladder, one hue per ramp), so a theme is that ramp
+      hue-rotated in OKLCH and light mode is the palette reflected about its
+      own background. Blurple + dark stays byte-identical to the ported hex.
+      Mode is System / Light / Dark; `userInterfaceStyle` in `app.json` went
+      to `automatic` so the OS can be asked.
+- [x] **The machinery to make a palette swap reach `StyleSheet.create`**:
+      `themed()` + `useThemed()` in `src/design/theme.tsx`, and every sheet in
+      the app converted. The sharp edge is the React Compiler — see the
+      "Themes" section of AGENTS.md, which is the part worth reading before
+      touching a colour again.
+- [x] **Muscle groups: 3 → 20**, head to toe, both languages, with `Other`
+      kept last as the catch-all. Seeded exercises refiled (lat pulldown →
+      Lats, reverse pec deck → Shoulders, curl → Biceps …). Storage went to
+      `v3`: the migration adds only keys that are *new* in v3, so a group
+      someone deleted stays deleted and every rename is kept.
+- [x] **Rest between sets is a setting** (`restSeconds`, Off/1:00/1:30/2:00/
+      3:00/5:00) rather than the hardcoded 180.
+- [x] **Haptics** (`src/data/haptics.ts`) on the same grammar as motion: the
+      lightest impact for a ticked set, which happens forty times a session;
+      the louder notification for a rest running out, which you feel from a
+      pocket. Toggle in Settings.
+- [x] **Train alone** — a privacy switch that unmounts `<BuddyRadio>` and the
+      buddy sheets and hides the buddy half of Profile. Paired names are
+      remembered; turning it on says `bye` first.
+- [x] **Backup & restore** — the durable slice as one JSON file through the
+      share sheet, and back in through the document picker, behind an envelope
+      check and a last-moment confirm.
+- [x] **Settings reordered** by how often it is opened for a thing:
+      Appearance, Workout, Privacy, Language, the two long lists, Data, About.
+
+Open: equipment is still the original five (no bands/kettlebell/Smith); units
+are kg-only.
+
 ## Suggested order
 
 1 (small, half done) → 3 (small) → 2 (medium) → 6 (persistence at least) →

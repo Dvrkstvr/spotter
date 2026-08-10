@@ -5,12 +5,13 @@
  *
  *   npm run build:apk
  *
- * Skip-if-already-there: `android/` is only regenerated (expo prebuild) when
- * missing; ANDROID_HOME / JAVA_HOME are only filled in when the environment
- * doesn't provide them (Unity's SDK and JDK, same as the rest of the repo).
+ * Skip-if-already-there: `android/` is regenerated (expo prebuild) when it is
+ * missing or older than `app.json`; ANDROID_HOME / JAVA_HOME are only filled in
+ * when the environment doesn't provide them (Unity's SDK and JDK, same as the
+ * rest of the repo).
  */
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
@@ -35,10 +36,17 @@ if (!env.JAVA_HOME) {
 const run = (exe, args, cwd) =>
   execFileSync(exe, args, { cwd: cwd ?? repoRoot, env, stdio: 'inherit', shell: true });
 
-/* — native project: generated, so regenerate when absent — */
+/* — native project: generated, so regenerate when absent or behind — */
 
-if (!existsSync(path.join(repoRoot, 'android', 'gradlew.bat'))) {
-  log('android/ missing — running expo prebuild');
+// Staleness matters as much as absence: app name, icons, scheme and permission
+// strings are baked into android/ at prebuild time, so an app.json edited since
+// then builds an APK that silently still carries the old ones.
+const manifest = path.join(repoRoot, 'android', 'app', 'src', 'main', 'AndroidManifest.xml');
+const missing = !existsSync(path.join(repoRoot, 'android', 'gradlew.bat')) || !existsSync(manifest);
+const stale = !missing && statSync(path.join(repoRoot, 'app.json')).mtimeMs > statSync(manifest).mtimeMs;
+
+if (missing || stale) {
+  log(missing ? 'android/ missing — running expo prebuild' : 'app.json is newer than android/ — running expo prebuild');
   run('npx', ['expo', 'prebuild', '--platform', 'android']);
 }
 
@@ -66,6 +74,6 @@ const stamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${p
 
 const outDir = path.join(repoRoot, '_builds');
 mkdirSync(outDir, { recursive: true });
-const out = path.join(outDir, `workout-diary-${stamp}-${hash}.apk`);
+const out = path.join(outDir, `spotter-${stamp}-${hash}.apk`);
 copyFileSync(apk, out);
 log(`done → ${path.relative(repoRoot, out)}`);

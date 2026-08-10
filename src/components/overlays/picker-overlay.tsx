@@ -2,17 +2,20 @@
  * Exercise picker — adds an exercise to the open routine or the live session,
  * depending on which one asked for it.
  */
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FullScreen } from '@/components/sheet';
 import { useBackClose } from '@/hooks/use-back-close';
+import { themed, useColors, useThemed } from '@/design/theme';
 import { color, font, wash } from '@/design/tokens';
 import { Btn, Input, missingName } from '@/design/ui';
 import { Exercise } from '@/data/exercises';
 import { myName, useStore } from '@/store/workout-store';
 
 export function PickerOverlay() {
+  const styles = useThemed(sheet);
+  const c = useColors();
   const { s, L, patch, allEx, gInfo, kInfo, exInfo, lastFor } = useStore();
   const insets = useSafeAreaInsets();
   const close = () => patch({ picker: null, query: '' });
@@ -103,7 +106,7 @@ export function PickerOverlay() {
           return (
             <Pressable key={e.id} onPress={() => add(e)} style={styles.row}>
               <View style={styles.text}>
-                <Text style={[styles.name, name.missing && missingName]}>{name.text}</Text>
+                <Text style={[styles.name, name.missing && missingName(c)]}>{name.text}</Text>
                 <Text style={styles.kind}>
                   {kInfo(e.kind).text} · {gInfo(e.group).text}
                 </Text>
@@ -117,7 +120,7 @@ export function PickerOverlay() {
   );
 }
 
-const styles = StyleSheet.create({
+const sheet = themed(() => ({
   header: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingBottom: 8 },
   backLabel: { fontSize: 13 },
   title: { flex: 1, fontFamily: font.regular, fontSize: 14, color: color.neutral400 },
@@ -137,4 +140,4 @@ const styles = StyleSheet.create({
   name: { fontFamily: font.regular, fontSize: 14, color: color.text },
   kind: { fontFamily: font.regular, fontSize: 11, color: color.neutral600 },
   plus: { fontFamily: font.regular, fontSize: 18, color: color.accent },
-});
+}));

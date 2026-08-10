@@ -10,7 +10,8 @@ import { ReactNode } from 'react';
 import { Pressable, ScrollView, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 
 import { RiseIn, SheetIn } from '@/components/motion';
-import { color, elevation, radius, wash } from '@/design/tokens';
+import { themed, useColors, useThemed } from '@/design/theme';
+import { color, elevation, radius } from '@/design/tokens';
 
 export function Sheet({
   onClose,
@@ -26,12 +27,14 @@ export function Sheet({
   zIndex: number;
   children: ReactNode;
 }) {
+  const styles = useThemed(sheet);
+  const c = useColors();
   return (
     <View style={[StyleSheet.absoluteFill, { justifyContent: 'flex-end', zIndex }]}>
       <Pressable
         accessibilityLabel="Close"
         onPress={onClose}
-        style={[StyleSheet.absoluteFill, { backgroundColor: wash.scrim(scrimOpacity) }]}
+        style={[StyleSheet.absoluteFill, { backgroundColor: c.wash.scrim(scrimOpacity) }]}
       />
       <SheetIn style={[styles.panel, { maxHeight }]}>
         <ScrollView
@@ -56,6 +59,7 @@ export function FullScreen({
   style?: StyleProp<ViewStyle>;
   children: ReactNode;
 }) {
+  const styles = useThemed(sheet);
   return (
     <RiseIn duration={180} style={[StyleSheet.absoluteFill, styles.full, { zIndex }, style]}>
       {children}
@@ -63,7 +67,7 @@ export function FullScreen({
   );
 }
 
-const styles = StyleSheet.create({
+const sheet = themed(() => ({
   panel: {
     width: '100%',
     backgroundColor: color.surface,
@@ -81,4 +85,4 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   full: { backgroundColor: color.bg },
-});
+}));

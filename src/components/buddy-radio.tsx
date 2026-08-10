@@ -40,11 +40,18 @@ export function BuddyRadio() {
 
   /* — advertising + discovery, driven by what the user is doing — */
 
-  // A pairing is standing until explicitly closed (Disconnect) or the app
-  // dies: while paired but unlinked, the radio keeps looking for the buddy.
+  // A pairing is standing until explicitly closed (Disconnect): while paired
+  // but unlinked, the radio keeps looking. `knownBuddies` extends that across
+  // restarts — with anyone on the list, this phone stays findable while the
+  // app is open, which is what lets a buddy be asked to join without either
+  // side having tapped anything first.
   const active =
     radio !== null &&
-    (store.s.scanning || store.s.buddySync || store.s.sessionShared || store.s.buddy !== null) &&
+    (store.s.scanning ||
+      store.s.buddySync ||
+      store.s.sessionShared ||
+      store.s.buddy !== null ||
+      store.s.knownBuddies.length > 0) &&
     store.s.buddyEndpoint === null;
 
   useEffect(() => {
@@ -98,7 +105,7 @@ export function BuddyRadio() {
       if (st.s.buddyEndpoint) {
         r.sendPayload(
           st.s.buddyEndpoint,
-          JSON.stringify({ v: 1, t: 'progress', state: progressOf(prev, -1, true) })
+          JSON.stringify({ v: 1, t: 'progress', state: progressOf(prev, -1, st.s.turnModes, true) })
         ).catch(() => {});
       }
       st.patch({
@@ -124,13 +131,30 @@ export function BuddyRadio() {
       if (!cur.session || !cur.buddyEndpoint) return;
       r.sendPayload(
         cur.buddyEndpoint,
-        JSON.stringify({ v: 1, t: 'progress', state: progressOf(cur.session, cur.active) })
+        JSON.stringify({
+          v: 1,
+          t: 'progress',
+          state: progressOf(cur.session, cur.active, cur.turnModes),
+        })
       ).catch(() => {});
     }, 250);
     return () => clearTimeout(id);
-    // `session` (object identity) and `active` are what the broadcast reads;
-    // buddyEndpoint re-fires it after a reconnect, which is the resync.
-  }, [shouldBroadcast, session, store.s.active, store.s.buddyEndpoint]);
+    // `session` (object identity), `active` and `turnModes` are what the
+    // broadcast reads; buddyEndpoint re-fires it after a reconnect, which is
+    // the resync. Merging a peer's turn modes never bumps a rev, so the
+    // rebroadcast it triggers dies on their side rather than echoing back.
+    //
+    // buddyJoin is here for the host's benefit: their session started before
+    // the guest accepted, so without a resend on "joined" the guest sits on
+    // "waiting to join" until the host happens to tick something.
+  }, [
+    shouldBroadcast,
+    session,
+    store.s.active,
+    store.s.turnModes,
+    store.s.buddyJoin,
+    store.s.buddyEndpoint,
+  ]);
 
   /* — co-created routine draft: announce once, then broadcast full state — */
 
@@ -188,8 +212,11 @@ export function BuddyRadio() {
         st.patch((s) => ({
           nearbyPeers: [...s.nearbyPeers.filter((p) => p.endpointId !== e.endpointId), e],
         }));
-        // The known buddy reappeared while the pairing stands — reconnect
-        // without anyone having to tap anything.
+        // The buddy of this session reappeared — reconnect without anyone
+        // having to tap anything. That is the mid-workout drop, and the only
+        // connection this phone ever opens by itself: everyone else on the
+        // roster is seen and listed, and stays that way until one of the two
+        // asks for a session and the other one answers.
         if (!st.s.buddyEndpoint && st.s.buddy === e.name) {
           r.requestConnection(myName(st.s), e.endpointId).catch(() => {});
         }
@@ -207,7 +234,8 @@ export function BuddyRadio() {
       // silent — that's the standing-pairing reconnect.
       r.addListener('onConnectionInitiated', (e) => {
         const st = ref.current;
-        if (e.name === st.s.buddy) {
+        // Already trusted — this run or a previous one. No code, no sheet.
+        if (e.name === st.s.buddy || st.s.knownBuddies.includes(e.name)) {
           r.acceptConnection(e.endpointId).catch(() => {});
           return;
         }
@@ -256,6 +284,10 @@ export function BuddyRadio() {
           e.endpointId,
           JSON.stringify({ v: 1, t: 'snapshot', name: myName(st.s), data: shareableSlice(st.s) })
         ).catch(() => {});
+        // This phone opened the link to ask something — the ask follows the
+        // snapshot, so the other side knows who is asking by the time it lands.
+        if (st.s.joinSent?.state === 'waiting')
+          r.sendPayload(e.endpointId, JSON.stringify({ v: 1, t: 'joinAsk' })).catch(() => {});
       }),
 
       r.addListener('onDisconnected', (e) =>
@@ -264,6 +296,10 @@ export function BuddyRadio() {
             ? {
                 buddyEndpoint: null,
                 buddySyncPending: false,
+                // An ask that ended in a dropped link is not a yes. Let the
+                // pairing go rather than chase them down and ask again —
+                // this is also the backstop for a refusal that never arrived.
+                ...(s.joinSent?.state === 'waiting' ? { buddy: null, joinSent: null } : {}),
                 ...(s.sessionShared ? {} : { buddySnapshot: null }),
               }
             : null
@@ -276,6 +312,9 @@ export function BuddyRadio() {
         const st = ref.current;
         switch (msg.t) {
           case 'snapshot':
+            // A snapshot only ever arrives from a peer we accepted, so this
+            // is the moment a pairing becomes a pairing.
+            st.rememberBuddy(msg.name);
             // Inside the functional patch, where the onConnected patch has
             // already applied — on a fast link the snapshot arrives before
             // React commits, so reading buddySyncPending via the ref races.
@@ -290,6 +329,8 @@ export function BuddyRadio() {
               return {
                 buddy: msg.name,
                 buddySnapshot: snapshot,
+                // Somebody is here again — the "they left" line has had its say.
+                buddyLeft: null,
                 ...(diff
                   ? {
                       buddySyncPending: false,
@@ -305,6 +346,34 @@ export function BuddyRadio() {
             break;
           case 'sessionInvite':
             st.patch({ buddyInvite: msg.invite });
+            // An invite we asked for needs no second question. The updater
+            // above lands before acceptInvite's reads it, so this is safe.
+            if (st.s.joinSent?.state === 'waiting') {
+              st.acceptInvite();
+              st.patch({ joinSent: null });
+              if (st.s.buddyEndpoint)
+                r.sendPayload(
+                  st.s.buddyEndpoint,
+                  JSON.stringify({ v: 1, t: 'sessionJoin' })
+                ).catch(() => {});
+            }
+            break;
+
+          // Somebody wants to train. The sheet asks; nothing here decides.
+          case 'joinAsk':
+            st.patch({ joinAsk: st.s.buddy ?? '' });
+            break;
+
+          // Mid-routine, yes arrives as the invite instead; this is the plain
+          // "sure, let's train" — the two are simply linked from here. A no
+          // leaves no connection behind, or the link would outlive the answer.
+          case 'joinReply':
+            if (msg.ok) st.patch({ joinSent: null });
+            else {
+              const to = st.s.buddy ?? '';
+              st.endPairing();
+              st.patch({ joinSent: { to, state: 'declined' } });
+            }
             break;
           case 'sessionJoin':
             st.patch({ buddyJoin: 'joined' });
@@ -318,6 +387,14 @@ export function BuddyRadio() {
               // Any progress proves they're in — covers a lost join message.
               ...(s.buddyJoin === 'pending' ? { buddyJoin: 'joined' as const } : {}),
             }));
+            // Turn modes ride along with progress: same full-state model, so
+            // whoever missed a toggle catches up on the next message.
+            st.mergeTurnModes(msg.state.modes);
+            break;
+          // They tapped Disconnect. Drop the pairing rather than start
+          // hunting for them — but never touch this phone's own session.
+          case 'bye':
+            st.endPairing(st.s.buddy);
             break;
           case 'draftStart': {
             // Both phones tapped "build together" at once → two competing

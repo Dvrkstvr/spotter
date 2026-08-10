@@ -11,6 +11,8 @@ export type BuddyLive = {
   text: string;
   /** whose set is next (accent cue), when both are on the same exercise */
   turn: string | null;
+  /** the turn is yours — the one cue worth the accent */
+  mine: boolean;
   /** the exercise the turn hint applies to — the alternate/parallel chip's key */
   modeEx: string | null;
   /** their exercise is in my list too — one tap to reconverge */
@@ -18,37 +20,54 @@ export type BuddyLive = {
 };
 
 export function useBuddyLive(): BuddyLive | null {
-  const { s, L, ex, exInfo } = useStore();
+  const { s, L, ex, exInfo, turnMode } = useStore();
   const session = s.session;
 
   if (!session || !s.sessionShared) return null;
 
   const nm = (v: keyof Strings) => L[v].replace('{name}', s.buddy ?? '');
-  const line = (text: string): BuddyLive => ({ text, turn: null, modeEx: null, jump: null });
+  const line = (text: string): BuddyLive => ({
+    text,
+    turn: null,
+    mine: false,
+    modeEx: null,
+    jump: null,
+  });
 
   if (!s.buddyEndpoint) return line(nm('stLost'));
   if (s.buddyJoin === 'declined') return line(nm('stDeclined'));
   const bp = s.buddyProgress;
-  if (!bp || s.buddyJoin === 'pending') return line(nm('stPending'));
+  // The host is genuinely waiting for an answer; the guest already answered
+  // and is only waiting for the first broadcast to land.
+  if (!bp || s.buddyJoin === 'pending')
+    return line(nm(s.sessionRole === 'guest' ? 'stJoining' : 'stPending'));
   if (bp.finished) return line(nm('stFinished'));
 
   const myActiveEx = session.list[s.active]?.ex ?? null;
 
   if (bp.active && bp.active === myActiveEx) {
-    const mine = session.list[s.active].sets.filter((x) => x.done).length;
+    const mySets = session.list[s.active].sets;
+    const mine = mySets.filter((x) => x.done).length;
     const theirs = bp.list.find((e) => e.ex === bp.active);
     const theirDone = theirs?.done.filter(Boolean).length ?? 0;
     const theirAll = theirs?.done.length ?? 0;
-    if (theirAll > 0 && theirDone >= theirAll) return line(nm('stWaiting'));
-    const mode = s.turnModes[bp.active] ?? 'alternate';
+    if (theirAll > 0 && theirDone >= theirAll) {
+      // Both through the exercise — nobody is waiting on anybody, which is
+      // what "{name} is waiting for you" used to claim in parallel mode.
+      const iAmDone = mySets.length > 0 && mine >= mySets.length;
+      return line(iAmDone ? L.stBothDone : nm('stWaiting'));
+    }
+    const mode = turnMode(bp.active);
     // Fewer completed sets goes next; ties go to the host.
-    const turn =
-      mode === 'parallel'
-        ? L.together
-        : mine < theirDone || (mine === theirDone && s.sessionRole === 'host')
-          ? L.yourTurn
-          : nm('theirTurn');
-    return { text: `${theirDone}/${theirAll}`, turn, modeEx: bp.active, jump: null };
+    const yours = mine < theirDone || (mine === theirDone && s.sessionRole === 'host');
+    const turn = mode === 'parallel' ? L.together : yours ? L.yourTurn : nm('theirTurn');
+    return {
+      text: `${theirDone}/${theirAll}`,
+      turn,
+      mine: mode === 'parallel' || yours,
+      modeEx: bp.active,
+      jump: null,
+    };
   }
 
   if (bp.active) {
@@ -59,6 +78,7 @@ export function useBuddyLive(): BuddyLive | null {
     return {
       text: `${prefix}${exName}`,
       turn: null,
+      mine: false,
       modeEx: null,
       jump: myIndex >= 0 && myIndex !== s.active ? { index: myIndex, name: exName } : null,
     };

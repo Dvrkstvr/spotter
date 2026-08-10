@@ -5,12 +5,13 @@
  * fixed the month to August 2026; this shows the real current month.
  */
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 import { Screen } from '@/components/screen';
 import { toISO, todayDom } from '@/data/date';
 import { DOW } from '@/data/exercises';
 import { MONTHS } from '@/data/i18n';
+import { themed, useColors, useThemed } from '@/design/theme';
 import { color, font, t, tracking } from '@/design/tokens';
 import { H2, H4, H6, missingName } from '@/design/ui';
 import { useStore } from '@/store/workout-store';
@@ -18,6 +19,8 @@ import { useStore } from '@/store/workout-store';
 const GRID_GAP = 3;
 
 export default function PlanScreen() {
+  const styles = useThemed(sheet);
+  const c = useColors();
   const { s, L, patch, routine, doneOn, loggedThisMonth, rInfo } = useStore();
   const [gridWidth, setGridWidth] = useState(0);
 
@@ -93,15 +96,15 @@ export default function PlanScreen() {
                 {
                   width: cell,
                   height: cell,
-                  backgroundColor: isSel ? color.accent900 : 'transparent',
-                  borderColor: isSel ? color.accent700 : 'transparent',
+                  backgroundColor: isSel ? c.accent900 : 'transparent',
+                  borderColor: isSel ? c.accent700 : 'transparent',
                 },
               ]}
             >
               <Text
                 style={[
                   styles.cellNum,
-                  { color: day < dom ? color.neutral600 : color.neutral300 },
+                  { color: day < dom ? c.neutral600 : c.neutral300 },
                 ]}
               >
                 {day}
@@ -112,8 +115,8 @@ export default function PlanScreen() {
                   {
                     backgroundColor: rid
                       ? isDone
-                        ? color.accent
-                        : color.accent800
+                        ? c.accent
+                        : c.accent800
                       : 'transparent',
                   },
                 ]}
@@ -125,11 +128,11 @@ export default function PlanScreen() {
 
       <View style={styles.legend}>
         <View style={styles.legendItem}>
-          <View style={[styles.dot, { backgroundColor: color.accent }]} />
+          <View style={[styles.dot, { backgroundColor: c.accent }]} />
           <Text style={styles.legendText}>{L.doneWord}</Text>
         </View>
         <View style={styles.legendItem}>
-          <View style={[styles.dot, { backgroundColor: color.accent800 }]} />
+          <View style={[styles.dot, { backgroundColor: c.accent800 }]} />
           <Text style={styles.legendText}>{L.plannedWord}</Text>
         </View>
       </View>
@@ -153,8 +156,8 @@ export default function PlanScreen() {
               <Text
                 style={[
                   styles.rowName,
-                  { color: r ? color.text : color.neutral600 },
-                  rn?.missing && missingName,
+                  { color: r ? c.text : c.neutral600 },
+                  rn?.missing && missingName(c),
                 ]}
                 numberOfLines={1}
               >
@@ -169,7 +172,7 @@ export default function PlanScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const sheet = themed(() => ({
   tight: { letterSpacing: tracking(t.h2, -0.02) },
   monthRow: {
     flexDirection: 'row',
@@ -241,4 +244,4 @@ const styles = StyleSheet.create({
   },
   rowName: { flex: 1, fontFamily: font.regular, fontSize: 14 },
   rowMeta: { fontFamily: font.regular, fontSize: 11, color: color.neutral600 },
-});
+}));

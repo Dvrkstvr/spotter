@@ -1,17 +1,19 @@
 /** Share mode — discover others sharing nearby and pair with a typed code. */
 import { useEffect, useState } from 'react';
-import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Pressable, Text, View } from 'react-native';
 
 import { Sheet } from '@/components/sheet';
 import { hasRadio, radio } from '@/data/buddy-radio';
 import { diffBuddy, shareableSlice } from '@/data/buddy-sync';
 import { connectPeer, scanPeers } from '@/data/buddy-transport';
 import { useBackClose } from '@/hooks/use-back-close';
+import { themed, useThemed } from '@/design/theme';
 import { color, font, motion, wash } from '@/design/tokens';
 import { Btn, H4, Input } from '@/design/ui';
-import { useStore } from '@/store/workout-store';
+import { myName, useStore } from '@/store/workout-store';
 
 export function ScanSheet() {
+  const styles = useThemed(sheet);
   const { s, L, patch } = useStore();
 
   // Which endpoint got our invite — its row reads "Invite sent" until the
@@ -54,7 +56,7 @@ export function ScanSheet() {
     if (hasRadio && radio) {
       // Just request — the code stage decides the pairing; <BuddyRadio>
       // opens the sync screen once the connection lands.
-      const me = s.profile.name.trim() || 'Workout Diary';
+      const me = myName(s);
       setSentTo(n.id);
       radio.requestConnection(me, n.id).catch(() => setSentTo(null));
       return;
@@ -160,6 +162,7 @@ export function ScanSheet() {
  * blinking.)
  */
 function SearchingDot() {
+  const styles = useThemed(sheet);
   return (
     <View style={styles.radar}>
       {[0, 1, 2].map((i) => (
@@ -171,6 +174,7 @@ function SearchingDot() {
 }
 
 function RadarRing({ offset }: { offset: number }) {
+  const styles = useThemed(sheet);
   const [p] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
@@ -204,7 +208,7 @@ function RadarRing({ offset }: { offset: number }) {
   );
 }
 
-const styles = StyleSheet.create({
+const sheet = themed(() => ({
   searchingRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
   radar: { width: 14, height: 14, alignItems: 'center', justifyContent: 'center' },
   dot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: color.accent },
@@ -267,4 +271,4 @@ const styles = StyleSheet.create({
   device: { fontFamily: font.regular, fontSize: 11, color: color.neutral600 },
   invite: { fontFamily: font.regular, fontSize: 11.5, color: color.accent },
   closeBtn: { marginTop: 16, height: 40 },
-});
+}));

@@ -5,16 +5,18 @@
  * sync) and opens the same session as guest; declining just says so. Either
  * way the choice is one tap — this can appear mid-gym-floor.
  */
-import { StyleSheet, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
 import { radio } from '@/data/buddy-radio';
 import { useBackClose } from '@/hooks/use-back-close';
 import { Sheet } from '@/components/sheet';
+import { themed, useThemed } from '@/design/theme';
 import { color, font } from '@/design/tokens';
 import { Btn, H4 } from '@/design/ui';
 import { resolveNames, useStore } from '@/store/workout-store';
 
 export function BuddyInviteSheet() {
+  const styles = useThemed(sheet);
   const { s, L, acceptInvite, declineInvite } = useStore();
 
   const send = (t: 'sessionJoin' | 'sessionDecline') => {
@@ -58,9 +60,9 @@ export function BuddyInviteSheet() {
   );
 }
 
-const styles = StyleSheet.create({
+const sheet = themed(() => ({
   body: { fontFamily: font.regular, fontSize: 14, color: color.text, marginTop: 10 },
   meta: { fontFamily: font.regular, fontSize: 11.5, color: color.neutral600, marginTop: 3 },
   actions: { flexDirection: 'row', gap: 8, marginTop: 18 },
   action: { flex: 1, height: 42 },
-});
+}));

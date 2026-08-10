@@ -10,6 +10,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Image, Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
 
 import { ImageGlyph } from '@/components/icon';
+import { themed, useColors, useThemed } from '@/design/theme';
 import { fill, font, wash } from '@/design/tokens';
 import { useStore } from '@/store/workout-store';
 
@@ -30,6 +31,8 @@ export function ImageSlot({
   placeholder: string;
   style?: StyleProp<ViewStyle>;
 }) {
+  const styles = useThemed(sheet);
+  const c = useColors();
   const { s, patch } = useStore();
   const uri = s.images[id];
 
@@ -59,7 +62,7 @@ export function ImageSlot({
       ) : (
         <>
           <View style={styles.empty}>
-            <ImageGlyph color={wash.text(45)} />
+            <ImageGlyph color={c.wash.text(45)} />
             <Text style={styles.caption} numberOfLines={2}>
               {placeholder}
             </Text>
@@ -71,7 +74,7 @@ export function ImageSlot({
   );
 }
 
-const styles = StyleSheet.create({
+const sheet = themed(() => ({
   frame: { overflow: 'hidden', backgroundColor: 'rgba(127, 127, 127, 0.08)' },
   empty: {
     ...fill,
@@ -93,4 +96,4 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
     borderColor: wash.text(35),
   },
-});
+}));

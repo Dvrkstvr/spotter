@@ -7,7 +7,7 @@
  * in the design — where switching tabs remounts the panel.
  */
 import { useFocusEffect } from 'expo-router';
-import { ReactNode, useCallback, useState } from 'react';
+import { ReactNode, RefObject, useCallback, useState } from 'react';
 import { ScrollView, StyleProp, ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -16,9 +16,12 @@ import { RiseIn } from '@/components/motion';
 export function Screen({
   children,
   contentStyle,
+  scrollRef,
 }: {
   children: ReactNode;
   contentStyle?: StyleProp<ViewStyle>;
+  /** For screens that scroll themselves to a section — see Profile's buddy card. */
+  scrollRef?: RefObject<ScrollView | null>;
 }) {
   const insets = useSafeAreaInsets();
 
@@ -34,6 +37,7 @@ export function Screen({
 
   return (
     <ScrollView
+      ref={scrollRef}
       style={{ flex: 1 }}
       contentContainerStyle={[
         { paddingTop: 14 + insets.top, paddingHorizontal: 16, paddingBottom: 8 },

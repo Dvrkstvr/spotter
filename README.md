@@ -1,11 +1,21 @@
-# Workout Diary
+# Spotter
 
 An Android workout logger, built with Expo and React Native. Plan a week, start
 the day's routine, and type your numbers set by set while you're standing at the
-machine.
+machine. Two phones can pair over the local radio and train the same session
+together — which is where the name comes from: a spotter is whoever is there
+for your set, and here that is both the app and the person on the other phone.
 
 It is a faithful implementation of the **Workout Diary v2** design from Claude
 Design — the Nocturne design system, dark-only, in German and English.
+
+The icon is two weight plates overlapping, the lens where they meet lit: your
+session, your buddy's, and the part you do together. It isn't a drawing —
+`npm run icons` renders every asset from the geometry and the palette in
+`src/design/tokens.ts`, so a colour change can be followed through.
+
+Renamed from **Workout Diary**; two identifiers deliberately kept the old name,
+because both are addresses rather than labels — see below.
 
 ## Running it
 
@@ -25,10 +35,24 @@ Two ways, and both stay supported:
   ```
 
   which Gradle-builds `assembleRelease` (regenerating `android/` first if it's
-  missing) and drops `_builds/workout-diary-<date>-<hash>.apk` — the file to
+  missing) and drops `_builds/spotter-<date>-<hash>.apk` — the file to
   sideload on both phones. The build uses the Android SDK/NDK that ships with
   Unity, assembled into `E:\android-sdk` as directory junctions (see
   `android/local.properties`).
+
+  To put that APK on a phone hanging off the USB cable:
+
+  ```bash
+  npm run install:apk
+  ```
+
+  It takes the newest APK in `_builds/`, installs it over the existing one
+  (`adb install -r`, so the diary on that phone survives) and launches it.
+  Emulators and adb-over-wifi targets are ignored — this is the cable only.
+  `-- --build` builds a fresh APK first, `-- -s <serial>` picks between two
+  connected phones, `-- --no-launch` just installs. Signature mismatches
+  (a dev build already installed) are reported rather than resolved: the
+  uninstall that would fix one also erases that phone's history.
 
 - **Expo Go** (JS-only iteration, mock buddy radio):
 
@@ -43,8 +67,9 @@ iOS config is untouched but unexercised — nothing has been checked on it.
 
 These also exist as double-clickable batch files in the repo root:
 `start-app.bat` (plain Metro), `start-emulated.bat` (the full buddy-testing
-setup below; takes the emulator count as an optional argument), and
-`build-apk.bat` (the release APK into `_builds\`).
+setup below; takes the emulator count as an optional argument),
+`build-apk.bat` (the release APK into `_builds\`) and `install-apk.bat`
+(that APK onto the phone on the cable).
 
 ### Testing the buddy features without two phones
 
@@ -109,6 +134,24 @@ not the app.
 The dev build now exists (see "Running it"), so Expo Go's ceiling no longer
 hard-blocks an SDK upgrade — it would just cost the Expo Go workflow. Still
 pinned to 54 for now to keep both paths alive.
+
+### What the rename didn't touch
+
+The app was called Workout Diary. Two identifiers still say so, and both are
+load-bearing — they address existing data rather than describe the app, so
+renaming them would quietly throw that data away:
+
+- **`android.package`** is `com.calvinkohl.workoutdiary`, not the tidier
+  `com.calkoh.spotter`. It is the app's identity to Android. Change it and the
+  next install lands *beside* the old app instead of over it, with an empty
+  diary, while the real history stays in the old package's storage.
+- **`STORAGE_KEY`** in `workout-store.tsx` is `workout-diary/v2`. Same story
+  one level down: rename the key and every logged session becomes unreachable
+  and the app reads as a first run.
+
+Neither is visible anywhere in the UI — the launcher shows `expo.name`. If the
+package id is ever worth changing, it needs an export/import path first, and
+both phones migrated in the same session.
 
 ## Checks
 

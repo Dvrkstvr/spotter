@@ -21,9 +21,11 @@ import { fileURLToPath } from 'node:url';
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const RELAY_PORT = Number(process.env.BUDDY_RELAY_PORT ?? 8787);
 const METRO_PORT = 8081;
+const APP = 'host.exp.exponent';
 
 const log = (m) => console.log(`[update:emu] ${m}`);
 const run = (exe, args) => execFileSync(exe, args, { encoding: 'utf8' });
+const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
 
 /* — SDK + running emulators — */
 
@@ -99,27 +101,84 @@ openWindow('start "metro (sim radio)" cmd /k "set EXPO_PUBLIC_SIM_RADIO=1&& npx 
   PATH: `${path.join(sdk, 'platform-tools')};${process.env.PATH}`,
 });
 
-// The port opens before Metro can actually serve — reloading then makes
-// Expo Go silently fall back to its cached (stale) bundle. /status says
-// when it's really ready.
+// The port opens before Metro can actually serve. /status isn't enough either
+// — it answers as soon as the HTTP server binds, about a second before the dev
+// server can produce a manifest, and Expo Go asked inside that gap opens its
+// LauncherActivity and closes it again. Ask for the very thing Expo Go fetches;
+// serving that is the only proof Metro is ready for it.
 const metroReady = async () => {
   try {
-    const res = await fetch(`http://127.0.0.1:${METRO_PORT}/status`);
-    return (await res.text()).includes('packager-status:running');
+    const status = await fetch(`http://127.0.0.1:${METRO_PORT}/status`);
+    if (!(await status.text()).includes('packager-status:running')) return false;
+    const res = await fetch(`http://127.0.0.1:${METRO_PORT}/`, {
+      headers: { 'expo-platform': 'android', accept: 'application/expo+json,application/json' },
+    });
+    if (!res.ok) return false;
+    const manifest = await res.json();
+    return Boolean(manifest.launchAsset?.url ?? manifest.bundleUrl);
   } catch {
     return false;
   }
 };
 
 const deadline = Date.now() + 120_000;
-while (!(await metroReady()) && Date.now() < deadline)
-  await new Promise((res) => setTimeout(res, 2000));
+while (!(await metroReady()) && Date.now() < deadline) await sleep(1000);
 if (!(await metroReady())) {
   log('Metro never came up — check its window');
   process.exit(1);
 }
 
 /* — wire each emulator and cold-restart the app so it refetches the JS — */
+
+// These get polled in loops, where one adb hiccup must not abort the run.
+const probe = (serial, args) => {
+  try {
+    return run(adb, ['-s', serial, ...args]);
+  } catch (e) {
+    return e.stdout ?? '';
+  }
+};
+
+const topActivity = (serial) =>
+  probe(serial, ['shell', 'dumpsys', 'activity', 'activities'])
+    .split(/\r?\n/)
+    .find((l) => l.includes('topResumedActivity=')) ?? '';
+
+// Teardown passes through a moment where nothing is resumed at all, so "not
+// Expo Go any more" is true well before the activity manager has finished.
+// Something else being genuinely resumed is what says it's done.
+const foregroundSettled = (serial) => {
+  const top = topActivity(serial);
+  return Boolean(top) && !top.includes('null') && !top.includes(APP);
+};
+
+// ExperienceActivity is the loaded app. LauncherActivity is only the doorway:
+// when Expo Go can't get the experience from the dev server it shows for a few
+// hundred ms and closes again, never handing over. So the handover — not the
+// package being in front — is what says the reload worked.
+const experienceIsUp = (serial) => topActivity(serial).includes('ExperienceActivity');
+
+const until = async (cond, ms) => {
+  const stop = Date.now() + ms;
+  while (Date.now() < stop) {
+    if (cond()) return true;
+    await sleep(150);
+  }
+  return cond();
+};
+
+// Don't poll for the package to stay in front: the LauncherActivity handover
+// leaves about a second with nothing resumed at all, which reads as a crash.
+// Wait for the experience to arrive, then check it sticks around.
+const staysUp = async (serial) => {
+  if (!(await until(() => experienceIsUp(serial), 20_000))) return false;
+  const stop = Date.now() + 2000;
+  while (Date.now() < stop) {
+    await sleep(400);
+    if (!experienceIsUp(serial)) return false;
+  }
+  return true;
+};
 
 for (const serial of serials) {
   for (const port of [METRO_PORT, RELAY_PORT])
@@ -128,13 +187,29 @@ for (const serial of serials) {
     } catch {
       log(`adb reverse failed for ${serial} port ${port}`);
     }
-  try {
-    run(adb, ['-s', serial, 'shell', 'am', 'force-stop', 'host.exp.exponent']);
-    run(adb, ['-s', serial, 'shell', 'am', 'start', '-a', 'android.intent.action.VIEW', '-d', `exp://127.0.0.1:${METRO_PORT}`, 'host.exp.exponent']);
-    log(`${serial} reloaded`);
-  } catch {
-    log(`${serial}: could not open Expo Go — is it installed? (first run: press a in Metro)`);
+
+  // `am force-stop` returns while the activity manager is still tearing the
+  // task down — the launcher only resumes a few hundred ms later. An `am start`
+  // fired into that window is swallowed: the app either never appears or comes
+  // up without reaching the front. That is why this script used to need running
+  // twice — the first run stopped the app and the second, with nothing left to
+  // tear down, opened it. Waiting for the launcher to actually be resumed is
+  // the real signal; a sleep would just be a guess about someone else's work.
+  probe(serial, ['shell', 'am', 'force-stop', APP]);
+  if (!(await until(() => foregroundSettled(serial), 10_000)))
+    log(`${serial}: nothing took the foreground after force-stop — starting anyway`);
+
+  // Verify rather than assume: `am start` reports success for intents that
+  // never produce a visible activity, so the old log lied on exactly the run
+  // that failed.
+  let up = false;
+  for (let attempt = 1; attempt <= 3 && !up; attempt++) {
+    const out = probe(serial, ['shell', 'am', 'start', '-a', 'android.intent.action.VIEW', '-d', `exp://127.0.0.1:${METRO_PORT}`, APP]);
+    if (out.includes('Error:')) log(`${serial}: ${out.trim().split(/\r?\n/).at(-1)}`);
+    up = await staysUp(serial);
+    if (!up && attempt < 3) log(`${serial}: Expo Go did not stay up (attempt ${attempt}) — retrying`);
   }
+  log(up ? `${serial} reloaded` : `${serial}: Expo Go never came to the front — is it installed? (first run: press a in Metro)`);
 }
 
 log('done — the emulators are fetching the current sim-radio bundle');

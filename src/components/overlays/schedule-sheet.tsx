@@ -5,17 +5,20 @@
  * cycled the day through the routines on tap; a real selector is the deliberate
  * replacement, since cycling capped the schedule at the three seed routines.
  */
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 import { CHECK_D, Icon } from '@/components/icon';
 import { Sheet } from '@/components/sheet';
 import { useBackClose } from '@/hooks/use-back-close';
+import { themed, useColors, useThemed } from '@/design/theme';
 import { color, font, wash } from '@/design/tokens';
 import { Btn, H4, missingName } from '@/design/ui';
 import { useStore } from '@/store/workout-store';
 import { DOW } from '@/data/exercises';
 
 export function ScheduleSheet() {
+  const styles = useThemed(sheet);
+  const c = useColors();
   const { s, L, patch, ex, rInfo, exInfo } = useStore();
   const close = () => patch({ dayPick: null });
   useBackClose(close);
@@ -60,7 +63,7 @@ export function ScheduleSheet() {
             <Pressable key={o.key ?? '__rest'} onPress={() => pick(o.key)} style={styles.row}>
               <View style={styles.text}>
                 <Text
-                  style={[styles.name, on && { color: color.accent }, o.missing && missingName]}
+                  style={[styles.name, on && { color: c.accent }, o.missing && missingName(c)]}
                 >
                   {o.text}
                 </Text>
@@ -69,7 +72,7 @@ export function ScheduleSheet() {
                 </Text>
               </View>
               <Text style={styles.meta}>{o.meta}</Text>
-              {on && <Icon d={CHECK_D} size={14} strokeWidth={2.2} color={color.accent} />}
+              {on && <Icon d={CHECK_D} size={14} strokeWidth={2.2} color={c.accent} />}
             </Pressable>
           );
         })}
@@ -80,7 +83,7 @@ export function ScheduleSheet() {
   );
 }
 
-const styles = StyleSheet.create({
+const sheet = themed(() => ({
   list: { marginTop: 12 },
   row: {
     flexDirection: 'row',
@@ -96,4 +99,4 @@ const styles = StyleSheet.create({
   detail: { fontFamily: font.regular, fontSize: 11, color: color.neutral600 },
   meta: { fontFamily: font.regular, fontSize: 11.5, color: color.neutral600 },
   closeBtn: { marginTop: 16, height: 40 },
-});
+}));

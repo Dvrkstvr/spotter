@@ -1,12 +1,12 @@
 {
   "expo": {
-    "name": "Workout Diary",
-    "slug": "workout-diary",
+    "name": "Spotter",
+    "slug": "spotter",
     "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "workoutdiary",
-    "userInterfaceStyle": "dark",
+    "scheme": "spotter",
+    "userInterfaceStyle": "automatic",
     "backgroundColor": "#161826",
     "ios": {
       "icon": "./assets/expo.icon"
@@ -39,7 +39,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Workout Diary uses your photos for your profile picture and your own exercise reference images."
+          "photosPermission": "Spotter uses your photos for your profile picture and your own exercise reference images."
         }
       ],
       [
