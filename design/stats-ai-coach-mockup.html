@@ -222,8 +222,19 @@
     <figure class="phone" aria-label="You tab with the Statistics and Coach card">
       <div class="status"><span>19:23</span><span class="batt"></span></div>
       <div class="screen">
-        <div class="sc-h2">Calvin</div>
-        <div class="sc-sub">29 yrs · 78 kg · 183 cm</div>
+        <div style="display:flex; align-items:center; gap:13px;">
+          <div style="width:58px; height:58px; border-radius:50%; flex:none; border:1px solid var(--a700); background:linear-gradient(150deg, var(--a800), var(--a900) 70%); display:grid; place-items:center; overflow:hidden;">
+            <!-- the photo slot — filled by the picker; initial as the empty-state -->
+            <svg width="58" height="58" viewBox="0 0 58 58">
+              <circle cx="29" cy="22" r="9.5" fill="#9184d9" opacity="0.85"/>
+              <path d="M11 50 q0 -15 18 -15 q18 0 18 15 z" fill="#9184d9" opacity="0.85"/>
+            </svg>
+          </div>
+          <div>
+            <div class="sc-h2">Calvin</div>
+            <div class="sc-sub" style="margin-top:1px;">29 yrs · 78 kg · 183 cm</div>
+          </div>
+        </div>
 
         <div class="card" style="margin-top:14px; border-color:var(--a700); background:linear-gradient(150deg, var(--a900), var(--surface) 62%); padding:12px 14px;">
           <div class="kicker">Statistics &amp; Coach</div>
@@ -262,6 +273,10 @@
       <ul>
         <li>The card sits <strong>under the profile header, above Buddy</strong> — the greyed
           sections are today's You screen, untouched. No sixth tab.</li>
+        <li>The <strong>profile photo tops the screen</strong>, round, beside the name — it is
+          the existing <code>ImageSlot</code> (picker-filled, persisted through
+          <code>photos.ts</code> into <code>images</code>), so there is nothing new to build;
+          the silhouette is its empty state.</li>
         <li>It wears the <strong>hero gradient</strong> (<code>t.heroGradient</code>, accent-900
           → surface at 62%), the same treatment as Today's hero — the one card on the screen
           that leads somewhere big.</li>
