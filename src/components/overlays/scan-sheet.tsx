@@ -8,7 +8,7 @@ import { diffBuddy, shareableSlice } from '@/data/buddy-sync';
 import { connectPeer, scanPeers } from '@/data/buddy-transport';
 import { useBackClose } from '@/hooks/use-back-close';
 import { themed, useThemed } from '@/design/theme';
-import { color, font, motion, wash } from '@/design/tokens';
+import { color, font, linger, motion, tracking, wash } from '@/design/tokens';
 import { Btn, H4, Input } from '@/design/ui';
 import { myName, useStore } from '@/store/workout-store';
 
@@ -43,7 +43,10 @@ export function ScanSheet() {
     cancelAuth();
     patch({ scanning: false });
   };
-  useBackClose(close);
+  // Back pops one layer, the way the Cancel button does: the code stage
+  // first, share mode second. One gesture, one depth — backing out of typing
+  // a code must not silently exit sharing and cost a fresh invite.
+  useBackClose(() => (s.pendingAuth ? cancelAuth() : close()));
 
   // Real radio: live Nearby endpoints, discovered by <BuddyRadio> while this
   // sheet is open — anyone else who also has sharing open. Expo Go: the
@@ -166,7 +169,7 @@ function SearchingDot() {
   return (
     <View style={styles.radar}>
       {[0, 1, 2].map((i) => (
-        <RadarRing key={i} offset={i * 533} />
+        <RadarRing key={i} offset={(i * linger.radar) / 3} />
       ))}
       <View style={styles.dot} />
     </View>
@@ -183,7 +186,7 @@ function RadarRing({ offset }: { offset: number }) {
       Animated.loop(
         Animated.timing(p, {
           toValue: 1,
-          duration: 1600,
+          duration: linger.radar,
           easing: motion.quick.easing,
           useNativeDriver: true,
         })
@@ -224,10 +227,12 @@ const sheet = themed(() => ({
   shareHint: { fontFamily: font.regular, fontSize: 11, color: color.neutral600, marginTop: 6 },
 
   authName: { fontFamily: font.regular, fontSize: 13, color: color.neutral400, marginTop: 10 },
+  // The code you show and the code you type are one ritual — the same em
+  // tracking on both, through tracking() like every other letterSpacing.
   authDigits: {
     fontFamily: font.heading,
     fontSize: 44,
-    letterSpacing: 10,
+    letterSpacing: tracking(44, 0.24),
     color: color.accent,
     textAlign: 'center',
     marginVertical: 18,
@@ -242,7 +247,7 @@ const sheet = themed(() => ({
     textAlign: 'center',
     fontFamily: font.heading,
     fontSize: 30,
-    letterSpacing: 8,
+    letterSpacing: tracking(30, 0.24),
     paddingVertical: 8,
   },
   inviteSent: { color: color.neutral500 },

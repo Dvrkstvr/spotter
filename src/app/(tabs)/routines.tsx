@@ -2,7 +2,7 @@
 import { Pressable, Text, View } from 'react-native';
 
 import { Screen } from '@/components/screen';
-import { DOW } from '@/data/exercises';
+import { DAYS_SHORT } from '@/data/i18n';
 import { themed, useColors, useThemed } from '@/design/theme';
 import { color, font, t, tracking } from '@/design/tokens';
 import { Btn, H2, missingName } from '@/design/ui';
@@ -11,11 +11,11 @@ import { useStore } from '@/store/workout-store';
 export default function RoutinesScreen() {
   const styles = useThemed(sheet);
   const c = useColors();
-  const { s, L, patch, ex, rInfo, exInfo } = useStore();
+  const { s, L, patch, ex, rInfo, exInfo, start } = useStore();
 
   /** Which weekdays this routine is scheduled on. */
   const dayFor = (rid: string) =>
-    DOW.filter((_, i) => s.schedule[i] === rid).join(' · ') || L.unscheduled;
+    DAYS_SHORT[s.lang].filter((_, i) => s.schedule[i] === rid).join(' · ') || L.unscheduled;
 
   const newRoutine = () =>
     patch((st) => {
@@ -59,9 +59,20 @@ export default function RoutinesScreen() {
                   .filter(Boolean)
                   .join(' · ')}
               </Text>
+              {/* Starting used to require the detour through the editor —
+                  the card is where you decide, so the card can start it. */}
+              <View style={styles.cardActions}>
+                <Btn
+                  variant="ghost"
+                  label={`${L.start} ›`}
+                  labelStyle={styles.startLabel}
+                  onPress={() => start(r.id)}
+                />
+              </View>
             </Pressable>
           );
         })}
+        {s.routines.length === 0 && <Text style={styles.empty}>{L.noRoutines}</Text>}
       </View>
     </Screen>
   );
@@ -86,4 +97,13 @@ const sheet = themed(() => ({
   spacer: { flex: 1 },
   cardDays: { fontFamily: font.regular, fontSize: 11, color: color.neutral600 },
   cardSummary: { fontFamily: font.regular, fontSize: 12, color: color.neutral500, marginTop: 5 },
+  cardActions: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 2 },
+  startLabel: { fontSize: 13 },
+  empty: {
+    fontFamily: font.regular,
+    fontSize: 12.5,
+    lineHeight: 12.5 * 1.5,
+    color: color.neutral500,
+    marginTop: 4,
+  },
 }));

@@ -21,15 +21,17 @@ import {
   ViewStyle,
 } from 'react-native';
 
-import { themed, useThemed } from '@/design/theme';
-import { color, fill, font, motion, radius, space, wash } from '@/design/tokens';
+import { themed, useColors, useThemed } from '@/design/theme';
+import { fill, font, linger, motion, Palette, radius, space } from '@/design/tokens';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-const VARIANTS = {
-  primary: { border: color.accent, label: color.accent, fill: wash.accent(20) },
-  secondary: { border: color.divider, label: color.text, fill: wash.text(12) },
-} as const;
+/** Takes the palette for the same reason ui.tsx's `btnVariant` does. */
+const holdVariant = (variant: 'primary' | 'secondary', c: Palette) =>
+  ({
+    primary: { border: c.accent, label: c.accent, fill: c.wash.accent(20) },
+    secondary: { border: c.divider, label: c.text, fill: c.wash.text(12) },
+  })[variant];
 
 export function HoldBtn({
   label,
@@ -39,17 +41,22 @@ export function HoldBtn({
   dashed = false,
   style,
   labelStyle,
+  accessibilityLabel,
+  hitSlop,
 }: {
   label: string;
   onConfirm: () => void;
-  variant?: keyof typeof VARIANTS;
+  variant?: 'primary' | 'secondary';
   hold?: boolean;
   dashed?: boolean;
   style?: StyleProp<ViewStyle>;
   labelStyle?: StyleProp<TextStyle>;
+  /** For glyph labels ("×") that a screen reader shouldn't read literally. */
+  accessibilityLabel?: string;
+  hitSlop?: number;
 }) {
   const styles = useThemed(sheet);
-  const v = VARIANTS[variant];
+  const v = holdVariant(variant, useColors());
   const [fillV] = useState(() => new Animated.Value(0));
   const [scale] = useState(() => new Animated.Value(1));
 
@@ -76,7 +83,7 @@ export function HoldBtn({
     if (hold) {
       Animated.timing(fillV, {
         toValue: 0,
-        duration: 160,
+        duration: linger.rewind,
         easing: motion.tap.easing,
         useNativeDriver: true,
       }).start();
@@ -86,6 +93,8 @@ export function HoldBtn({
   return (
     <AnimatedPressable
       accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      hitSlop={hitSlop}
       onPressIn={start}
       onPressOut={release}
       onPress={hold ? undefined : onConfirm}

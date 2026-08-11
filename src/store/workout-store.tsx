@@ -12,41 +12,73 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useState } from 'react';
+import { AppState } from 'react-native';
 
 import type {
+  Bid,
   BuddyProgress,
   DraftPayload,
+  FirstUp,
+  FirstUpChoice,
   SessionInvite,
   SyncItem,
   TurnChoice,
   TurnMode,
 } from '@/data/buddy-sync';
 import type { BuddySnapshot } from '@/data/buddy-transport';
-import { mergeTurns, routineClosure } from '@/data/buddy-sync';
+import { mergeFirstUp, mergeTurns, routineClosure } from '@/data/buddy-sync';
 import { todayDom, todayISO } from '@/data/date';
 import {
   DEFAULT_GROUPS,
   DEFAULT_KINDS,
   DEFAULT_ROUTINES,
+  blankOf,
   EX,
   Exercise,
   INFO,
+  isSingle,
+  MarkNote,
+  Measure,
+  measureOf,
   Routine,
+  SetMark,
   SetupPair,
   V2_GROUP_KEYS,
 } from '@/data/exercises';
-import { DICT, fmtDayLong, Lang, LangMap, Strings } from '@/data/i18n';
+import { deviceLang, DICT, fmtDayLong, Lang, LangMap, Strings } from '@/data/i18n';
 import { isThemeName, ThemeMode, ThemeName } from '@/design/tokens';
 
 /* ── types ─────────────────────────────────────────────────────────────── */
 
-export type LoggedSet = { w: string; reps: string; done: boolean; prev: string };
+export type LoggedSet = {
+  w: string;
+  reps: string;
+  done: boolean;
+  prev: string;
+  /** This set's own verdict on the weight — see `SetMark`. */
+  mark?: SetMark;
+  /** The words that go with it. Any mark can carry them; none has to. */
+  note?: string;
+  /**
+   * Last time's verdict for this row, denormalised beside `prev` for the same
+   * reason `prev` itself is: the ghost and the mark describe one past set, and
+   * copying them together at session build is what keeps them describing the
+   * same one when a routine asks for more sets than last time had.
+   */
+  prevMark?: MarkNote | null;
+};
 export type SessionExercise = { ex: string; sets: LoggedSet[] };
 export type Session = { rid: string | null; name: string; list: SessionExercise[] };
 export type Summary = {
   name: string;
   stats: { k: string; v: string | number }[];
   note: string;
+  /**
+   * Nothing was ticked, so nothing was logged — the modal drops the "Saved"
+   * kicker, the stats and the confetti. A discarded session should read as a
+   * quiet exit, not spend the payoff moment on a mistake.
+   */
+  empty: boolean;
   /**
    * The finished exercises, kept only when the session was freeform (no
    * routine) and non-empty — the summary modal offers to save them as a new
@@ -61,7 +93,7 @@ export type Labelled = { key: string; labels: LangMap };
  * greyed as the cue that a translation is still wanted.
  */
 export type Resolved = { text: string; missing: boolean };
-export type Draft = { name: string; group: string; kind: string };
+export type Draft = { name: string; group: string; kind: string; measure: Measure };
 /**
  * Collaboration metadata for a routine being built together with the buddy
  * (the routine itself lives in `routines` like any other). Structure — name,
@@ -83,8 +115,36 @@ export type CoDraft = {
 };
 export type Profile = { name: string; age: string; weight: string; height: string };
 export type PickerMode = 'routine' | 'session' | null;
-/** One finished session: which local day it landed on, and from which routine. */
-export type HistoryEntry = { date: string; rid: string | null };
+/** One exercise as it was actually logged: the ticked sets, in order. */
+export type LoggedExercise = { ex: string; sets: string[] };
+/**
+ * One finished session: which local day it landed on, from which routine, and
+ * what was actually done.
+ *
+ * Everything past `rid` is optional, and that is the whole migration: a phone
+ * that has been logging since before the day view existed keeps every entry it
+ * has, and those days simply say so rather than inventing a set list. Nothing
+ * about the stored shape changed for the two keys that were always there, so
+ * this needs no `STORAGE_VERSION` bump.
+ *
+ * The sets are the same "70 × 8" strings `lastLog` and `prev` are written in —
+ * one format for a logged set, read back through `prevNums` / `loggedLine` and
+ * interpreted against the exercise's measure.
+ */
+export type HistoryEntry = {
+  date: string;
+  rid: string | null;
+  /** What the session was called on the day — a routine renamed since doesn't rewrite it. */
+  name?: string;
+  /** Ticked sets per exercise, in session order. Exercises with none are left out. */
+  list?: LoggedExercise[];
+  /** Wall clock, in seconds. The one stat that can't be re-derived. */
+  secs?: number;
+  /** Load volume, as the summary counted it — see `totals`. */
+  vol?: number;
+  /** Who you trained with, if the session was shared. */
+  buddy?: string;
+};
 /** The last logged numbers for one exercise, shown as the "last time" ghosts. */
 export type LastLog = { date: string; sets: string[] };
 
@@ -115,6 +175,17 @@ export type State = {
   history: HistoryEntry[];
   /** last logged numbers per exercise id — real history behind "last time" */
   lastLog: Record<string, LastLog>;
+  /**
+   * Last session's verdicts per exercise id, index for index with
+   * `lastLog[id].sets` — an unmarked set holds its place as a `null` so the
+   * two arrays keep describing the same rows.
+   *
+   * A separate key rather than a richer `LastLog`, and deliberately: `PERSIST`
+   * is additive, so a new key costs a phone that has been logging for months
+   * nothing, where changing the shape of `lastLog` would cost it a
+   * `STORAGE_VERSION` bump and a migration over real training data.
+   */
+  lastMarks: Record<string, (MarkNote | null)[]>;
   daySel: number;
   custom: Exercise[];
   /**
@@ -140,8 +211,21 @@ export type State = {
    * entirely — the row stays yours and nothing counts down.
    */
   restSeconds: number;
+  /**
+   * What a fresh shared session's first-up policy starts as. Only a seed: the
+   * live policy is `firstUp`, a register both phones agree on, and changing it
+   * mid-workout doesn't change this.
+   */
+  firstUpDefault: FirstUp;
   /** Vibrate on the moments worth feeling: a set ticked, a rest run out. */
   haptics: boolean;
+  /**
+   * Let a rest that runs out while the phone is away reach you anyway, as a
+   * notification. The out-of-app half of `haptics`: a suspended JS thread never
+   * feels the moment pass, so the alarm is handed to Android up front — see
+   * `src/data/rest-alarm.ts`.
+   */
+  restAlert: boolean;
   /**
    * Train alone. The whole buddy half of the app — the radio, the roster, the
    * bars, every sheet that can interrupt you — is hidden and switched off.
@@ -190,6 +274,20 @@ export type State = {
    * advisory display only, but the same on both phones (see `mergeTurns`).
    */
   turnModes: Record<string, TurnChoice>;
+  /**
+   * Who leads an exercise when you're level on it — one last-writer-wins
+   * register for the whole session, seeded from `firstUpDefault` and changeable
+   * from the overview sheet by either phone. Like `turnModes` it is advisory
+   * display only, and like `turnModes` both phones must land on the same answer,
+   * which is why the coin's seed travels inside the register (see `leaderOf`).
+   */
+  firstUp: FirstUpChoice;
+  /**
+   * This phone's answer to "who's up?", per exercise, under the `ask` policy.
+   * Own state, never merged — a bid is one phone's opinion, and the buddy's
+   * arrives in their `progress` rather than becoming ours.
+   */
+  myBids: Record<string, Bid>;
   /** the buddy tapped Disconnect; a line says so until it's dismissed */
   buddyLeft: string | null;
   /**
@@ -241,6 +339,7 @@ const initialState: State = {
   summary: null,
   history: [],
   lastLog: {},
+  lastMarks: {},
   daySel: todayDom(),
   custom: [],
   exEdits: {},
@@ -250,14 +349,20 @@ const initialState: State = {
   setups: {},
   videos: {},
   instrOpen: null,
+  // English and dark, not the OS's answer to either — see `firstRunDefaults`,
+  // which is where following the OS actually happens. This object is also what
+  // an existing phone renders before its blob comes back and what an
+  // unreadable blob falls back to, and neither of those may change a setting
+  // the user already has.
   lang: 'en',
-  // Dark, not 'system': the app was dark-only until now, so a phone that has
-  // been logging for months must not turn white because of an update. Anyone
-  // who wants the OS to decide can say so in Settings.
   themeMode: 'dark',
   theme: 'blurple',
   restSeconds: 180,
+  // What the app has always done, now that it has a name: the tie goes to
+  // whoever started the session.
+  firstUpDefault: 'host',
   haptics: true,
+  restAlert: true,
   privateMode: false,
   settingsOpen: false,
   scanning: false,
@@ -277,6 +382,8 @@ const initialState: State = {
   buddyJoin: null,
   buddyProgress: null,
   turnModes: {},
+  firstUp: { policy: 'host', seed: 0, rev: 0 },
+  myBids: {},
   buddyLeft: null,
   rest: null,
   coDraft: null,
@@ -288,6 +395,36 @@ const initialState: State = {
   kinds: DEFAULT_KINDS.map((k) => ({ ...k })),
   images: {},
 };
+
+/**
+ * A session's first-up register, fresh from the setting. The seed is minted
+ * here and only here: every new session re-rolls, so running the same routine
+ * twice doesn't hand the same person every exercise both times.
+ */
+const freshFirstUp = (policy: FirstUp): FirstUpChoice => ({
+  policy,
+  seed: Math.floor(Math.random() * 0x7fffffff),
+  rev: 0,
+});
+
+/**
+ * What a phone that has never run this app starts with, over `initialState`.
+ *
+ * Kept out of `initialState` deliberately. That object serves three cases —
+ * the frame before an existing phone's blob comes back, an unreadable blob,
+ * and a true first run — and only the last one may follow the OS. A phone
+ * that has been logging for months must not turn white because of an update,
+ * and someone who chose English on a German phone must not have it undone.
+ * The hydration path is the only place that can tell the three apart.
+ *
+ * Both are ordinary settings the moment they land: changing either in
+ * Settings writes it to the blob, and the blob is what every later launch
+ * reads. Nothing re-asks the OS afterwards.
+ */
+const firstRunDefaults = (): Partial<State> => ({
+  lang: deviceLang(),
+  themeMode: 'system',
+});
 
 type Patch = Partial<State> | ((s: State) => Partial<State> | null);
 
@@ -314,9 +451,10 @@ const STORAGE_KEY_V1 = 'workout-diary/v1';
 // phone that has been logging since v2 keeps its data and starts the new maps
 // empty. Anything that changes the *shape* of an existing key needs a version.
 const PERSIST = [
-  'routines', 'schedule', 'history', 'lastLog', 'custom', 'profile',
+  'routines', 'schedule', 'history', 'lastLog', 'lastMarks', 'custom', 'profile',
   'setups', 'videos', 'lang', 'groups', 'kinds', 'images', 'exEdits', 'cueEdits',
-  'knownBuddies', 'themeMode', 'theme', 'restSeconds', 'haptics', 'privateMode',
+  'knownBuddies', 'themeMode', 'theme', 'restSeconds', 'firstUpDefault', 'haptics', 'restAlert',
+  'privateMode',
 ] as const satisfies readonly (keyof State)[];
 
 type Persisted = Pick<State, (typeof PERSIST)[number]>;
@@ -427,29 +565,150 @@ export const num = (v: string | number, fb: number) => {
   return isNaN(n) ? fb : n;
 };
 
-/** Split a "70 × 8" summary back into its weight and reps. BW counts as 0. */
-export const prevNums = (prev: string) => {
-  const m = String(prev).split('×');
-  return { w: (m[0] || '').trim().replace('BW', '0'), r: (m[1] || '').trim() };
+/**
+ * One routine line, written the way its measure reads: "4 × 8 · 70 kg",
+ * "3 × 45 sec", "5 km · 30 min", "90 min".
+ *
+ * Every screen that previews a routine — the Today hero, the plan, the
+ * routine editor — was formatting this inline as `sets × reps · kg`, which a
+ * duration entry would render as "1 × 90 · BW". One helper so there is one
+ * place to be right.
+ */
+/** A set mark spelled out. Takes `L` for the same reason `measureLabel` does. */
+export const markLabel = (m: SetMark, L: Strings) =>
+  ({ up: L.markUp, down: L.markDown, ok: L.markOk, note: L.markNote })[m];
+
+/** The measure spelled out, for a picker. Takes `L` so it can't be hoisted. */
+export const measureLabel = (m: Measure, L: Strings) =>
+  ({
+    load: L.measureLoad,
+    time: L.measureTime,
+    distance: L.measureDistance,
+    duration: L.measureDuration,
+  })[m];
+
+/**
+ * A compact unit tag for a routine row — '' for a plain lift.
+ *
+ * The routine editor is one grid with shared column headers, but a routine can
+ * mix measures: Full Body A ends on a plank, where "reps" means seconds and
+ * "kg" means nothing. A per-row tag is the only honest label a shared header
+ * can carry, short of a column per measure.
+ */
+export const unitTag = (m: Measure, L: Strings) =>
+  m === 'load'
+    ? ''
+    : m === 'time'
+      ? L.unitSec
+      : m === 'duration'
+        ? L.unitMin
+        : `${L.unitKm} × ${L.unitMin}`;
+
+export const schemeLine = (
+  it: { sets: number; reps: number; w: number },
+  m: Measure,
+  L: Strings,
+  /**
+   * Drop the set count. For the co-created draft, where the sets belong to
+   * both of you and only the reps and kg are yours — printing "1 ×" there
+   * would claim a set count that line does not own.
+   */
+  noSets = false
+): string => {
+  // One set is the usual case for anything measured in distance or minutes,
+  // and "1 ×" in front of a run reads as noise rather than information.
+  const pre = noSets || it.sets <= 1 ? '' : `${it.sets} × `;
+  if (m === 'duration') return `${it.reps} ${L.unitMin}`;
+  if (m === 'time') return `${pre}${it.reps} ${L.unitSec}${it.w ? `  ·  ${fmt(it.w)} ${L.unitKg}` : ''}`;
+  if (m === 'distance')
+    return `${pre}${it.w ? `${fmt(it.w)} ${L.unitKm}  ·  ` : ''}${it.reps} ${L.unitMin}`;
+  // A lift keeps its "4 × 8", where the set count is the point.
+  const n = noSets ? `${it.reps}` : `${it.sets} × ${it.reps}`;
+  return `${n}  ·  ${it.w ? `${fmt(it.w)} ${L.unitKg}` : blankOf(m)}`;
 };
 
-/** Build a fresh session from a routine, with "last time" ghosts filled in. */
+/**
+ * Split a "70 × 8" summary back into its two fields. BW counts as 0; a dash
+ * is a `distance` set with no distance recorded, and has to come back empty
+ * rather than as the character itself — copying "—" into the field would put
+ * an em-dash in a numeric input.
+ */
+export const prevNums = (prev: string) => {
+  const left = (prev || '').split('×')[0]?.trim() ?? '';
+  const m = String(prev).split('×');
+  return {
+    w: left === '—' ? '' : left.replace('BW', '0'),
+    r: (m[1] || '').trim(),
+  };
+};
+
+/** mm:ss. The live session's clock and every logged one are the same number. */
+export const fmtClock = (secs: number) =>
+  `${String(Math.floor(secs / 60)).padStart(2, '0')}:${String(secs % 60).padStart(2, '0')}`;
+
+/**
+ * One logged set, written out with its units: "70 kg × 8", "BW × 20",
+ * "5 km × 30 min", "90 min".
+ *
+ * `schemeLine` does this for a *plan*, where the numbers are a routine item and
+ * the set count is part of the sentence. This does it for a set that actually
+ * happened, from the stored "70 × 8" string — and it carries its units on its
+ * back, because the day view lists them loose rather than under a column
+ * header, and a day can mix all four measures.
+ *
+ * An empty left field keeps whichever blank `blankOf` wrote: BW is a fact
+ * worth printing, an unrecorded distance is not, so the dash drops out and
+ * leaves the minutes standing alone.
+ */
+export const loggedLine = (logged: string, m: Measure, L: Strings): string => {
+  const [rawL = '', rawR = ''] = String(logged).split('×').map((x) => x.trim());
+  if (m === 'duration') return `${rawR} ${L.unitMin}`;
+  const right = m === 'load' ? rawR : `${rawR} ${m === 'time' ? L.unitSec : L.unitMin}`;
+  const left =
+    rawL === '—' ? '' : rawL === 'BW' ? 'BW' : `${rawL} ${m === 'distance' ? L.unitKm : L.unitKg}`;
+  return left ? `${left} × ${right}` : right;
+};
+
+/**
+ * Build a fresh session from a routine, with "last time" ghosts filled in.
+ *
+ * A row somebody typed numbers into (`planned`) opens with them already in the
+ * fields, so the weight two people sat down and agreed on is the one standing
+ * in front of them rather than a figure that stayed in the editor. The ghost
+ * still says what *you* did last time and tapping it still copies that back
+ * over the plan — an opening bid, not a cage. A row nobody touched carries the
+ * picker's defaults, which are no one's decision, and stays out of the way.
+ */
 const sessionFrom = (s: State, r: Routine): Session => {
-  const lastOf = (id: string) =>
-    s.lastLog[id]?.sets ?? [...EX, ...s.custom].find((e) => e.id === id)?.lastSets ?? [];
+  const exOf = (id: string) => [...EX, ...s.custom].find((e) => e.id === id);
+  const lastOf = (id: string) => s.lastLog[id]?.sets ?? exOf(id)?.lastSets ?? [];
   return {
     rid: r.id,
     name: resolveNames(r.names, s.lang).text,
     list: r.items.map((it) => {
       const last = lastOf(it.ex);
+      const marks = s.lastMarks[it.ex] ?? [];
+      // Nothing goes in the left field when the measure hasn't got one, or
+      // when the plan's own figure is 0 — empty is already how bodyweight and
+      // an unrecorded distance are written, and it keeps the BW ghost.
+      const left = !isSingle(measureOf(exOf(it.ex))) && it.w > 0;
+      const w = it.planned && left ? fmt(it.w) : '';
+      const reps = it.planned ? String(it.reps) : '';
       return {
         ex: it.ex,
-        sets: Array.from({ length: it.sets }, (_, k) => ({
-          w: '',
-          reps: '',
-          done: false,
-          prev: last[k] || last[0] || `${fmt(it.w)} × ${it.reps}`,
-        })),
+        sets: Array.from({ length: it.sets }, (_, k) => {
+          // A plan asking for more sets than last time had falls back to the
+          // first ghost; the mark falls back with it, or the arrow on the row
+          // would be a verdict on a different set.
+          const src = last[k] ? k : 0;
+          return {
+            w,
+            reps,
+            done: false,
+            prev: last[src] || `${fmt(it.w)} × ${it.reps}`,
+            prevMark: marks[src] ?? null,
+          };
+        }),
       };
     }),
   };
@@ -462,12 +721,19 @@ export const myName = (s: State) => s.profile.name.trim() || 'Spotter';
  * Adopt a peer's version of a routine while keeping this phone's own numbers:
  * structure (name, exercise list, order, set counts) is theirs, reps and
  * weight stay local wherever the exercise was already in the local copy.
+ *
+ * `planned` travels with the numbers it describes. On a row that arrives from
+ * the buddy their figure is the only one this phone has, so it lands as the
+ * starting point — but unmarked: it is their decision, not this phone's, and
+ * a weight nobody here agreed to must not turn up pre-typed in their session.
  */
 const mergeRoutine = (local: Routine | undefined, incoming: Routine): Routine => ({
   ...incoming,
   items: incoming.items.map((it) => {
     const mine = local?.items.find((x) => x.ex === it.ex);
-    return mine ? { ...it, reps: mine.reps, w: mine.w } : { ...it };
+    return mine
+      ? { ...it, reps: mine.reps, w: mine.w, planned: mine.planned }
+      : { ...it, planned: undefined };
   }),
 });
 
@@ -529,7 +795,11 @@ function useWorkoutState() {
         return v1 ? migrateV2(migrateV1(JSON.parse(v1))) : null;
       })
       .then((data) => {
-        if (alive && data) patch(data);
+        // `null` here is the one thing `initialState` cannot know: the read
+        // succeeded and there was nothing at any version, so this phone has
+        // never run the app. That — and only that — is when the OS gets to
+        // pick the language and the light/dark mode.
+        if (alive) patch(data ?? firstRunDefaults());
       })
       .catch(() => {}) // unreadable blob → run on the seed rather than crash
       .finally(() => {
@@ -573,15 +843,31 @@ function useWorkoutState() {
   const exInfo = (e: Exercise): Resolved => resolveNames(e.names, state.lang, e.name);
   const rInfo = (r: Routine): Resolved => resolveNames(r.names, state.lang);
 
-  /** "Last time" for an exercise — really logged history first, then the seed. */
-  const lastFor = (id: string): { date: string | null; sets: string[] } => {
+  /**
+   * "Last time" for an exercise — really logged history first, then the seed.
+   *
+   * `marks` runs index for index with `sets`, and is empty for the seeded
+   * library: nobody was there to judge those.
+   */
+  const lastFor = (
+    id: string
+  ): { date: string | null; sets: string[]; marks: (MarkNote | null)[] } => {
     const logged = state.lastLog[id];
-    if (logged) return { date: logged.date, sets: logged.sets };
-    return { date: null, sets: ex(id)?.lastSets ?? [] };
+    if (logged) return { date: logged.date, sets: logged.sets, marks: state.lastMarks[id] ?? [] };
+    return { date: null, sets: ex(id)?.lastSets ?? [], marks: [] };
   };
 
   /** Whether a given local day (ISO) has a logged session. */
   const doneOn = (iso: string) => state.history.some((h) => h.date === iso);
+
+  /**
+   * Every session logged on a local day, each with its index in `history`.
+   *
+   * The index is what `saveDayAsRoutine` writes back through: history entries
+   * carry no id of their own, and a day can hold more than one session.
+   */
+  const sessionsOn = (iso: string) =>
+    state.history.map((h, i) => ({ h, i })).filter((x) => x.h.date === iso);
 
   /** Distinct days with a logged session in the current month. */
   const loggedThisMonth = () => {
@@ -655,6 +941,40 @@ function useWorkoutState() {
       return { session: { ...s.session, list } };
     });
   };
+
+  /**
+   * Drop an exercise from the live session — the undo for a wrong pick, which
+   * otherwise caps progress below 100% for the rest of the workout. Guarded to
+   * exercises with nothing ticked: a set that was actually lifted is a fact,
+   * and facts don't leave through an ×. Safe with a buddy for the same reason
+   * adding is: `progress` is whole-state and keyed by exercise id.
+   */
+  const removeSessionEx = (i: number) =>
+    patch((s) => {
+      if (!s.session) return null;
+      const entry = s.session.list[i];
+      if (!entry || entry.sets.some((x) => x.done)) return null;
+      const list = s.session.list.filter((_, k) => k !== i);
+      return {
+        session: { ...s.session, list },
+        active: Math.max(0, Math.min(s.active > i ? s.active - 1 : s.active, list.length - 1)),
+      };
+    });
+
+  /**
+   * Delete a routine. The schedule slots pointing at it clear, a co-draft of
+   * it ends, and the editor closes with it. `history` is untouched on
+   * purpose: entries carry the name frozen at log time, and a deleted rid
+   * there is already the "routine deleted since" case the plan screen and
+   * save-as-routine both handle.
+   */
+  const deleteRoutine = (rid: string) =>
+    patch((s) => ({
+      routines: s.routines.filter((r) => r.id !== rid),
+      schedule: Object.fromEntries(Object.entries(s.schedule).filter(([, v]) => v !== rid)),
+      ...(s.coDraft?.rid === rid ? { coDraft: null } : {}),
+      routineOpen: s.routineOpen === rid ? null : s.routineOpen,
+    }));
 
   const mutRoutine = (rid: string, fn: (r: Routine) => void) => {
     patch((s) => ({
@@ -794,6 +1114,8 @@ function useWorkoutState() {
         buddyJoin: withBuddy ? ('joined' as const) : null,
         buddyProgress: null,
         turnModes: {},
+        firstUp: freshFirstUp(s.firstUpDefault),
+        myBids: {},
         buddyLeft: null,
         rest: null,
         sessionMin: false,
@@ -835,6 +1157,10 @@ function useWorkoutState() {
         buddyJoin: null,
         buddyProgress: null,
         turnModes: {},
+        // The host's register arrives with their next broadcast and wins the
+        // rev-0 tie, so this is only what the guest shows for one message.
+        firstUp: freshFirstUp(s.firstUpDefault),
+        myBids: {},
         // The clock this rest was stamped against is being set back to zero.
         rest: null,
         sessionMin: false,
@@ -869,6 +1195,40 @@ function useWorkoutState() {
     patch((s) => {
       const merged = mergeTurns(s.turnModes, theirs, s.sessionRole);
       return merged ? { turnModes: merged } : null;
+    });
+
+  /* — who goes first (shared, advisory) — */
+
+  /**
+   * Change the policy for this session. Mints a new seed with it — the two
+   * always travel together (see `FirstUpChoice`), and it means picking Random
+   * a second time re-rolls rather than sitting on the same coin. Bids go with
+   * it: the question has changed, so the old answers aren't answers to it.
+   */
+  const setFirstUp = (policy: FirstUp) =>
+    patch((s) => ({
+      firstUp: { ...freshFirstUp(policy), rev: s.firstUp.rev + 1 },
+      myBids: {},
+    }));
+
+  /** Adopt the buddy's register if theirs wins. Adopting never bumps a rev. */
+  const mergeFirstUpFrom = (theirs: FirstUpChoice | undefined) =>
+    patch((s) => {
+      const merged = mergeFirstUp(s.firstUp, theirs, s.sessionRole);
+      return merged ? { firstUp: merged } : null;
+    });
+
+  /**
+   * Answer "who's up?" for an exercise. Tapping the same answer again takes it
+   * back — the row returns and you can say the other thing, which is the only
+   * way out of a misfire, since a bid is otherwise final for the exercise.
+   */
+  const bidFirst = (exId: string, bid: Bid) =>
+    patch((s) => {
+      const next = { ...s.myBids };
+      if (next[exId] === bid) delete next[exId];
+      else next[exId] = bid;
+      return { myBids: next };
     });
 
   /* — backup — */
@@ -917,7 +1277,7 @@ function useWorkoutState() {
    * being asked, so there is nothing to reconnect behind your back.
    */
   const endPairing = (left: string | null = null) =>
-    patch(() => ({
+    patch((s) => ({
       buddy: null,
       buddyEndpoint: null,
       buddySnapshot: null,
@@ -934,6 +1294,8 @@ function useWorkoutState() {
       buddyJoin: null,
       buddyProgress: null,
       turnModes: {},
+      firstUp: freshFirstUp(s.firstUpDefault),
+      myBids: {},
       coDraft: null,
     }));
 
@@ -1076,6 +1438,8 @@ function useWorkoutState() {
         buddyJoin: 'joined' as const,
         buddyProgress: null,
         turnModes: {},
+        firstUp: freshFirstUp(s.firstUpDefault),
+        myBids: {},
         // Same reset as `start`: a rest is stamped against `elapsed`.
         rest: null,
         sessionMin: false,
@@ -1083,27 +1447,32 @@ function useWorkoutState() {
     });
   };
 
-  /** Ticked sets, total sets, and total volume for the live session. */
+  /**
+   * Ticked sets, total sets, and total volume for the live session.
+   *
+   * Only `load` exercises reach the volume: kg × seconds and km × minutes are
+   * not units, so adding a plank or a run into that total would quietly make
+   * the summary's one number mean nothing.
+   */
   const totals = () => {
     const list = state.session?.list ?? [];
     let done = 0;
     let all = 0;
     let vol = 0;
-    list.forEach((e) =>
+    list.forEach((e) => {
+      const counts = measureOf(ex(e.ex)) === 'load';
       e.sets.forEach((s) => {
         all++;
         if (s.done) {
           done++;
-          vol += num(s.w, 0) * num(s.reps, 0);
+          if (counts) vol += num(s.w, 0) * num(s.reps, 0);
         }
-      })
-    );
+      });
+    });
     return { done, all, vol };
   };
 
-  const mm = String(Math.floor(state.elapsed / 60)).padStart(2, '0');
-  const ss = String(state.elapsed % 60).padStart(2, '0');
-  const clock = `${mm}:${ss}`;
+  const clock = fmtClock(state.elapsed);
 
   const finishSession = () => {
     const L = DICT[state.lang] ?? DICT.en;
@@ -1113,13 +1482,39 @@ function useWorkoutState() {
       if (!s.session) return null;
 
       // Write the ticked numbers back per exercise — these become the "last
-      // time" ghosts, replacing the static seed the design shipped with.
+      // time" ghosts, replacing the static seed the design shipped with — and
+      // keep the same list on the day itself, which is what the plan screen
+      // reads back. `lastLog` only ever holds the *latest* session for an
+      // exercise; a diary has to remember the ones before it too.
       const lastLog = { ...s.lastLog };
+      const lastMarks = { ...s.lastMarks };
+      const logged: LoggedExercise[] = [];
       for (const e of s.session.list) {
-        const sets = e.sets
-          .filter((x) => x.done)
-          .map((x) => `${num(x.w, 0) ? fmt(num(x.w, 0)) : 'BW'} × ${Math.round(num(x.reps, 0))}`);
-        if (sets.length) lastLog[e.ex] = { date: today, sets };
+        // An empty left field means bodyweight on a lift or a hold, and an
+        // unrecorded distance on a run — same blank, two different facts, so
+        // the measure decides which one gets written down. A `duration` set
+        // has no left field at all and always takes the dash, which is what
+        // keeps its stored string the same shape as everything else.
+        const blank = blankOf(measureOf(ex(e.ex)));
+        const ticked = e.sets.filter((x) => x.done);
+        const sets = ticked.map(
+          (x) => `${num(x.w, 0) ? fmt(num(x.w, 0)) : blank} × ${Math.round(num(x.reps, 0))}`
+        );
+        if (sets.length) {
+          lastLog[e.ex] = { date: today, sets };
+          logged.push({ ex: e.ex, sets });
+          // The verdicts ride alongside, one slot per string above. An
+          // exercise nobody marked this time loses the key rather than
+          // keeping it: last month's "go heavier" beside this month's
+          // numbers is advice about a session that no longer exists.
+          const marks = ticked.map((x) =>
+            x.mark
+              ? { mark: x.mark, ...(x.note?.trim() ? { note: x.note.trim() } : {}) }
+              : null
+          );
+          if (marks.some(Boolean)) lastMarks[e.ex] = marks;
+          else delete lastMarks[e.ex];
+        }
       }
 
       return {
@@ -1128,9 +1523,23 @@ function useWorkoutState() {
         // it has to carry what Discard did: a session where nothing was ticked
         // never happened, and must not land on the calendar as a training day.
         history: tot.done
-          ? [...s.history, { date: today, rid: s.session.rid }]
+          ? [
+              ...s.history,
+              {
+                date: today,
+                rid: s.session.rid,
+                // The name as it read today. A routine renamed next month must
+                // not rewrite what this workout was called when it happened.
+                name: s.session.name,
+                list: logged,
+                secs: s.elapsed,
+                vol: Math.round(tot.vol),
+                ...(s.sessionShared && s.buddy ? { buddy: s.buddy } : {}),
+              },
+            ]
           : s.history,
         lastLog,
+        lastMarks,
         summary: {
           name: s.session.name,
           stats: [
@@ -1141,6 +1550,7 @@ function useWorkoutState() {
           note: tot.done
             ? L.savedNote.replace('{date}', fmtDayLong(s.lang, new Date()))
             : L.savedEmpty,
+          empty: !tot.done,
           saveable:
             s.session.rid === null && s.session.list.length > 0 ? s.session.list : null,
         },
@@ -1180,13 +1590,86 @@ function useWorkoutState() {
     });
   };
 
+  /**
+   * Keep a logged day as a routine — the same offer the summary makes, still
+   * open a week later from the plan screen.
+   *
+   * The summary saves the session that is still on screen, sets never ticked
+   * included, because that is the shape you built. This saves what actually
+   * happened: the ticked sets, and nothing else. Numbers come from the last
+   * set of each exercise — the one you finished on, which is the one worth
+   * repeating — and there is no ghost to fall back on, because a set that was
+   * logged always has its own numbers.
+   *
+   * A session with no routine of its own is *filed* under the new one as well:
+   * a freeform workout, or one whose routine has since been deleted, gets the
+   * hole in its history filled in. A session that already belongs to a live
+   * routine keeps it — saving a variant under a new name must not rewrite what
+   * the day was.
+   */
+  const saveDayAsRoutine = (i: number, name: string) =>
+    patch((s) => {
+      const h = s.history[i];
+      const items = (h?.list ?? [])
+        .filter((e) => e.sets.length > 0)
+        .map((e) => {
+          const n = prevNums(e.sets[e.sets.length - 1]);
+          return {
+            ex: e.ex,
+            sets: e.sets.length,
+            reps: Math.round(num(n.r, 8)),
+            w: num(n.w, 0),
+          };
+        });
+      if (items.length === 0) return null;
+      const L = DICT[s.lang] ?? DICT.en;
+      const label = name.trim() || L.newRoutine;
+      const id = `r${Date.now()}`;
+      const orphan = !s.routines.some((r) => r.id === h.rid);
+      return {
+        routines: [...s.routines, { id, names: { [s.lang]: label }, items }],
+        history: orphan
+          ? s.history.map((x, k) => (k === i ? { ...x, rid: id, name: label } : x))
+          : s.history,
+      };
+    });
+
   /* — the elapsed clock, ticking only while a session is open — */
 
+  /**
+   * Counted in whole seconds of *wall time*, not in ticks that happened to
+   * arrive. Android suspends the JS thread the moment the screen locks, and an
+   * interval that adds 1 per firing simply stops — taking the rest countdown
+   * with it, since that is measured in `elapsed` (see `rest`). Adding the gap
+   * since the last tick instead means a minute spent locked is still a minute.
+   *
+   * Deliberately a delta rather than a `startedAt` anchor in state: `elapsed: 0`
+   * is written from four places, and none of them has to learn a companion
+   * field for this to be right — after a reset the clock simply counts up from
+   * 0 again, because only the gap since the last tick is ever added.
+   *
+   * `last` keeps the sub-second remainder, so it can't drift; the AppState
+   * listener is what makes the correction land on the frame the screen lights
+   * up rather than whenever a throttled interval next fires.
+   */
   const hasSession = state.session !== null;
   useEffect(() => {
     if (!hasSession) return;
-    const id = setInterval(() => patch((s) => ({ elapsed: s.elapsed + 1 })), 1000);
-    return () => clearInterval(id);
+    let last = Date.now();
+    const advance = () => {
+      const gained = Math.floor((Date.now() - last) / 1000);
+      if (gained <= 0) return;
+      last += gained * 1000;
+      patch((s) => ({ elapsed: s.elapsed + gained }));
+    };
+    const id = setInterval(advance, 1000);
+    const sub = AppState.addEventListener('change', (st) => {
+      if (st === 'active') advance();
+    });
+    return () => {
+      clearInterval(id);
+      sub.remove();
+    };
   }, [hasSession, patch]);
 
   const L: Strings = DICT[state.lang] ?? DICT.en;
@@ -1210,6 +1693,7 @@ function useWorkoutState() {
     rInfo,
     lastFor,
     doneOn,
+    sessionsOn,
     loggedThisMonth,
     setup,
     cues,
@@ -1219,7 +1703,9 @@ function useWorkoutState() {
     exEdited,
     resetEx,
     mutSession,
+    removeSessionEx,
     mutRoutine,
+    deleteRoutine,
     moveRoutineItem,
     reorder,
     importFromPeer,
@@ -1231,6 +1717,9 @@ function useWorkoutState() {
     turnMode,
     toggleTurnMode,
     mergeTurnModes,
+    setFirstUp,
+    mergeFirstUpFrom,
+    bidFirst,
     rememberBuddy,
     endPairing,
     forgetBuddy,
@@ -1243,6 +1732,7 @@ function useWorkoutState() {
     clock,
     finishSession,
     saveAsRoutine,
+    saveDayAsRoutine,
   };
 }
 

@@ -7,12 +7,12 @@ import { CHECK_D, Icon } from '@/components/icon';
 import { Screen } from '@/components/screen';
 import { routineEquals } from '@/data/buddy-sync';
 import { daysSince, todayDow, todayISO } from '@/data/date';
-import { DOW } from '@/data/exercises';
-import { fmtDayShort, fmtLastDone } from '@/data/i18n';
+import { measureOf } from '@/data/exercises';
+import { countN, DAYS_SHORT, fmtDayShort, fmtLastDone } from '@/data/i18n';
 import { themed, useColors, useThemed } from '@/design/theme';
 import { color, elevation, font, t, tracking } from '@/design/tokens';
 import { Btn, CardKicker, H2, H3, H6, missingName } from '@/design/ui';
-import { fmt, useStore } from '@/store/workout-store';
+import { schemeLine, useStore } from '@/store/workout-store';
 
 export default function TodayScreen() {
   const styles = useThemed(sheet);
@@ -25,12 +25,19 @@ export default function TodayScreen() {
   const tr = routine(todayRid ?? null);
 
   /**
-   * Whether today has a logged session. The design has no completed state for
-   * this card — it always reads "planned" — so this treatment is an addition,
-   * built from the design's own cues: the accent check from a ticked set, and
-   * the demotion of a spent primary button to secondary.
+   * Whether the card's own workout happened. The design has no completed
+   * state for this card — it always reads "planned" — so this treatment is an
+   * addition, built from the design's own cues: the accent check from a
+   * ticked set, and the demotion of a spent primary button to secondary.
+   *
+   * Gated on the routine the card names, not on any session: a morning
+   * freeform run must not stamp "Completed today" on an untouched Push Day.
+   * A rest-day card names nothing, so there any training counts — and the
+   * calendar dot keeps the plain any-session meaning on purpose.
    */
-  const doneToday = doneOn(todayISO());
+  const doneToday = todayRid
+    ? s.history.some((h) => h.date === todayISO() && h.rid === todayRid)
+    : doneOn(todayISO());
 
   /** Days since this routine was last logged, or null if it never was. */
   const lastDays = (() => {
@@ -56,15 +63,19 @@ export default function TodayScreen() {
     ? {
         name: trName!.text,
         missing: trName!.missing,
-        summary: `${tr.items.length} ${L.exCount} · ${tr.items.reduce((a, i) => a + i.sets, 0)} ${L.setCount}`,
+        summary: `${countN(tr.items.length, L.exCountOne, L.exCount)} · ${countN(
+          tr.items.reduce((a, i) => a + i.sets, 0),
+          L.setCountOne,
+          L.setCount
+        )}`,
         lines: tr.items.map((i) => ({
           ...exInfo(ex(i.ex)!),
-          scheme: `${i.sets} × ${i.reps}  ·  ${i.w ? `${fmt(i.w)} kg` : 'BW'}`,
+          scheme: schemeLine(i, measureOf(ex(i.ex)), L),
         })),
       }
     : { name: L.restDay, missing: false, summary: '', lines: [] };
 
-  const weekRows = DOW.map((d, i) => {
+  const weekRows = DAYS_SHORT[s.lang].map((d, i) => {
     const rid = s.schedule[i];
     const r = routine(rid ?? null);
     const rn = r ? rInfo(r) : null;
@@ -75,7 +86,7 @@ export default function TodayScreen() {
       name: rn ? rn.text : L.rest,
       missing: rn?.missing ?? false,
       nameColor: r ? (isToday ? c.text : c.neutral300) : c.neutral600,
-      meta: r ? `${r.items.length} ${L.exCount}` : '',
+      meta: r ? countN(r.items.length, L.exCountOne, L.exCount) : '',
     };
   });
 
@@ -162,7 +173,9 @@ export default function TodayScreen() {
       </LinearGradient>
 
       <View style={styles.sectionRow}>
-        <H6 style={styles.sectionHead}>{L.thisWeek}</H6>
+        {/* Same list, same rows, same name as the Plan screen's — two labels
+            for one thing made the inert copy here read as a broken one. */}
+        <H6 style={styles.sectionHead}>{L.weeklyPlan}</H6>
         <Btn
           variant="ghost"
           label={`${L.seePlan} ›`}
@@ -174,7 +187,10 @@ export default function TodayScreen() {
 
       <View style={styles.week}>
         {weekRows.map((w, i) => (
-          <View key={i} style={styles.row}>
+          // The same tap as Plan's weekly rows: pick that day's routine. The
+          // rows looked identical to Plan's and did nothing, which reads as
+          // the tap not registering rather than as a design choice.
+          <Pressable key={i} onPress={() => patch({ dayPick: i })} style={styles.row}>
             <Text style={[styles.rowDay, { color: w.dayColor }]}>{w.day}</Text>
             <Text
               style={[styles.rowName, { color: w.nameColor }, w.missing && missingName(c)]}
@@ -183,7 +199,7 @@ export default function TodayScreen() {
               {w.name}
             </Text>
             <Text style={styles.rowMeta}>{w.meta}</Text>
-          </View>
+          </Pressable>
         ))}
       </View>
 
@@ -193,7 +209,8 @@ export default function TodayScreen() {
           {L.chooseWorkout}
         </Text>
         <Text style={styles.chooseCount}>
-          {s.routines.length} {L.routines.toLowerCase()}
+          {/* Its own key, not `.toLowerCase()` — German keeps the capital. */}
+          {s.routines.length} {L.routinesWord}
         </Text>
         <Text style={styles.chevron}>›</Text>
       </Pressable>

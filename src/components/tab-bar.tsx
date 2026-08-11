@@ -16,7 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon } from '@/components/icon';
 import { TABS } from '@/data/exercises';
 import { themed, useColors, useThemed } from '@/design/theme';
-import { color, font, motion, tracking, wash } from '@/design/tokens';
+import { color, font, linger, motion, tracking, wash } from '@/design/tokens';
 import { useStore } from '@/store/workout-store';
 
 const DASH_W = 28;
@@ -174,7 +174,7 @@ function TabGlyph({ focused, children }: { focused: boolean; children: ReactNode
       Animated.sequence([
         Animated.timing(y, {
           toValue: -3,
-          duration: 100,
+          duration: linger.rise,
           easing: motion.tap.easing,
           useNativeDriver: true,
         }),

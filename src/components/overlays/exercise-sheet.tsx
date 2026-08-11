@@ -14,13 +14,15 @@
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
+import { Icon, MARK_D } from '@/components/icon';
 import { Sheet } from '@/components/sheet';
+import { measureOf } from '@/data/exercises';
 import { useBackClose } from '@/hooks/use-back-close';
 import { fmtDayTiny } from '@/data/i18n';
 import { themed, useColors, useThemed } from '@/design/theme';
-import { color, font, wash } from '@/design/tokens';
-import { Btn, Field, H4, H6, Input, missingName, Seg, Tag } from '@/design/ui';
-import { resolveNames, useStore } from '@/store/workout-store';
+import { color, font, slop, wash } from '@/design/tokens';
+import { Btn, Chip, Field, H4, H6, Input, missingName, Tag } from '@/design/ui';
+import { measureLabel, resolveNames, useStore } from '@/store/workout-store';
 
 export function ExerciseSheet() {
   const styles = useThemed(sheet);
@@ -90,51 +92,49 @@ export function ExerciseSheet() {
 
       {editing ? (
         <>
+          {/* Wrapping chips, not a Seg: twenty groups in a single
+              non-wrapping row run off the screen, and a group past the clip
+              can't be picked at all. Same treatment as equipment below. */}
           <H6 style={styles.head}>{L.muscleGroup}</H6>
-          <Seg
-            options={s.groups
+          <View style={styles.chips}>
+            {s.groups
               .map((g) => ({ ...g, r: resolveNames(g.labels, s.lang) }))
               .filter((g) => g.r.text.trim())
-              .map((g) => ({
-                key: g.key,
-                label: g.r.text,
-                on: e.group === g.key,
-                pick: () => editEx(e.id, { group: g.key }),
-              }))}
-          />
+              .map((g) => (
+                <Chip
+                  key={g.key}
+                  label={g.r.text}
+                  on={e.group === g.key}
+                  missing={g.r.missing}
+                  onPress={() => editEx(e.id, { group: g.key })}
+                />
+              ))}
+          </View>
 
           <H6 style={styles.head}>{L.equipment}</H6>
           <View style={styles.chips}>
             {s.kinds
               .map((k) => ({ ...k, r: resolveNames(k.labels, s.lang) }))
               .filter((k) => k.r.text.trim())
-              .map((k) => {
-                const on = e.kind === k.key;
-                return (
-                  <Pressable
-                    key={k.key}
-                    onPress={() => editEx(e.id, { kind: k.key })}
-                    style={[
-                      styles.chip,
-                      {
-                        backgroundColor: on ? c.wash.accent(16) : 'transparent',
-                        borderColor: on ? c.accent : c.divider,
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.chipLabel,
-                        { color: on ? c.accent200 : c.neutral400 },
-                        k.r.missing && missingName(c),
-                      ]}
-                    >
-                      {k.r.text}
-                    </Text>
-                  </Pressable>
-                );
-              })}
+              .map((k) => (
+                <Chip
+                  key={k.key}
+                  label={k.r.text}
+                  on={e.kind === k.key}
+                  missing={k.r.missing}
+                  onPress={() => editEx(e.id, { kind: k.key })}
+                />
+              ))}
           </View>
+
+          {/* Read-only on purpose. A logged set is one string shape for every
+              measure, so changing it here would not break the history — it
+              would silently re-read "— × 90" as 90 reps, which is worse. */}
+          <H6 style={styles.head}>{L.measure}</H6>
+          <View style={styles.tagRow}>
+            <Tag tone="neutral" label={measureLabel(measureOf(e), L)} />
+          </View>
+          <Text style={styles.measureNote}>{L.measureFixed}</Text>
         </>
       ) : (
         <View style={styles.tagRow}>
@@ -168,7 +168,8 @@ export function ExerciseSheet() {
               onChangeText={(v) => mutSetup(e.id, (a) => { a[i][1] = v; })}
             />
             <Pressable
-              accessibilityLabel="Remove setting"
+              accessibilityLabel={L.remove}
+              hitSlop={slop}
               onPress={() => mutSetup(e.id, (a) => { a.splice(i, 1); })}
               style={styles.del}
             >
@@ -182,7 +183,10 @@ export function ExerciseSheet() {
         label={L.addSetting}
         labelStyle={styles.ghostLabel}
         style={styles.addBtn}
-        onPress={() => mutSetup(e.id, (a) => { a.push(['Setting', '']); })}
+        // An empty key, not the literal word 'Setting': the placeholder says
+        // what goes here, and a pre-filled English word was being saved (and
+        // synced to the buddy) by anyone who didn't clear it first.
+        onPress={() => mutSetup(e.id, (a) => { a.push(['', '']); })}
       />
 
       {editing ? (
@@ -208,13 +212,26 @@ export function ExerciseSheet() {
         <>
           <H6 style={styles.head}>{L.lastSession}</H6>
           <View style={{ gap: 4 }}>
-            {last.sets.map((v, i) => (
-              <View key={i} style={styles.lastRow}>
-                <Text style={styles.lastN}>Set {i + 1}</Text>
-                <Text style={styles.lastV}>{v}</Text>
-                <Text style={styles.lastWhen}>{i === 0 ? lastWhen : ''}</Text>
-              </View>
-            ))}
+            {/* The one screen with room for a mark's words in full — the set
+                row itself only ever has space for the glyph. */}
+            {last.sets.map((v, i) => {
+              const m = last.marks[i];
+              return (
+                <View key={i} style={styles.lastItem}>
+                  <View style={styles.lastRow}>
+                    <Text style={styles.lastN}>
+                      {L.setLabel.replace('{n}', String(i + 1))}
+                    </Text>
+                    <Text style={styles.lastV}>{v}</Text>
+                    {m && <Icon d={MARK_D[m.mark]} size={14} color={c.accent400} strokeWidth={2.2} />}
+                    <Text style={styles.lastWhen}>{i === 0 ? lastWhen : ''}</Text>
+                  </View>
+                  {m?.note?.trim() ? (
+                    <Text style={styles.lastNote}>{m.note.trim()}</Text>
+                  ) : null}
+                </View>
+              );
+            })}
           </View>
 
           <H6 style={styles.head}>{L.usedIn}</H6>
@@ -243,8 +260,13 @@ const sheet = themed(() => ({
   resetLabel: { fontSize: 12.5, color: color.neutral400 },
   head: { marginTop: 18, marginBottom: 8, color: color.neutral500 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  chip: { paddingVertical: 5, paddingHorizontal: 11, borderRadius: 6, borderWidth: 1 },
-  chipLabel: { fontFamily: font.regular, fontSize: 11.5 },
+  measureNote: {
+    fontFamily: font.regular,
+    fontSize: 11,
+    lineHeight: 11 * 1.45,
+    color: color.neutral600,
+    marginTop: 7,
+  },
   howToBlock: { marginTop: 18, height: 40 },
 
   setupRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
@@ -254,13 +276,10 @@ const sheet = themed(() => ({
   delGlyph: { fontFamily: font.regular, fontSize: 15, color: color.neutral600 },
   addBtn: { alignSelf: 'flex-start', marginTop: 7 },
 
-  lastRow: {
-    flexDirection: 'row',
-    gap: 12,
-    paddingBottom: 4,
-    borderBottomWidth: 1,
-    borderBottomColor: wash.text(7),
-  },
+  /** The rule sits on the item, so a mark's note stays inside its own row. */
+  lastItem: { paddingBottom: 4, borderBottomWidth: 1, borderBottomColor: wash.text(7) },
+  lastRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  lastNote: { marginTop: 2, fontFamily: font.regular, fontSize: 12, color: color.neutral500 },
   lastN: { width: 34, fontFamily: font.regular, fontSize: 13.5, color: color.neutral600, fontVariant: ['tabular-nums'] },
   lastV: { flex: 1, fontFamily: font.regular, fontSize: 13.5, color: color.text, fontVariant: ['tabular-nums'] },
   lastWhen: { fontFamily: font.regular, fontSize: 13.5, color: color.neutral600, fontVariant: ['tabular-nums'] },

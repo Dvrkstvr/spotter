@@ -28,7 +28,10 @@ import {
   routineClosure,
   shareableSlice,
 } from '@/data/buddy-sync';
-import { myName, Session, Store, useStore } from '@/store/workout-store';
+import { myName, Session, State, Store, useStore } from '@/store/workout-store';
+
+/** The shared registers a progress message carries beside the set counts. */
+const sharedOf = (s: State) => ({ modes: s.turnModes, first: s.firstUp, bids: s.myBids });
 
 export function BuddyRadio() {
   const store = useStore();
@@ -105,7 +108,11 @@ export function BuddyRadio() {
       if (st.s.buddyEndpoint) {
         r.sendPayload(
           st.s.buddyEndpoint,
-          JSON.stringify({ v: 1, t: 'progress', state: progressOf(prev, -1, st.s.turnModes, true) })
+          JSON.stringify({
+            v: 1,
+            t: 'progress',
+            state: progressOf(prev, -1, sharedOf(st.s), true),
+          })
         ).catch(() => {});
       }
       st.patch({
@@ -114,6 +121,7 @@ export function BuddyRadio() {
         buddyJoin: null,
         buddyProgress: null,
         turnModes: {},
+        myBids: {},
       });
     }
   }, [session]);
@@ -134,15 +142,16 @@ export function BuddyRadio() {
         JSON.stringify({
           v: 1,
           t: 'progress',
-          state: progressOf(cur.session, cur.active, cur.turnModes),
+          state: progressOf(cur.session, cur.active, sharedOf(cur)),
         })
       ).catch(() => {});
     }, 250);
     return () => clearTimeout(id);
-    // `session` (object identity), `active` and `turnModes` are what the
-    // broadcast reads; buddyEndpoint re-fires it after a reconnect, which is
-    // the resync. Merging a peer's turn modes never bumps a rev, so the
-    // rebroadcast it triggers dies on their side rather than echoing back.
+    // `session` (object identity), `active` and the shared registers are what
+    // the broadcast reads; buddyEndpoint re-fires it after a reconnect, which
+    // is the resync. Merging a peer's turn modes or first-up register never
+    // bumps a rev, so the rebroadcast it triggers dies on their side rather
+    // than echoing back; `myBids` is own state and is never merged at all.
     //
     // buddyJoin is here for the host's benefit: their session started before
     // the guest accepted, so without a resend on "joined" the guest sits on
@@ -152,6 +161,8 @@ export function BuddyRadio() {
     session,
     store.s.active,
     store.s.turnModes,
+    store.s.firstUp,
+    store.s.myBids,
     store.s.buddyJoin,
     store.s.buddyEndpoint,
   ]);
@@ -387,9 +398,12 @@ export function BuddyRadio() {
               // Any progress proves they're in — covers a lost join message.
               ...(s.buddyJoin === 'pending' ? { buddyJoin: 'joined' as const } : {}),
             }));
-            // Turn modes ride along with progress: same full-state model, so
-            // whoever missed a toggle catches up on the next message.
+            // Turn modes and the first-up register ride along with progress:
+            // same full-state model, so whoever missed a change catches up on
+            // the next message. Their bids need no merging — they arrive as
+            // part of `buddyProgress` and are read from there.
             st.mergeTurnModes(msg.state.modes);
+            st.mergeFirstUpFrom(msg.state.first);
             break;
           // They tapped Disconnect. Drop the pairing rather than start
           // hunting for them — but never touch this phone's own session.

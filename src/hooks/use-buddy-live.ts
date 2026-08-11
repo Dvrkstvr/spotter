@@ -3,6 +3,7 @@
  * session overlay's buddy bar (minimal) and the Profile tab's session panel
  * (full detail). All advisory — nothing here ever blocks input.
  */
+import { bidPending, leaderOf } from '@/data/buddy-sync';
 import { Strings } from '@/data/i18n';
 import { useStore } from '@/store/workout-store';
 
@@ -15,6 +16,13 @@ export type BuddyLive = {
   mine: boolean;
   /** the exercise the turn hint applies to — the alternate/parallel chip's key */
   modeEx: string | null;
+  /**
+   * The `ask` policy is open on this exercise and this phone hasn't answered:
+   * the waiting row asks instead of telling. Never blocks anything — the turn
+   * below is already resolved by the coin, and ticking a set drops the
+   * question entirely.
+   */
+  asking: boolean;
   /** their exercise is in my list too — one tap to reconverge */
   jump: { index: number; name: string } | null;
 };
@@ -31,6 +39,7 @@ export function useBuddyLive(): BuddyLive | null {
     turn: null,
     mine: false,
     modeEx: null,
+    asking: false,
     jump: null,
   });
 
@@ -58,14 +67,24 @@ export function useBuddyLive(): BuddyLive | null {
       return line(iAmDone ? L.stBothDone : nm('stWaiting'));
     }
     const mode = turnMode(bp.active);
-    // Fewer completed sets goes next; ties go to the host.
-    const yours = mine < theirDone || (mine === theirDone && s.sessionRole === 'host');
+    // Fewer completed sets goes next. Level is the only undecided moment, and
+    // the whole first-up setting is what breaks that one tie — with `host` it
+    // resolves to exactly what the app always did.
+    const myBid = s.myBids[bp.active];
+    const theirBid = bp.bids?.[bp.active];
+    const iLead =
+      leaderOf(s.firstUp, bp.active, myBid, theirBid, s.sessionRole) ===
+      (s.sessionRole === 'guest' ? 'guest' : 'host');
+    const yours = mine < theirDone || (mine === theirDone && iLead);
     const turn = mode === 'parallel' ? L.together : yours ? L.yourTurn : nm('theirTurn');
     return {
       text: `${theirDone}/${theirAll}`,
       turn,
       mine: mode === 'parallel' || yours,
       modeEx: bp.active,
+      // Only worth asking while it's genuinely open: taking turns, and level
+      // on the exercise. Once one of you is ahead the order is arithmetic.
+      asking: mode === 'alternate' && mine === theirDone && bidPending(s.firstUp, myBid),
       jump: null,
     };
   }
@@ -80,6 +99,9 @@ export function useBuddyLive(): BuddyLive | null {
       turn: null,
       mine: false,
       modeEx: null,
+      // You're not even on the same exercise — there is no turn to hand out,
+      // so there is nothing to ask about either.
+      asking: false,
       jump: myIndex >= 0 && myIndex !== s.active ? { index: myIndex, name: exName } : null,
     };
   }

@@ -8,7 +8,7 @@ import { Screen } from '@/components/screen';
 import { hasRadio, radio, sayGoodbye } from '@/data/buddy-radio';
 import { useBuddyLive } from '@/hooks/use-buddy-live';
 import { themed, useColors, useThemed } from '@/design/theme';
-import { color, font, radius, t, tracking } from '@/design/tokens';
+import { color, font, radius, slop, t, tracking } from '@/design/tokens';
 import { Btn, H2, H6, missingName } from '@/design/ui';
 import { myName, useStore } from '@/store/workout-store';
 
@@ -50,7 +50,7 @@ export default function YouScreen() {
 
   const sub =
     [
-      s.profile.age && `${s.profile.age} yrs`,
+      s.profile.age && `${s.profile.age} ${L.yrs}`,
       s.profile.weight && `${s.profile.weight} kg`,
       s.profile.height && `${s.profile.height} cm`,
     ]
@@ -75,14 +75,16 @@ export default function YouScreen() {
         <H2 size={t.h2} style={styles.tight}>
           {L.you}
         </H2>
-        <Pressable
-          accessibilityRole="button"
+        {/* A Btn like its header siblings ("+ New"), not a bare Pressable —
+            this was the one tap in the app that answered with nothing. */}
+        <Btn
+          variant="ghost"
           accessibilityLabel={L.settings}
           onPress={() => patch({ settingsOpen: true })}
           style={styles.gear}
         >
           <Icon d={GEAR_D} color={c.neutral400} size={21} />
-        </Pressable>
+        </Btn>
       </View>
 
       <View style={styles.identity}>
@@ -213,6 +215,7 @@ export default function YouScreen() {
                     )}
                     <Pressable
                       accessibilityLabel={L.forgetBuddy}
+                      hitSlop={slop}
                       // Forgetting whoever is on the line is a disconnect, and a
                       // disconnect they aren't told about doesn't hold.
                       onPress={() => {
@@ -388,7 +391,14 @@ function MeasureInput({
 const sheet = themed(() => ({
   head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   tight: { letterSpacing: tracking(t.h2, -0.02) },
-  gear: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center' },
+  gear: {
+    width: 34,
+    height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+  },
 
   identity: { flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: 16 },
   avatar: { width: 76, height: 76 },
@@ -474,7 +484,7 @@ const sheet = themed(() => ({
   modeChip: {
     paddingVertical: 3,
     paddingHorizontal: 8,
-    borderRadius: 6,
+    borderRadius: radius.md * 0.75,
     borderWidth: 1,
     borderColor: color.divider,
   },

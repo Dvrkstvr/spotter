@@ -350,6 +350,40 @@ export const motion = {
 } as const;
 
 /**
+ * The decorative tails — fades, glows and small nudges drawn around the
+ * action, never gating it. Hand-tuned in the motion pass; durations (ms)
+ * only, each site pairing one with the tier easing its layer wants. Named
+ * for the role, so a screen never carries a raw timing literal.
+ */
+export const linger = {
+  /** the ghost column's numbers flying into the fields */
+  fly: 320,
+  /** the wash catching up behind that copy */
+  catch: 450,
+  /** a just-ticked row's flash fading back out */
+  flash: 550,
+  /** the progress bar's leading-edge glint */
+  edge: 500,
+  /** the seal's afterglow at 100% */
+  glow: 900,
+  /** the seal sweep across the bar */
+  sweep: 550,
+  /** the 3px counter rise before its payoff settle (tab bar and session) */
+  rise: 100,
+  /** a released hold rewinding its fill */
+  rewind: 160,
+  /** one radar ring's flight in the scan sheet */
+  radar: 1600,
+} as const;
+
+/**
+ * The reach every small control gets — × glyphs, grips, marks are drawn at
+ * 20–26px, and Android wants ~48dp of touch. One constant, not per-site
+ * guesses, so no two ×s in the app are differently hard to hit.
+ */
+export const slop = 8;
+
+/**
  * CSS `position:absolute; inset:0` as a spreadable object. React Native 0.86 no
  * longer types `StyleSheet.absoluteFillObject`, and `absoluteFill` is a
  * registered style id rather than something you can spread.

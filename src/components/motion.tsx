@@ -60,9 +60,17 @@ export function RiseIn({
 export function SheetIn({
   children,
   style,
+  offsetY,
 }: {
   children: ReactNode;
   style?: StyleProp<ViewStyle>;
+  /**
+   * A live extra offset composed after the entry slide — the grab handle's
+   * drag. A separate transform entry rather than a wrapper view, because a
+   * percentage maxHeight on the panel must keep resolving against the
+   * overlay, not an auto-sized wrapper.
+   */
+  offsetY?: Animated.Value;
 }) {
   const [p] = useState(() => new Animated.Value(0));
   const [height, setHeight] = useState(0);
@@ -96,6 +104,7 @@ export function SheetIn({
                 outputRange: [height || 600, 0],
               }),
             },
+            ...(offsetY ? [{ translateY: offsetY }] : []),
           ],
         },
       ]}

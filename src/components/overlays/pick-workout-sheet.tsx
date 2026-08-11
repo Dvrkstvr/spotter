@@ -5,6 +5,7 @@ import { Sheet } from '@/components/sheet';
 import { useBackClose } from '@/hooks/use-back-close';
 import { radio } from '@/data/buddy-radio';
 import { todayDow } from '@/data/date';
+import { countN } from '@/data/i18n';
 import { themed, useColors, useThemed } from '@/design/theme';
 import { color, font, radius, wash } from '@/design/tokens';
 import { Btn, H4, missingName } from '@/design/ui';
@@ -34,7 +35,7 @@ export function PickWorkoutSheet() {
       .map((r) => ({
         key: r.id,
         ...rInfo(r),
-        meta: `${r.items.length} ${L.exCount}`,
+        meta: countN(r.items.length, L.exCountOne, L.exCount),
         detail: exNames(r.items),
         go: () => start(r.id),
       })),

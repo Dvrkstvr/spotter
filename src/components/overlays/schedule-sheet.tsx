@@ -14,7 +14,7 @@ import { themed, useColors, useThemed } from '@/design/theme';
 import { color, font, wash } from '@/design/tokens';
 import { Btn, H4, missingName } from '@/design/ui';
 import { useStore } from '@/store/workout-store';
-import { DOW } from '@/data/exercises';
+import { countN, DAYS_SHORT } from '@/data/i18n';
 
 export function ScheduleSheet() {
   const styles = useThemed(sheet);
@@ -40,7 +40,7 @@ export function ScheduleSheet() {
     ...s.routines.map((r) => ({
       key: r.id as string | null,
       ...rInfo(r),
-      meta: `${r.items.length} ${L.exCount}`,
+      meta: countN(r.items.length, L.exCountOne, L.exCount),
       detail: r.items
         .map((i) => {
           const e = ex(i.ex);
@@ -54,7 +54,7 @@ export function ScheduleSheet() {
 
   return (
     <Sheet zIndex={83} maxHeight="78%" onClose={close}>
-      <H4>{`${DOW[day]} · ${L.chooseRoutine}`}</H4>
+      <H4>{`${DAYS_SHORT[s.lang][day]} · ${L.chooseRoutine}`}</H4>
 
       <View style={styles.list}>
         {options.map((o) => {
@@ -72,7 +72,8 @@ export function ScheduleSheet() {
                 </Text>
               </View>
               <Text style={styles.meta}>{o.meta}</Text>
-              {on && <Icon d={CHECK_D} size={14} strokeWidth={2.2} color={c.accent} />}
+              {/* accent400 like every other done-check — this was the one in plain accent. */}
+              {on && <Icon d={CHECK_D} size={14} strokeWidth={2.2} color={c.accent400} />}
             </Pressable>
           );
         })}
