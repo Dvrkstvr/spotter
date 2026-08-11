@@ -4,6 +4,7 @@ import { Pressable, Text, View } from 'react-native';
 import { Sheet } from '@/components/sheet';
 import { useBackClose } from '@/hooks/use-back-close';
 import { radio } from '@/data/buddy-radio';
+import { routineStyleScore } from '@/data/exercises';
 import { todayDow } from '@/data/date';
 import { countN } from '@/data/i18n';
 import { themed, useColors, useThemed } from '@/design/theme';
@@ -30,7 +31,10 @@ export function PickWorkoutSheet() {
       .join(' · ');
 
   const options = [
-    ...s.routines
+    // Style order, stable: the routines that are mostly what you train rise,
+    // ties keep the list's own order, and `mixed` changes nothing at all.
+    ...[...s.routines]
+      .sort((a, b) => routineStyleScore(b, s.style, ex) - routineStyleScore(a, s.style, ex))
       .filter((r) => r.id !== todayRid)
       .map((r) => ({
         key: r.id,

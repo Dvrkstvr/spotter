@@ -8,7 +8,7 @@ import { Fragment } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import { Screen } from '@/components/screen';
-import { Exercise, measureOf } from '@/data/exercises';
+import { Exercise, inStyle, measureOf, styleFirst } from '@/data/exercises';
 import { Strings } from '@/data/i18n';
 import { themed, useColors, useThemed } from '@/design/theme';
 import { color, font, t, tracking } from '@/design/tokens';
@@ -79,6 +79,12 @@ export default function LibraryScreen() {
       (groupText.get(e.group) ?? e.group.toLowerCase()).includes(q)) &&
     (s.filter === 'All' || e.kind === s.filter);
 
+  // With a style chosen, sorting works at both depths: groups that hold any
+  // of it float over groups that hold none, and within a group its exercises
+  // lead. Sorting, never filtering — every group and row is still here.
+  const sorted = s.style !== 'mixed';
+  const inStyleGroup = (g: { items: Exercise[] }) => g.items.some((e) => inStyle(e, s.style));
+
   const groups = s.groups
     .map((g) => {
       const r = resolveNames(g.labels, s.lang);
@@ -86,12 +92,17 @@ export default function LibraryScreen() {
         name: r.text,
         missing: r.missing,
         isDivider: !r.text.trim(),
-        items: allEx().filter((e) => e.group === g.key && match(e)),
+        items: styleFirst(
+          allEx().filter((e) => e.group === g.key && match(e)),
+          s.style
+        ),
       };
     })
-    // Dividers punctuate the full list; between zero results they are just
-    // stray rules floating in blank space.
-    .filter((g) => g.items.length || (g.isDivider && !q));
+    // Dividers punctuate the user's own ordering; between zero results they
+    // are stray rules floating in blank space, and in a style-sorted list the
+    // ordering is no longer the one they were placed in.
+    .filter((g) => g.items.length || (g.isDivider && !q && !sorted))
+    .sort((a, b) => (sorted ? Number(inStyleGroup(b)) - Number(inStyleGroup(a)) : 0));
 
   return (
     <Screen>
