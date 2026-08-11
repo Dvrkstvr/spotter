@@ -164,6 +164,133 @@ with a dark hero card on it.
 Sheets are exempt: `themed()`'s thunk runs outside any component, and
 `useThemed(sheet)` passes the generation in, which is a reactive argument.
 
+## Statistics & the AI coach
+
+The design has no statistics view and no coach — both are Calvin's, and the
+mockup they were built from is `design/stats-ai-coach-mockup.html`, which
+stands in the same relation to these screens that Workout Diary v2 does to the
+rest of the app.
+
+It is a Profile card → Insights → the coach's three steps, and the property
+that holds the whole thing together is that **it only ever reads**.
+`data/stats.ts` and `data/coach.ts` are pure — a history slice and a lookup
+in, numbers and strings out — with no store, no hooks and no colours, which
+also keeps the React Compiler out of the question. Nothing about the
+statistics is persisted, and that is what makes them free: a phone that has
+been logging for months already has everything they need, with no new key,
+no `STORAGE_VERSION` bump and no migration over real training data. `coach` —
+the goal, the week, the equipment — is the one thing here that is stored, and
+it is a *setting*, added the additive way `PERSIST` allows.
+
+- **Balance is read over six regions, not twenty muscle groups.** Twenty is the
+  right granularity for filing an exercise and the wrong one for reading a body
+  at a glance: a chart with twenty axes says nothing, and "Traps 1%" is not a
+  finding. `REGION_OF` rolls the seeded keys up, and a region's *name* comes
+  from the dictionary rather than from `groups` — the user's list is theirs to
+  rename, reorder and extend, while these six are an analysis this app
+  performs. That is also why the mapping is deliberately partial: a group
+  someone invented, plus `FullBody`, `Cardio` and `Other`, map to nothing.
+- **Weak is below three quarters of an even split, not below even.** In any real
+  week three regions are under the mean by definition, and a screen that flags
+  half the body every time is noise rather than a finding.
+- **Under `MIN_SESSIONS` the card makes no claims.** Balance across two workouts
+  is a Tuesday, not a weakness, and a coach prompt built on it would be
+  confident nonsense. The card still stands, because it is the door — its
+  empty state says what will appear there, which is more use than a card that
+  refuses to be pressed.
+- **Every period option is bounded** — `PERIODS` is 8 weeks, 6 months, 12
+  months, and no "all time". The volume chart buckets whatever window it is
+  handed, and all-time has no bucket size: one bar per week over three years is
+  not a chart, and one bar per year over three weeks is not one either. Each
+  period carries its own `bucketDays`, sized to land 8–13 bars, and the
+  heading says which. Empty buckets stay in — a fortnight you did not train is
+  a fact about the shape, and closing the gap would draw a history nobody had.
+- **Cardio is a line, never a seventh axis.** It is not a muscle to be balanced
+  against the others — but "none at all" is exactly the gap this screen exists
+  to show, so it is stated under the weak points instead of being left out.
+  What the six percentages *do* leave out is disclosed at the foot
+  (`looseSets`), or a cardio-heavy month reads as a missing one.
+- **`distanceKm` is the one number re-derived from the stored set strings.**
+  Everything else is taken off `history` as written — volume is each entry's
+  own `vol`, because that number was written by `totals()` and is already gated
+  to `load` sets, and re-deriving it here would mean re-deciding what counts in
+  a second place. Distance never had a total of its own, so it is parsed; an
+  unrecorded `—` contributes nothing rather than zero.
+- **A fun fact compares against the largest thing you have cleared twice over.**
+  The threshold does two jobs: "about 1 elephant" says less than the number did,
+  and always being plural is what lets every line read "{n} cars" and skip
+  singular agreement, which German would otherwise need a case for in each one.
+  The scale grows with the diary rather than being reseeded on a timer — the
+  same training earns the same sentence, and passing a threshold is the reward.
+- **Favourites are counted by the name frozen at log time**, like everything
+  else that reads `history`: a routine renamed in March must not rewrite what
+  February's workout was called, and one deleted since still counts the days it
+  was actually trained.
+- **`keyLifts` only reads `load`.** A trend needs one number that means the same
+  thing in two sessions, and kilo-seconds and kilometre-minutes are not
+  units — the same reason `totals()` refuses to add them into volume.
+  `deltaKg` is `null` for a lift seen once and `0` for one that has not moved:
+  "no reading yet" and "stalled" are different facts, and a prompt that
+  confused them would call a new lift a plateau.
+
+### The coach's contract is the seam
+
+`buildPrompt` writes the request and `parsePlan` reads the reply, and neither
+knows who is on the other side. That is the whole design: today the far end is
+a chat app reached through the Android share sheet, and a tiny on-device model
+later answers the same fenced block with the preview and the import path
+untouched.
+
+- **The prompt is in the user's language; the contract inside it is not.** They
+  read it before they send it — it is shown in full, which is what makes the
+  privacy switch on the step before it mean something rather than being a
+  promise. But `"measure": "load"` is an identifier in this app's data, not a
+  word being translated, and a German reply carrying `"gewicht"` imports as
+  nothing.
+- **Rule 3 makes the answer carry its own way home.** The reply is told to close
+  with copy-this-message → open Spotter → paste. Whoever wandered off into a
+  chat app has no reason to remember this flow, and `parsePlan` hunting the
+  block out of the surrounding prose is what makes "copy the whole thing" true
+  advice rather than a trap.
+- **Names are the join key in both directions.** The prompt ships the library,
+  the muscle-group keys and the equipment keys so the answer builds on what is
+  here instead of inventing a second Bench Press; `resolvePlan` turns names back
+  into ids, matching case- and space-insensitively across *every* language an
+  exercise is named in — the prompt is German while half the library is still
+  named in English.
+- **Import is additive only.** New `custom` exercises and new `routines` through
+  the shapes the app already has: nothing edited, nothing replaced, and
+  `history` / `lastLog` untouchable by construction. The worst a bad plan can do
+  is leave rows to delete, which is what lets the preview be a preview rather
+  than a warning. An imported exercise is written with the same literal the
+  new-exercise sheet writes, down to `load` staying absent — it must be
+  indistinguishable from a hand-made one, or it reaches a buddy as a different
+  shape.
+- **The AI's reps and kilos land as `planned` only where this phone has no
+  history for that exercise.** Where you have lifted the thing, your own "last
+  time" ghost is the better number and the plan defers to it — the same rule
+  `mergeRoutine` applies to a buddy's figures, and for the same reason: an AI
+  that has never watched you lift does not get to overwrite what you actually
+  did. Where you haven't, its figure is the only one anyone has, and a blank row
+  would throw away the part of the recommendation that was useful.
+- **An unresolvable group or equipment files under a row that exists, and the
+  preview says so.** The lists are the user's, and a plan must not be able to
+  grow them behind their back; filing under a raw key would strand the exercise
+  outside the library's filter row, which is the state deleting a seeded group
+  produces. Groups ship a catch-all and equipment does not, so the last row
+  stands in.
+- **No new native dependency.** The prompt leaves through React Native's own
+  `Share`, not a clipboard module: there isn't one in the project, adding one
+  costs a dev-build rebuild for one button, and the share sheet is the primary
+  action anyway. The prompt is `selectable` for the phone whose share target
+  refuses text.
+- **Counts compose from their own singular and plural pieces**
+  (`countRoutine` / `countRoutines`), because the same count lands in three
+  different sentences and every one of them can legitimately be 1.
+- **The coach sits directly above Insights in the overlay stack** (76 → 77).
+  It is opened from there and has to cover it; closing it drops you back onto
+  the statistics you left.
+
 ## Deliberate deviations from the design
 
 Keep these; they're decisions, not drift. Each is commented at its site.
@@ -439,6 +566,10 @@ Keep these; they're decisions, not drift. Each is commented at its site.
   hidden buttons, because the radio is what advertises and answers. Turning it
   on sends `bye` and tears the pairing down like any other teardown.
   `knownBuddies` survives — it is a curtain, not a divorce.
+- **The Profile card, Insights and the AI coach have no design behind them at
+  all** — the design knows nothing about statistics. They are derived entirely
+  from `history` and stay out of persistence; see "Statistics & the AI coach"
+  above for the rules that hold them together.
 - **Backup is the durable slice in an envelope** (`src/data/backup.ts`),
   stamped with `STORAGE_VERSION` so an old file is migrated forward rather
   than loaded raw. A restore *replaces*: the seeded defaults go down first, so
