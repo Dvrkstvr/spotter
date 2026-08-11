@@ -49,6 +49,7 @@ import {
   StyleKey,
   V2_GROUP_KEYS,
 } from '@/data/exercises';
+import { DEFAULT_COACH, type CoachOptions, type ResolvedPlan } from '@/data/coach';
 import { deviceLang, DICT, fmtDayLong, Lang, LangMap, Strings } from '@/data/i18n';
 import { isThemeName, ThemeMode, ThemeName } from '@/design/tokens';
 
@@ -265,6 +266,14 @@ export type State = {
    * restart.
    */
   statsOpen: boolean;
+  /** The coach flow — goal, prompt, import. Transient like `statsOpen`. */
+  coachOpen: boolean;
+  /**
+   * What the coach was last asked for. Persisted so re-running it next month
+   * is two taps rather than four — a new key, which `PERSIST` takes without a
+   * version bump or a migration.
+   */
+  coach: CoachOptions;
   scanning: boolean;
   /**
    * This phone's install id, advertised alongside the profile name (see
@@ -424,6 +433,8 @@ const initialState: State = {
   level: 'regular',
   settingsOpen: false,
   statsOpen: false,
+  coachOpen: false,
+  coach: { ...DEFAULT_COACH, kinds: [...DEFAULT_COACH.kinds] },
   scanning: false,
   // ANDROID_ID resolves at module load and never changes; the random
   // fallback is minted once here and then pinned by persistence.
@@ -521,7 +532,7 @@ const PERSIST = [
   'routines', 'schedule', 'history', 'lastLog', 'lastMarks', 'custom', 'profile',
   'setups', 'videos', 'lang', 'groups', 'kinds', 'images', 'exEdits', 'cueEdits',
   'knownBuddies', 'buddyIds', 'selfId', 'themeMode', 'theme', 'restSeconds', 'firstUpDefault',
-  'haptics', 'restAlert', 'privateMode', 'onboarded', 'style', 'level',
+  'haptics', 'restAlert', 'privateMode', 'onboarded', 'style', 'level', 'coach',
 ] as const satisfies readonly (keyof State)[];
 
 type Persisted = Pick<State, (typeof PERSIST)[number]>;
@@ -1786,6 +1797,85 @@ function useWorkoutState() {
       };
     });
 
+  /**
+   * Write an AI plan in — the one place anything from outside reaches the
+   * library.
+   *
+   * **Additive, always.** New `custom` exercises and new `routines`, and
+   * nothing else: no edit to an exercise already here, no routine replaced,
+   * and `history` / `lastLog` untouched by construction. The worst a bad plan
+   * can do is leave rows to delete, which is why the preview can afford to be
+   * a preview rather than a warning.
+   *
+   * `picked` names which routines the user left ticked. An exercise is created
+   * only if a ticked routine needs it, so unticking a routine also drops the
+   * exercises that came with it rather than seeding the library with orphans
+   * from a plan that was turned down.
+   *
+   * The AI's reps and kilos land as `planned` **only where this phone has no
+   * history of its own** for that exercise. Where you have lifted the thing,
+   * your own "last time" ghost is the better number and the plan defers to it,
+   * exactly as a buddy's figures do (see `mergeRoutine`) — an AI that has
+   * never watched you lift does not get to overwrite what you actually did.
+   * Where you haven't, its figure is the only one anyone has, and a blank row
+   * would throw away the part of the recommendation that was useful.
+   */
+  const importPlan = (plan: ResolvedPlan, picked: boolean[]) =>
+    patch((s) => {
+      const wanted = plan.routines.filter((_, i) => picked[i] !== false);
+      if (wanted.length === 0) return null;
+
+      const needed = new Set<number>();
+      for (const r of wanted) for (const it of r.items) needed.add(it.ref);
+
+      const custom = [...s.custom];
+      const stamp = Date.now();
+      /** Plan-exercise index → the id it resolved to or was created as. */
+      const idOf = new Map<number, string>();
+      plan.exercises.forEach((e, i) => {
+        if (e.existingId) {
+          idOf.set(i, e.existingId);
+          return;
+        }
+        if (!needed.has(i) || !e.create) return;
+        const id = `x${stamp}${i}`;
+        idOf.set(i, id);
+        // The same literal the new-exercise sheet writes, down to `load`
+        // staying absent — an imported lift must be indistinguishable from a
+        // hand-made one, or it would sync to a buddy as a different shape.
+        custom.push({
+          id,
+          name: e.name,
+          names: { [s.lang]: e.name },
+          group: e.create.group,
+          kind: e.create.kind,
+          ...(e.create.measure === 'load' ? {} : { measure: e.create.measure }),
+          last: 0,
+          lastSets: ['— × —'],
+        });
+      });
+
+      const routines = [...s.routines];
+      wanted.forEach((r, k) => {
+        const items = r.items.flatMap((it) => {
+          const ex = idOf.get(it.ref);
+          if (!ex) return [];
+          return [
+            {
+              ex,
+              sets: it.sets,
+              reps: it.reps,
+              w: it.kg,
+              ...(s.lastLog[ex] ? {} : { planned: true as const }),
+            },
+          ];
+        });
+        if (items.length) routines.push({ id: `r${stamp}${k}`, names: { [s.lang]: r.name }, items });
+      });
+
+      return { custom, routines };
+    });
+
   /* — the elapsed clock, ticking only while a session is open — */
 
   /**
@@ -1886,6 +1976,7 @@ function useWorkoutState() {
     finishSession,
     saveAsRoutine,
     saveDayAsRoutine,
+    importPlan,
   };
 }
 

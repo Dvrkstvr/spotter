@@ -419,3 +419,82 @@ const pick = <T extends { key: FactKey }>(
 export const funFact = (volumeKg: number, distanceKm: number): FunFact | null =>
   pick([...SPANS].sort((a, b) => a.km - b.km), distanceKm, 'km', 'distance') ??
   pick(WEIGHTS, volumeKg, 'kg', 'volume');
+
+/* ── key lifts ─────────────────────────────────────────────────────────────
+ *
+ * What a coach would actually ask about: the handful of lifts you keep doing,
+ * what you last did on them, and whether the number has moved.
+ *
+ * Only `load` exercises qualify. A trend needs one number that means the same
+ * thing in two sessions, and kilo-seconds and kilometre-minutes are not units
+ * — the same reason `totals()` refuses to add them into volume.
+ */
+
+export type KeyLift = {
+  id: string;
+  /** Sessions in the window that contained it. */
+  sessions: number;
+  /** The heaviest set of the most recent session, in the stored "70 × 8" form. */
+  latest: string;
+  /**
+   * Kilos gained on the top set since the first session in the window — 0 for
+   * a lift that has not moved, null when there is only one session to go on.
+   * Null and 0 say different things: "no reading yet" and "stalled", and a
+   * coach prompt that confused them would call a new lift a plateau.
+   */
+  deltaKg: number | null;
+};
+
+/** The left-hand field of a stored set, in kg. BW is 0; an unrecorded dash isn't a number. */
+const setKg = (s: string): number | null => {
+  const left = String(s).split('×')[0]?.trim() ?? '';
+  if (left === '—' || left === '') return null;
+  if (left === 'BW') return 0;
+  const n = parseFloat(left.replace(',', '.'));
+  return isNaN(n) ? null : n;
+};
+
+export function keyLifts(
+  history: readonly StatsSession[],
+  ex: (id: string) => Exercise | undefined,
+  sinceDays: number | null = null,
+  limit = 6,
+  today: Date = new Date()
+): KeyLift[] {
+  type Seen = { date: string; topKg: number; topSet: string };
+  const byEx = new Map<string, Seen[]>();
+
+  for (const h of history) {
+    if (sinceDays !== null && daysAgo(h.date, today) >= sinceDays) continue;
+    for (const entry of h.list ?? []) {
+      if (measureOf(ex(entry.ex)) !== 'load') continue;
+      let top: Seen | null = null;
+      for (const set of entry.sets) {
+        const kg = setKg(set);
+        if (kg === null) continue;
+        if (!top || kg > top.topKg) top = { date: h.date, topKg: kg, topSet: set };
+      }
+      if (!top) continue;
+      const list = byEx.get(entry.ex) ?? [];
+      list.push(top);
+      byEx.set(entry.ex, list);
+    }
+  }
+
+  return [...byEx.entries()]
+    .map(([id, seen]) => {
+      // Appended-on-finish history is already chronological, but the trend is
+      // the difference between two specific ends of it — worth not assuming.
+      const sorted = [...seen].sort((a, b) => a.date.localeCompare(b.date));
+      const first = sorted[0];
+      const last = sorted[sorted.length - 1];
+      return {
+        id,
+        sessions: sorted.length,
+        latest: last.topSet,
+        deltaKg: sorted.length > 1 ? Math.round((last.topKg - first.topKg) * 10) / 10 : null,
+      };
+    })
+    .sort((a, b) => b.sessions - a.sessions)
+    .slice(0, limit);
+}

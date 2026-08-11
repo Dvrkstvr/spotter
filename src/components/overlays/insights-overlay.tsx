@@ -81,7 +81,7 @@ export function InsightsOverlay() {
   const favExName = favEx ? exInfo(favEx) : null;
 
   return (
-    <FullScreen zIndex={77}>
+    <FullScreen zIndex={76}>
       <View style={[styles.header, { paddingTop: 12 + insets.top }]}>
         <Btn variant="ghost" label={L.back} labelStyle={styles.backLabel} onPress={close} />
       </View>
@@ -174,7 +174,10 @@ export function InsightsOverlay() {
               <Text style={styles.cardioVal}>
                 {st.cardioSessions === 0
                   ? L.insightsCardioNone
-                  : L.insightsCardioSome.replace('{n}', String(st.cardioSessions))}
+                  : (st.cardioSessions === 1 ? L.statsFootSession : L.statsFootSessions).replace(
+                      '{n}',
+                      String(st.cardioSessions)
+                    )}
               </Text>
               {st.cardioSessions === 0 && <Tag label={L.insightsLow} tone="outline" />}
             </View>
@@ -253,6 +256,16 @@ export function InsightsOverlay() {
                 {L.insightsLoose.replace('{n}', String(st.looseSets))}
               </Text>
             )}
+
+            {/* The whole screen is a description; this is the one thing on it
+                that does something about what it describes. */}
+            <Btn
+              variant="primary"
+              block
+              label={L.getRecommendations}
+              style={styles.cta}
+              onPress={() => patch({ coachOpen: true })}
+            />
           </>
         )}
       </ScrollView>
@@ -346,4 +359,5 @@ const sheet = themed(() => ({
     marginTop: 3,
   },
   foot: { fontFamily: font.regular, fontSize: 11, color: color.neutral600, marginTop: 14 },
+  cta: { marginTop: 18 },
 }));
