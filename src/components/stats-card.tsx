@@ -7,13 +7,16 @@
  * and closes with the two all-time numbers a diary is actually kept for.
  *
  * It wears the hero gradient, the treatment Today's hero card has to itself —
- * one card per screen gets to be the one that leads somewhere.
+ * one card per screen gets to be the one that leads somewhere. Tapping it
+ * opens Insights, including in the empty state: the screen explains what it
+ * will show once there is something to show, which is more use than a card
+ * that refuses to be pressed.
  *
  * Everything here is derived at render from `history`; see `data/stats.ts`.
  * Nothing new is persisted.
  */
 import { LinearGradient } from 'expo-linear-gradient';
-import { Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 import { themed, useColors, useThemed } from '@/design/theme';
 import { color, font, radius, t, tracking, wash } from '@/design/tokens';
@@ -52,10 +55,12 @@ export function StatsCard({
   /** Everything ever logged — the footer's two numbers. */
   allTime,
   L,
+  onPress,
 }: {
   recent: TrainingStats;
   allTime: TrainingStats;
   L: Strings;
+  onPress: () => void;
 }) {
   const styles = useThemed(sheet);
   const c = useColors();
@@ -78,6 +83,12 @@ export function StatsCard({
   const peak = Math.max(EVEN_SHARE, ...recent.balance.map((b) => b.share));
 
   return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${L.statsTitle} — ${line}`}
+      onPress={onPress}
+      style={({ pressed }) => pressed && styles.pressed}
+    >
     <LinearGradient
       colors={[c.accent900, c.surface]}
       locations={[...t.heroGradient.locations]}
@@ -143,15 +154,19 @@ export function StatsCard({
         </View>
       )}
 
-      <Text style={styles.foot}>
-        {(allTime.sessions === 1
-          ? L.statsFootSession
-          : L.statsFootSessions.replace('{n}', String(allTime.sessions))) +
-          (allTime.volume > 0
-            ? `  ·  ${L.statsFootVolume.replace('{kg}', groupDigits(allTime.volume, L.thousandSep))}`
-            : '')}
-      </Text>
+      <View style={styles.footRow}>
+        <Text style={styles.foot}>
+          {(allTime.sessions === 1
+            ? L.statsFootSession
+            : L.statsFootSessions.replace('{n}', String(allTime.sessions))) +
+            (allTime.volume > 0
+              ? `  ·  ${L.statsFootVolume.replace('{kg}', groupDigits(allTime.volume, L.thousandSep))}`
+              : '')}
+        </Text>
+        <Text style={styles.chevron}>›</Text>
+      </View>
     </LinearGradient>
+    </Pressable>
   );
 }
 
@@ -201,10 +216,9 @@ const sheet = themed(() => ({
     borderStyle: 'dashed',
     borderColor: color.neutral500,
   },
-  foot: {
-    fontFamily: font.regular,
-    fontSize: 11.5,
-    color: wash.text(55),
-    marginTop: 10,
-  },
+  footRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
+  foot: { flex: 1, fontFamily: font.regular, fontSize: 11.5, color: wash.text(55) },
+  chevron: { fontFamily: font.regular, fontSize: 17, lineHeight: 17, color: color.accent },
+  /** Whole-card press feedback, the grammar every Pressable in the app uses. */
+  pressed: { opacity: 0.82 },
 }));

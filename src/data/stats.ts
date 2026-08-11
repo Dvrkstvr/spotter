@@ -23,6 +23,8 @@ import { measureOf, type Exercise } from './exercises';
  */
 export type StatsSession = {
   date: string;
+  /** What the session was called on the day — frozen at log time. */
+  name?: string;
   /** Ticked sets per exercise. Absent on entries logged before the day view. */
   list?: { ex: string; sets: string[] }[];
   /** Load volume as the summary counted it. Absent on those same old entries. */
@@ -123,6 +125,14 @@ export type TrainingStats = {
   looseSets: number;
   /** Sessions containing at least one `distance` or `duration` exercise. */
   cardioSessions: number;
+  /**
+   * Kilometres covered, off the left-hand field of every `distance` set. The
+   * one number here that *is* re-derived from the stored strings, because
+   * nothing ever totalled it: `vol` deliberately counts load and only load,
+   * so a run has never had a number of its own. An unrecorded distance is
+   * written `—` and contributes nothing rather than zero — see `blankOf`.
+   */
+  distanceKm: number;
 };
 
 /**
@@ -158,6 +168,7 @@ export function trainingStats(
   let loose = 0;
   let volume = 0;
   let cardioSessions = 0;
+  let distanceKm = 0;
 
   for (const h of inWindow) {
     volume += h.vol ?? 0;
@@ -166,6 +177,11 @@ export function trainingStats(
       const e = ex(entry.ex);
       const m = measureOf(e);
       if (m === 'distance' || m === 'duration') hasCardio = true;
+      if (m === 'distance')
+        for (const set of entry.sets) {
+          const km = parseFloat(String(set).split('×')[0]?.trim() ?? '');
+          if (!isNaN(km)) distanceKm += km;
+        }
       const region = e ? regionOf(e.group) : null;
       if (region && m !== 'distance' && m !== 'duration') {
         sets[region] += entry.sets.length;
@@ -199,6 +215,7 @@ export function trainingStats(
     countedSets: counted,
     looseSets: loose,
     cardioSessions,
+    distanceKm,
   };
 }
 
@@ -236,3 +253,169 @@ export const pct = (share: number) => Math.round(share * 100);
  */
 export const groupDigits = (n: number, sep: string) =>
   String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, sep);
+
+/* ── periods ───────────────────────────────────────────────────────────────
+ *
+ * What the Insights seg offers. Every option is *bounded*, and that is the
+ * point: the volume chart buckets the window it is given, and "all time" has
+ * no bucket size — one bar per week over three years is not a chart, and one
+ * bar per year over three weeks is not one either. A phone with six weeks of
+ * training picking twelve months sees mostly empty chart, which is the honest
+ * picture rather than a missing one.
+ *
+ * `bucketDays` divides its window into 8–13 bars, the most a phone screen can
+ * carry and still let you tell one from its neighbour.
+ */
+export type PeriodKey = '8w' | '6m' | '12m';
+
+export const PERIODS: readonly { key: PeriodKey; days: number; bucketDays: number }[] = [
+  { key: '8w', days: 56, bucketDays: 7 },
+  { key: '6m', days: 182, bucketDays: 14 },
+  { key: '12m', days: 364, bucketDays: 28 },
+];
+
+export const periodOf = (k: PeriodKey) => PERIODS.find((p) => p.key === k) ?? PERIODS[0];
+
+/** Whole local days from an ISO date to a given day. Never `toISOString()`. */
+const daysAgo = (iso: string, today: Date) => {
+  const [y, m, d] = iso.split('-').map(Number);
+  const then = new Date(y, m - 1, d);
+  const now = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  return Math.round((now.getTime() - then.getTime()) / 86_400_000);
+};
+
+export type Bucket = { volume: number; sessions: number };
+
+/**
+ * Load volume bucketed over the window, oldest bucket first, with the newest
+ * bucket ending today. Empty buckets are present as zeroes — a fortnight you
+ * did not train is a fact about the shape, and closing the gap would draw a
+ * chart of a training history nobody had.
+ */
+export function volumeSeries(
+  history: readonly StatsSession[],
+  sinceDays: number,
+  bucketDays: number,
+  today: Date = new Date()
+): Bucket[] {
+  const n = Math.ceil(sinceDays / bucketDays);
+  const out: Bucket[] = Array.from({ length: n }, () => ({ volume: 0, sessions: 0 }));
+  for (const h of history) {
+    const ago = daysAgo(h.date, today);
+    if (ago < 0 || ago >= n * bucketDays) continue;
+    const i = n - 1 - Math.floor(ago / bucketDays);
+    out[i].volume += h.vol ?? 0;
+    out[i].sessions++;
+  }
+  return out;
+}
+
+/* ── favourites ─────────────────────────────────────────────────────────── */
+
+export type Favourites = {
+  /** The exercise logged in the most sessions, with that count. */
+  exercise: { id: string; sessions: number } | null;
+  /**
+   * The session name logged most often, with that count.
+   *
+   * Counted by the name each session was *filed under*, not by routine id, for
+   * the same reason the day view shows that name: it was frozen at log time,
+   * so a routine renamed in March doesn't rewrite February, and one deleted
+   * since still counts the days it was actually trained. A freeform habit
+   * therefore surfaces as "Free session", which is an honest answer to what
+   * this person does most.
+   */
+  session: { name: string; count: number } | null;
+};
+
+export function favourites(
+  history: readonly StatsSession[],
+  sinceDays: number | null = null,
+  today: Date = new Date()
+): Favourites {
+  const inWindow = history.filter(
+    (h) => sinceDays === null || daysAgo(h.date, today) < sinceDays
+  );
+  const exCount = new Map<string, number>();
+  const nameCount = new Map<string, number>();
+  for (const h of inWindow) {
+    // An exercise trained twice in one session is one session, not two.
+    for (const id of new Set((h.list ?? []).map((e) => e.ex)))
+      exCount.set(id, (exCount.get(id) ?? 0) + 1);
+    const name = h.name?.trim();
+    if (name) nameCount.set(name, (nameCount.get(name) ?? 0) + 1);
+  }
+  const top = <T,>(m: Map<T, number>): [T, number] | null => {
+    let best: [T, number] | null = null;
+    // Ties go to whichever was met first, which is insertion order — history
+    // order — so the answer is stable rather than dependent on the sort.
+    for (const [k, v] of m) if (!best || v > best[1]) best = [k, v];
+    return best;
+  };
+  const e = top(exCount);
+  const n = top(nameCount);
+  return {
+    exercise: e ? { id: e[0], sessions: e[1] } : null,
+    session: n ? { name: n[0], count: n[1] } : null,
+  };
+}
+
+/* ── fun facts ─────────────────────────────────────────────────────────────
+ *
+ * A tonne of anything is an abstraction; thirty cars is a picture. Each entry
+ * pairs a dictionary key with what one of the thing weighs (kg) or spans (km),
+ * and `funFact` picks the largest one you have cleared at least twice over.
+ *
+ * Twice over is what keeps the sentence plural, which is what lets every
+ * translation say "{n} cars" and skip singular agreement entirely — German
+ * would otherwise need a case for `1` in every line. It also keeps the
+ * comparison meaningful: "about 1 elephant" says less than the number did.
+ *
+ * The scale grows with the diary rather than being reseeded on a timer: the
+ * same training earns the same sentence, and passing a threshold is the reward.
+ */
+export type FactKey =
+  | 'factWashingMachine' | 'factPiano' | 'factCar' | 'factElephant' | 'factBus' | 'factJet'
+  | 'factMarathon' | 'factChannel' | 'factGermany' | 'factSahara';
+
+export type FunFact = { key: FactKey; n: number; kind: 'volume' | 'distance' };
+
+const WEIGHTS: readonly { key: FactKey; kg: number }[] = [
+  { key: 'factWashingMachine', kg: 70 },
+  { key: 'factPiano', kg: 450 },
+  { key: 'factCar', kg: 1500 },
+  { key: 'factElephant', kg: 5400 },
+  { key: 'factBus', kg: 12_000 },
+  { key: 'factJet', kg: 183_000 },
+];
+
+const SPANS: readonly { key: FactKey; km: number }[] = [
+  { key: 'factMarathon', km: 42.195 },
+  { key: 'factChannel', km: 34 },
+  { key: 'factGermany', km: 640 },
+  { key: 'factSahara', km: 1800 },
+];
+
+const pick = <T extends { key: FactKey }>(
+  scale: readonly (T & { kg?: number; km?: number })[],
+  total: number,
+  unit: 'kg' | 'km',
+  kind: 'volume' | 'distance'
+): FunFact | null => {
+  let best: FunFact | null = null;
+  for (const item of scale) {
+    const size = unit === 'kg' ? item.kg! : item.km!;
+    const n = Math.round(total / size);
+    if (n >= 2) best = { key: item.key, n, kind };
+  }
+  return best;
+};
+
+/**
+ * The one comparison worth printing, or null when nothing clears the smallest
+ * of them. Distance wins when there is any, because a diary full of kilos says
+ * something about you that a diary with kilometres in it hasn't said yet.
+ */
+export const funFact = (volumeKg: number, distanceKm: number): FunFact | null =>
+  pick([...SPANS].sort((a, b) => a.km - b.km), distanceKm, 'km', 'distance') ??
+  pick(WEIGHTS, volumeKg, 'kg', 'volume');

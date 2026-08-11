@@ -258,6 +258,13 @@ export type State = {
    */
   level: Level;
   settingsOpen: boolean;
+  /**
+   * The Insights screen, opened from the Profile card. Transient like every
+   * other open-overlay flag — the statistics are derived from `history` on
+   * every render, so there is nothing about this view worth surviving a
+   * restart.
+   */
+  statsOpen: boolean;
   scanning: boolean;
   /**
    * This phone's install id, advertised alongside the profile name (see
@@ -416,6 +423,7 @@ const initialState: State = {
   style: 'mixed',
   level: 'regular',
   settingsOpen: false,
+  statsOpen: false,
   scanning: false,
   // ANDROID_ID resolves at module load and never changes; the random
   // fallback is minted once here and then pinned by persistence.

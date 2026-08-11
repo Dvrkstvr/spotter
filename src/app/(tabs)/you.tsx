@@ -111,7 +111,12 @@ export default function YouScreen() {
       {/* Directly under the identity, above Buddy: what the diary knows about
           you belongs beside who you are, and ahead of who you train with. */}
       <View style={styles.statsCard}>
-        <StatsCard recent={recentStats} allTime={allTimeStats} L={L} />
+        <StatsCard
+          recent={recentStats}
+          allTime={allTimeStats}
+          L={L}
+          onPress={() => patch({ statsOpen: true })}
+        />
       </View>
 
       <H6 style={styles.sectionHead}>{L.aboutYou}</H6>

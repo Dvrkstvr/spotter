@@ -4,14 +4,15 @@
  * The order below is the order they paint in — later wins — and each carries the
  * z-index the design gives it, so the two never drift apart:
  *
- *   70 exercise · 75 routine · 78 settings · 79 buddy sync · 80 session
+ *   70 exercise · 75 routine · 77 insights · 78 settings · 79 buddy sync · 80 session
  *   83 schedule · 84 pick workout · 85 picker · 86 how-to · 87 nearby
  *   88 new exercise · 89 buddy invite / join ask · 90 summary
  *
- * 79 (buddy sync), 83 (schedule), and 89 (buddy invite, join ask) are not
- * from the design: the day-routine selector replaces the design's
+ * 77 (insights), 79 (buddy sync), 83 (schedule), and 89 (buddy invite, join
+ * ask) are not from the design: the day-routine selector replaces the design's
  * tap-to-cycle, and the buddy screens belong to the real radio the design's
- * mock never had. Both buddy questions sit just under the summary so
+ * mock never had. Insights sits just under settings, the one screen that has
+ * to be able to cover it. Both buddy questions sit just under the summary so
  * "train together?" and "can I join?" can land on top of whatever is open —
  * including the session, which is exactly where the second one arrives.
  */
@@ -20,6 +21,7 @@ import { BuddyInviteSheet } from '@/components/overlays/buddy-invite-sheet';
 import { OnboardingOverlay } from '@/components/overlays/onboarding-overlay';
 import { BuddySyncOverlay } from '@/components/overlays/buddy-sync-overlay';
 import { ExerciseSheet } from '@/components/overlays/exercise-sheet';
+import { InsightsOverlay } from '@/components/overlays/insights-overlay';
 import { InstructionsSheet } from '@/components/overlays/instructions-sheet';
 import { JoinAskSheet } from '@/components/overlays/join-ask-sheet';
 import { NewExerciseSheet } from '@/components/overlays/new-exercise-sheet';
@@ -53,6 +55,7 @@ export function Overlays() {
       <RestAlarm />
       {s.exOpen && <ExerciseSheet />}
       {s.routineOpen && <RoutineOverlay />}
+      {s.statsOpen && <InsightsOverlay />}
       {s.settingsOpen && <SettingsOverlay />}
       {social && s.buddySync && <BuddySyncOverlay />}
       {s.session && !s.sessionMin && <SessionOverlay />}
