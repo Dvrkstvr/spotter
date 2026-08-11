@@ -345,11 +345,49 @@ export type DraftPayload = {
   picking: boolean;
 };
 
+/* ── peer identity ─────────────────────────────────────────────────────── */
+
+/**
+ * The Nearby advertising name carries both halves of a peer's identity:
+ * `<installId>|<displayName>`. The install id (`selfId` in the store) is
+ * ANDROID_ID or a once-generated random string — stable across renames — so
+ * a pairing survives the buddy renaming themselves. A raw name with no
+ * separator (an older build advertising name-only) parses as id-less and
+ * matches by name, as before.
+ */
+export const encodePeerName = (id: string, name: string) => (id ? `${id}|${name}` : name);
+
+export type PeerIdentity = { id: string | null; name: string };
+
+export const decodePeerName = (raw: string): PeerIdentity => {
+  const i = raw.indexOf('|');
+  const id = i > 0 ? raw.slice(0, i) : '';
+  return /^[a-z0-9]{8,}$/.test(id) ? { id, name: raw.slice(i + 1) } : { id: null, name: raw };
+};
+
+/**
+ * Does an advertised identity match this display name? The id is what makes
+ * a renamed buddy still the buddy; the name fallback keeps id-less older
+ * builds pairable. `id` is the install id recorded for the name in
+ * `buddyIds`, if one ever arrived.
+ */
+export const matchesBuddy = (name: string, id: string | undefined, peer: PeerIdentity) =>
+  (peer.id !== null && peer.id === id) || peer.name === name;
+
+/** Is this peer anywhere on the roster — by recorded install id or by name? */
+export const isKnownPeer = (
+  s: { knownBuddies: string[]; buddyIds: Record<string, string> },
+  peer: PeerIdentity
+) =>
+  s.knownBuddies.includes(peer.name) ||
+  (peer.id !== null && Object.values(s.buddyIds).includes(peer.id));
+
 /* ── wire protocol (real radio) ────────────────────────────────────────── */
 
 /** Messages the two phones exchange once Nearby connects them. */
 export type BuddyMessage =
-  | { v: 1; t: 'snapshot'; name: string; data: SyncSide }
+  /** `id` is the sender's install id; absent from older builds */
+  | { v: 1; t: 'snapshot'; name: string; id?: string; data: SyncSide }
   | { v: 1; t: 'item'; item: SyncItem }
   | { v: 1; t: 'sessionInvite'; invite: SessionInvite }
   | { v: 1; t: 'sessionJoin' }
