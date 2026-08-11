@@ -1,5 +1,5 @@
 /** Exercise library and per-exercise instructions. Ported from the design's EX / INFO. */
-import { LangMap } from './i18n';
+import { Lang, LangMap } from './i18n';
 
 /**
  * What the two numbers in a set row mean.
@@ -92,9 +92,13 @@ export type MarkNote = { mark: SetMark; note?: string };
 
 export type Exercise = {
   id: string;
-  /** Canonical name — the seed library is language-neutral gym vocabulary. */
+  /** Canonical name — always English, and the stable join key for the coach. */
   name: string;
-  /** Per-language names for user-created exercises. Seed entries have none. */
+  /**
+   * Per-language names. User-created exercises carry what they were named;
+   * seeded ones get theirs from `DE_NAMES` below — only where a German gym
+   * genuinely says something else, so `Plank` stays `Plank`.
+   */
   names?: LangMap;
   /** Key into the user's muscle-group list. */
   group: string;
@@ -167,7 +171,7 @@ export const styleFirst = (list: Exercise[], s: StyleKey): Exercise[] =>
     ? list
     : [...list].sort((a, b) => Number(inStyle(b, s)) - Number(inStyle(a, s)));
 
-export const EX: Exercise[] = [
+const SEEDS: Exercise[] = [
   { id: 'bench', name: 'Bench Press', group: 'Chest', kind: 'Barbell', last: 70, lastSets: ['70 × 8', '70 × 8', '70 × 7', '65 × 8'] },
   { id: 'incline', name: 'Incline Dumbbell Press', group: 'Chest', kind: 'Dumbbell', last: 24, lastSets: ['24 × 10', '24 × 9', '22 × 10'] },
   { id: 'chestpress', name: 'Chest Press', group: 'Chest', kind: 'Machine', last: 60, lastSets: ['60 × 10', '60 × 10', '60 × 9'] },
@@ -263,6 +267,65 @@ export const EX: Exercise[] = [
   { id: 'jumprope', name: 'Jump Rope', group: 'Cardio', kind: 'Bodyweight', measure: 'distance', last: 0, lastSets: ['— × 3', '— × 3', '— × 2'] },
 ];
 
+/* ── German seed names ─────────────────────────────────────────────────────
+ *
+ * Only where a German gym genuinely says something else — `Butterfly` *is*
+ * the German for a pec deck, but `Plank`, `Hip Thrust` and the calisthenics
+ * skill names are what the German scene says too, so those ids are absent
+ * and keep their canonical name in both languages. An id in this table gets
+ * `names: { en, de }`: both filled, because `resolveNames` greys a name whose
+ * requested language is missing, and a seed is never "untranslated".
+ */
+const DE_NAMES: Record<string, string> = {
+  bench: 'Bankdrücken',
+  incline: 'Schrägbankdrücken mit Kurzhanteln',
+  chestpress: 'Brustpresse',
+  pec: 'Butterfly',
+  fly: 'Fliegende am Kabelzug',
+  pushup: 'Liegestütze',
+  lat: 'Latzug',
+  row: 'Rudern am Kabel',
+  bbrow: 'Langhantelrudern',
+  pullup: 'Klimmzüge',
+  sapd: 'Latzug mit gestreckten Armen',
+  rear: 'Butterfly Reverse',
+  lateral: 'Seitheben',
+  curl: 'Bizepscurls',
+  tri: 'Trizepsdrücken am Kabel',
+  squat: 'Kniebeugen',
+  frontsquat: 'Frontkniebeugen',
+  deadlift: 'Kreuzheben',
+  rdl: 'Rumänisches Kreuzheben',
+  legpress: 'Beinpresse',
+  legext: 'Beinstrecker',
+  legcurl: 'Beinbeuger',
+  hipadd: 'Adduktorenmaschine',
+  calfmach: 'Wadenheben an der Maschine',
+  lunge: 'Ausfallschritte im Gehen',
+  dip: 'Dips',
+  diamond: 'Diamant-Liegestütze',
+  chinup: 'Klimmzüge im Untergriff',
+  invrow: 'Umgekehrtes Rudern',
+  bridge: 'Beckenheben',
+  calfbw: 'Wadenheben',
+  kneeraise: 'Knieheben im Hang',
+  handstand: 'Handstand',
+  wallsit: 'Wandsitzen',
+  run: 'Laufen',
+  intervalrun: 'Intervall-Lauf',
+  walk: 'Gehen',
+  swim: 'Schwimmen',
+  rower: 'Rudergerät',
+  bike: 'Ergometer',
+  elliptical: 'Crosstrainer',
+  stairs: 'Stepper',
+  jumprope: 'Seilspringen',
+};
+
+export const EX: Exercise[] = SEEDS.map((e) =>
+  DE_NAMES[e.id] ? { ...e, names: { en: e.name, de: DE_NAMES[e.id] } } : e
+);
+
 /** A machine setting: [what to set, what to set it to]. */
 export type SetupPair = [string, string];
 
@@ -330,6 +393,88 @@ export const INFO: Record<string, ExerciseInfo> = {
   stairs: { setup: [['Level', '8']], cues: ['Stand up off the rails — they are for balance, not weight.', 'Whole foot on the step.'] },
   jumprope: { setup: [['Rope length', 'armpit']], cues: ['Turn from the wrists, not the shoulders.', 'Jump just high enough to clear the rope.'] },
 };
+
+/**
+ * The same table, written in German — written, not translated (AGENTS.md,
+ * "Copy voice"): terse du-form, mechanism first. A full parallel table rather
+ * than per-entry maps, so a German phone never shows a half-translated sheet.
+ * Read through `infoFor`, never directly. The numeric setup *values* are the
+ * design's example settings and stay as they are; only labels and word-values
+ * translate.
+ */
+export const INFO_DE: Record<string, ExerciseInfo> = {
+  bench: { setup: [['Stangenhöhe', '3'], ['Bank', 'flach']], cues: ['Schulterblätter zusammen, Füße fest am Boden.', 'Stange zur unteren Brust, Ellbogen etwa 45°.'] },
+  incline: { setup: [['Bankwinkel', '30°']], cues: ['Kurzhanteln oben über dem Schlüsselbein.', 'Auf Brusthöhe stoppen, nicht federn.'] },
+  chestpress: { setup: [['Sitz', '4'], ['Griffe', 'B']], cues: ['Griffe auf Höhe der Brustmitte.', 'Ellbogen nicht durchstrecken.'] },
+  pec: { setup: [['Sitz', '4'], ['Startposition', '3']], cues: ['Ellbogen leicht gebeugt, und so bleiben sie.', 'Vorn eine Sekunde zusammendrücken.'] },
+  fly: { setup: [['Rollenhöhe', '8'], ['Griffe', 'einzeln']], cues: ['Einen Schritt nach vorn, damit die Züge unter Spannung bleiben.', 'Hände im Bogen führen, nicht drücken.'] },
+  pushup: { setup: [], cues: ['Hände unter den Schultern.', 'Körper in einer Linie, Rippen runter.'] },
+  lat: { setup: [['Sitz', '3'], ['Beinpolster', '4'], ['Stange', 'breit']], cues: ['Brust raus, Stange zum Schlüsselbein.', 'Die Ellbogen führen, nicht die Hände.'] },
+  row: { setup: [['Sitz', '3'], ['Fußplatte', '2']], cues: ['Der Rücken bleibt ruhig, nur die Arme arbeiten.', 'Zum Bauchnabel ziehen, kurz halten.'] },
+  bbrow: { setup: [['Ablagehöhe im Rack', '2']], cues: ['Oberkörper etwa 45°, Rücken gerade.', 'Stange zum Bauch, kontrolliert ablassen.'] },
+  pullup: { setup: [['Stange', 'hoch'], ['Tritt', '1']], cues: ['Unten ganz aushängen.', 'Kinn über die Stange, ohne Schwung.'] },
+  sapd: { setup: [['Rollenhöhe', '10']], cues: ['Arme die ganze Zeit gestreckt.', 'Stange zu den Oberschenkeln — der Lat arbeitet.'] },
+  rear: { setup: [['Sitz', '4'], ['Arme', 'breit']], cues: ['Daumen nach oben, Ellbogen locker.', 'Stopp, wenn die Arme auf Schulterlinie sind.'] },
+  lateral: { setup: [], cues: ['Die Ellbogen führen.', 'Auf Schulterhöhe stoppen.'] },
+  curl: { setup: [], cues: ['Ellbogen fest an den Rippen.', 'Kein Schwung aus der Hüfte.'] },
+  tri: { setup: [['Rollenhöhe', '10'], ['Griff', 'Seil']], cues: ['Ellbogen bleiben am Körper.', 'Das Seil unten auseinanderziehen.'] },
+
+  /* Beine */
+  squat: { setup: [['Ablagehöhe im Rack', '7'], ['Sicherungsstreben', '4']], cues: ['Stange auf der hinteren Schulter, Ellbogen nach unten.', 'Hüfte unter Kniehöhe, Knie in Richtung der Zehen.'] },
+  frontsquat: { setup: [['Ablagehöhe im Rack', '7']], cues: ['Ellbogen hoch, die Stange liegt auf den Schultern.', 'Aufrecht bleiben — sobald du kippst, fällt die Stange.'] },
+  deadlift: { setup: [['Scheiben', '20 kg — Stange auf Kniehöhe']], cues: ['Stange über der Fußmitte, Schultern knapp davor.', 'Den Boden wegdrücken; die Stange streift die Schienbeine.'] },
+  rdl: { setup: [['Ablagehöhe im Rack', '9']], cues: ['Knie locker, aus der Hüfte kippen.', 'Stopp, wo die Beinbeuger stoppen — nicht erst am Boden.'] },
+  hipthrust: { setup: [['Bankhöhe', 'Knie'], ['Polster', 'dick']], cues: ['Schulterblätter auf die Bankkante.', 'Rippen runter, Kinn einziehen, oben anspannen.'] },
+  legpress: { setup: [['Sitz', '3'], ['Lehnenwinkel', '2']], cues: ['Füße mittig auf der Platte, schulterbreit.', 'Knie bis etwa 90° — die Hüfte bleibt unten.'] },
+  legext: { setup: [['Sitz', '4'], ['Polster', '5']], cues: ['Polster ans Schienbein, nicht an den Fuß.', 'Oben eine Sekunde halten.'] },
+  legcurl: { setup: [['Sitz', '3'], ['Polster', '4']], cues: ['Hüfte flach aufs Polster.', 'Den Rückweg kontrollieren.'] },
+  hipadd: { setup: [['Startweite', '3']], cues: ['Aufrecht sitzen, Knie zusammendrücken.', 'Langsam wieder öffnen lassen.'] },
+  calfmach: { setup: [['Schulterpolster', '5']], cues: ['Fußballen auf die Kante.', 'Unten ganz dehnen, oben kurz halten.'] },
+  lunge: { setup: [], cues: ['Großer Schritt, hinteres Knie knapp über den Boden.', 'Oberkörper die ganze Zeit aufrecht.'] },
+
+  /* Calisthenics */
+  dip: { setup: [['Holmbreite', 'schulterbreit']], cues: ['Vorgelehnt für die Brust, aufrecht für den Trizeps.', 'Stopp, wenn der Oberarm waagerecht ist.'] },
+  pikepush: { setup: [], cues: ['Hüfte hoch, Kopf zwischen den Händen.', 'Mit dem Scheitel Richtung Boden.'] },
+  diamond: { setup: [], cues: ['Zeigefinger und Daumen berühren sich.', 'Die Ellbogen streifen auf dem Weg nach unten die Rippen.'] },
+  chinup: { setup: [['Stange', 'hoch'], ['Tritt', '1']], cues: ['Handflächen zu dir, Hände schulterbreit.', 'Unten ganz aushängen, Kinn über die Stange.'] },
+  invrow: { setup: [['Stangenhöhe', 'Hüfte']], cues: ['Körper in einer Linie von Ferse bis Kopf.', 'Brust an die Stange, dort kurz halten.'] },
+  airsquat: { setup: [], cues: ['Füße schulterbreit, Zehen leicht nach außen.', 'Hüfte unter Kniehöhe, Brust raus.'] },
+  splitsq: { setup: [['Bankhöhe', 'Knie']], cues: ['Hinterer Fuß auf die Bank, vorderes Schienbein senkrecht.', 'Runter, bis das hintere Knie fast aufsetzt.'] },
+  nordic: { setup: [], cues: ['Fußgelenke fixiert, Hüfte gestreckt.', 'So langsam wie möglich ablassen, dann zurückdrücken.'] },
+  bridge: { setup: [], cues: ['Fersen nah an die Hüfte.', 'Oben anspannen, Rippen runter.'] },
+  calfbw: { setup: [['Stufe', 'Kante']], cues: ['Unten ganz dehnen.', 'Oben eine Sekunde halten.'] },
+  kneeraise: { setup: [['Stange', 'hoch']], cues: ['Kein Schwung — aus dem ruhigen Hang starten.', 'Knie zur Brust, die Hüfte rollt mit ein.'] },
+
+  plank: { setup: [], cues: ['Ellbogen unter den Schultern.', 'Rippen runter, Gesäß fest, eine gerade Linie.'] },
+  sideplank: { setup: [], cues: ['Ellbogen unter der Schulter, Hüften übereinander.', 'Die untere Hüfte nach oben drücken, nicht nach vorn.'] },
+  hollow: { setup: [], cues: ['Unterer Rücken fest am Boden.', 'Arme und Beine nur so weit absenken, wie das hält.'] },
+  deadhang: { setup: [['Stange', 'hoch']], cues: ['Schultern aktiv, nicht zu den Ohren gezogen.', 'Alles andere locker lassen und atmen.'] },
+  handstand: { setup: [['Wand', 'Brust zur Wand']], cues: ['Finger spreizen, den Boden wegdrücken.', 'Rippen runter — kein Hohlkreuz.'] },
+  lsit: { setup: [['Parallettes', 'niedrig']], cues: ['Schultern nach unten gedrückt, Arme gestreckt.', 'Beine gestreckt und waagerecht — sonst angezogen halten.'] },
+  wallsit: { setup: [], cues: ['Oberschenkel parallel zum Boden.', 'Rücken flach an der Wand, Gewicht auf den Fersen.'] },
+
+  /* Cardio — die Setup-Paare sind die Konsole der Maschine */
+  run: { setup: [], cues: ['Locker heißt: Du kannst dich noch unterhalten.', 'Unter der Hüfte aufsetzen, kurze schnelle Schritte.'] },
+  intervalrun: { setup: [], cues: ['Die Strecke hart, dann gehen, bis der Atem zurück ist.', 'Gleichmäßiges Tempo über alle Wiederholungen schlägt eine schnelle erste.'] },
+  walk: { setup: [], cues: ['Zügig genug, dass Reden anstrengt.'] },
+  swim: { setup: [['Bahn', 'mittel']], cues: ['Ins Wasser ausatmen, solange das Gesicht drin ist.', 'Züge pro Bahn zählen — weniger schlägt schneller.'] },
+  rower: { setup: [['Dämpfer', '4'], ['Fußschlaufe', '3']], cues: ['Beine, dann Rücken, dann Arme. Auf dem Rückweg umgekehrt.', 'Die Kette bleibt den ganzen Zug über waagerecht.'] },
+  bike: { setup: [['Sitzhöhe', '7'], ['Widerstand', '6']], cues: ['Sitz so, dass das Knie unten leicht gebeugt bleibt.', 'Zone 2 ist das Tempo, bei dem die Nase zum Atmen reicht.'] },
+  elliptical: { setup: [['Widerstand', '6'], ['Steigung', '4']], cues: ['Aufrecht stehen, die Griffe folgen den Beinen.'] },
+  stairs: { setup: [['Stufe', '8']], cues: ['Nicht aufs Geländer stützen — es ist fürs Gleichgewicht da, nicht fürs Gewicht.', 'Der ganze Fuß auf die Stufe.'] },
+  jumprope: { setup: [['Seillänge', 'Achselhöhe']], cues: ['Aus den Handgelenken drehen, nicht aus den Schultern.', 'Nur so hoch springen, wie das Seil braucht.'] },
+};
+
+/**
+ * The seeded how-to for an exercise, in the given language.
+ *
+ * The seam every read goes through: the store's `setup()` / `cues()` resolve
+ * here and lay the user's overrides on top — an override is the user's own
+ * words and wins in *both* languages, same as an edited name. English is the
+ * fallback so a custom exercise (no seed entry) simply resolves to nothing.
+ */
+export const infoFor = (id: string, lang: Lang): ExerciseInfo | undefined =>
+  lang === 'de' ? (INFO_DE[id] ?? INFO[id]) : INFO[id];
 
 /**
  * One line of a routine. `reps` and `w` are read through the exercise's

@@ -208,7 +208,7 @@ export default function PlanScreen() {
         {isoOf(s.daySel) === today && !!selRoutine && selSessions.length === 0 && (
           <Btn
             variant="primary"
-            label={L.start}
+            label={L.startBare}
             style={styles.dayStart}
             labelStyle={styles.dayStartLabel}
             onPress={() => start(selRoutine.id)}

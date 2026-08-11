@@ -585,6 +585,37 @@ Keep these; they're decisions, not drift. Each is commented at its site.
   drags into the middle of the seeded block, which is the whole point of
   having one.
 
+## Copy voice
+
+Every user-facing string lives in `src/data/i18n.ts`; the full audit that
+derived these rules is `design/copy-audit.md` (its §7 lists German lines that
+deliberately beat their English — don't literalize them back).
+
+- **Mechanism first, consequence second; the em-dash carries asides.** No
+  exclamation marks, no praise — understatement is the register ("Ready.").
+  Errors say what happened and the way out, never who's at fault.
+- **Contractions are the default.** Write them out only where a line should
+  slow the reader down (destructive confirmations: "It cannot be undone.").
+- **Chevrons are `›`/`‹`, never `>`.** The freeform session is "Free session"
+  in English and "Freies Training" in German — one term each, everywhere.
+- **German is written, not translated.** du-form; apocopated imperatives in UI
+  copy (*füg, trag, Zeig*), full imperatives only inside the coach prompt;
+  buttons are infinitives (`start` is the one composed exception — it prefixes
+  a routine name, and `startBare` exists for the bare-button sites).
+- **German terms, decided once:** **Einheit** = a logged/counted session,
+  **Session** = the live (shared) one, **Training** = the activity;
+  **Handy** = the phone — **Gerät** is equipment only; **Partner**, not
+  Buddy; **Wdh.**, not Whd.; a screen tap is a **Fingertipp**, *abhaken*
+  means to tick. Trailing activity-ellipses attach (`Suche…`).
+- **The seed library speaks both languages too.** Seeded exercise names carry
+  `names.de` via `DE_NAMES` — only where a German gym genuinely says
+  something else (`Butterfly` for the pec deck; `Plank` stays `Plank`) — and
+  the cues and machine-setup labels have a full parallel table (`INFO_DE`),
+  read through `infoFor(id, lang)`, never `INFO` directly. A user's rewrite
+  (`cueEdits` / `setups` / a rename) is their own words and wins in both
+  languages. `Exercise.name` stays English: it is the canonical join key the
+  coach contract and `resolvePlan` match on, not a display string.
+
 ## Checks
 
 Both must pass before committing:

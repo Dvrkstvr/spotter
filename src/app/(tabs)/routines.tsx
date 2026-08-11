@@ -64,7 +64,7 @@ export default function RoutinesScreen() {
               <View style={styles.cardActions}>
                 <Btn
                   variant="ghost"
-                  label={`${L.start} ›`}
+                  label={`${L.startBare} ›`}
                   labelStyle={styles.startLabel}
                   onPress={() => start(r.id)}
                 />

@@ -36,7 +36,7 @@ import {
   blankOf,
   EX,
   Exercise,
-  INFO,
+  infoFor,
   isSingle,
   Level,
   MarkNote,
@@ -953,16 +953,17 @@ function useWorkoutState() {
     return new Set(state.history.map((h) => h.date).filter((d) => d.startsWith(prefix))).size;
   };
 
-  /** The machine settings for an exercise — the user's edits, else the defaults. */
+  /* The machine settings / cues for an exercise — the user's edits, else the
+     seeds in the active language (`infoFor`). An edit is the user's own words
+     and wins in both languages, exactly like an edited name. */
   const setup = (id: string): SetupPair[] =>
-    state.setups[id] ?? (INFO[id]?.setup ?? []).map((p) => [...p] as SetupPair);
+    state.setups[id] ?? (infoFor(id, state.lang)?.setup ?? []).map((p) => [...p] as SetupPair);
 
-  /** The cues for an exercise — the user's rewrite, else the seeded ones. */
-  const cues = (id: string) => state.cueEdits[id] ?? INFO[id]?.cues ?? [];
+  const cues = (id: string) => state.cueEdits[id] ?? infoFor(id, state.lang)?.cues ?? [];
 
   const mutSetup = (id: string, fn: (rows: SetupPair[]) => void) => {
     patch((s) => {
-      const cur = (s.setups[id] ?? INFO[id]?.setup ?? []).map((p) => [...p] as SetupPair);
+      const cur = (s.setups[id] ?? infoFor(id, s.lang)?.setup ?? []).map((p) => [...p] as SetupPair);
       fn(cur);
       return { setups: { ...s.setups, [id]: cur } };
     });
@@ -970,7 +971,7 @@ function useWorkoutState() {
 
   const mutCues = (id: string, fn: (rows: string[]) => void) => {
     patch((s) => {
-      const cur = [...(s.cueEdits[id] ?? INFO[id]?.cues ?? [])];
+      const cur = [...(s.cueEdits[id] ?? infoFor(id, s.lang)?.cues ?? [])];
       fn(cur);
       return { cueEdits: { ...s.cueEdits, [id]: cur } };
     });
