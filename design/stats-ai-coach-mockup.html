@@ -46,10 +46,6 @@
     font-weight: 500; font-size: 24px; letter-spacing: -0.015em;
     margin: 0 0 6px;
   }
-  .h6 {
-    font-size: 12px; font-weight: 500; letter-spacing: 0.08em;
-    text-transform: uppercase; color: var(--n500);
-  }
   .lede { color: var(--n400); max-width: 62ch; }
   .lede strong { color: var(--text); font-weight: 500; }
 
@@ -99,10 +95,6 @@
   .batt { display: inline-block; width: 18px; height: 9px; border: 1px solid var(--n600); border-radius: 2px; position: relative; }
   .batt::after { content: ""; position: absolute; inset: 1.5px 30% 1.5px 1.5px; background: var(--n500); border-radius: 1px; }
   .screen { flex: 1; padding: 8px 18px 0; overflow: hidden; position: relative; display: flex; flex-direction: column; }
-  .screen.fades::after {
-    content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 34px;
-    background: linear-gradient(transparent, var(--bg)); pointer-events: none;
-  }
   .tabs {
     flex: none; display: flex; border-top: 1px solid var(--rule);
     padding: 9px 6px 14px; background: rgba(22, 24, 38, 0.92);
@@ -127,7 +119,6 @@
   }
   .btn.primary { border-color: var(--accent); color: var(--accent); }
   .btn.dashed { border-style: dashed; }
-  .btn.ghost { border-color: transparent; color: var(--accent); padding: 4px 2px; justify-content: flex-start; }
   .seg { display: inline-flex; border: 1px solid var(--divider); border-radius: 8px; overflow: hidden; }
   .seg span { padding: 5px 12px; font-size: 12px; color: var(--text); }
   .seg span + span { border-left: 1px solid var(--divider); }
@@ -148,11 +139,7 @@
   .rule-row { border-bottom: 1px solid var(--rule); }
 
   /* insights bits */
-  .tiles { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
-  .tile { background: var(--surface); border: 1px solid var(--n800); border-radius: 8px; padding: 6px 10px; }
-  .tile .v { font-size: 15.5px; font-weight: 500; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
-  .tile .k { font-size: 9.5px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--n600); margin-top: 1px; }
-  .balance-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 12.5px; }
+  .balance-row { display: flex; align-items: center; gap: 8px; padding: 2px 0; font-size: 12.5px; }
   .balance-row .name { width: 76px; color: var(--text); }
   .balance-row .name.low { color: var(--n500); }
   .balance-row .bar { flex: 1; height: 8px; position: relative; }
@@ -165,7 +152,7 @@
   /* prompt / code */
   .promptbox {
     background: var(--scrim); border: 1px solid var(--n800); border-radius: 8px;
-    font-family: var(--mono); font-size: 10.4px; line-height: 1.62;
+    font-family: var(--mono); font-size: 9.8px; line-height: 1.5;
     color: var(--n400); padding: 12px 13px; white-space: pre-wrap;
     overflow: hidden; position: relative;
   }
@@ -176,7 +163,7 @@
     background: linear-gradient(transparent, var(--scrim));
   }
 
-  /* import rows */
+  /* import / ledger rows */
   .imp-row { display: flex; align-items: center; gap: 9px; padding: 7px 0; font-size: 13px; }
   .imp-row .scheme { margin-left: auto; color: var(--n500); font-size: 11.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .tick { width: 16px; height: 16px; border: 1px solid var(--divider); border-radius: 4px; flex: none; position: relative; }
@@ -210,42 +197,104 @@
     <h1>Stats &amp; AI Coach</h1>
     <p class="lede">
       A read of the diary the app already keeps — <strong>strengths and weaknesses drawn from
-      logged sets over time</strong> — and a loop that turns it into recommendations:
-      pick a goal, Spotter writes a prompt around your data, you hand it to any AI chat,
-      and paste the answer back. The answer carries a machine-readable block, so the app
-      can preview and import the recommended exercises and routines. Later, a tiny on-device
-      model replaces the copy-paste hop; <strong>every screen after the prompt stays the same</strong>.
+      logged sets over time</strong> — and a loop that turns it into recommendations. It opens
+      from <strong>a card on the You tab</strong>: pick a goal, Spotter writes a prompt around
+      your data, you hand it to any AI chat, and paste the answer back. The answer carries a
+      machine-readable block <em>and its own way home</em>, so the app can preview and import the
+      recommended exercises and routines. Later, a tiny on-device model replaces the copy-paste
+      hop; <strong>every screen after the prompt stays the same</strong>.
     </p>
     <div class="flow" aria-label="the loop">
-      <span class="step"><em>Diary</em> · history + lastLog</span><span class="arrow">→</span>
-      <span class="step"><em>01</em> Insights</span><span class="arrow">→</span>
-      <span class="step"><em>02</em> Goal</span><span class="arrow">→</span>
-      <span class="step"><em>03</em> Prompt</span><span class="arrow">→</span>
+      <span class="step"><em>01</em> You card</span><span class="arrow">→</span>
+      <span class="step"><em>02</em> Insights</span><span class="arrow">→</span>
+      <span class="step"><em>03</em> Goal</span><span class="arrow">→</span>
+      <span class="step"><em>04</em> Prompt</span><span class="arrow">→</span>
       <span class="step ai">Gemini · Claude · GPT</span><span class="arrow">→</span>
-      <span class="step"><em>04</em> Paste &amp; preview</span><span class="arrow">→</span>
+      <span class="step"><em>05</em> Paste &amp; preview</span><span class="arrow">→</span>
       <span class="step"><em>Import</em> · routines + exercises</span>
     </div>
   </header>
 
   <hr class="fade">
 
-  <!-- ════════ 01 · INSIGHTS ════════ -->
+  <!-- ════════ 01 · YOU CARD ════════ -->
+  <section class="shot" id="you">
+    <figure class="phone" aria-label="You tab with the Statistics and Coach card">
+      <div class="status"><span>19:23</span><span class="batt"></span></div>
+      <div class="screen">
+        <div class="sc-h2">Calvin</div>
+        <div class="sc-sub">29 yrs · 78 kg · 183 cm</div>
+
+        <div class="card" style="margin-top:14px; border-color:var(--a700); background:linear-gradient(150deg, var(--a900), var(--surface) 62%); padding:12px 14px;">
+          <div class="kicker">Statistics &amp; Coach</div>
+          <div style="font-size:14.5px; font-weight:500; margin-top:6px; line-height:1.35;">Chest is pulling ahead — legs got 9% of your sets.</div>
+          <div id="minibars" style="margin-top:9px;"></div>
+          <div style="display:flex; align-items:center; margin-top:8px; font-size:11.5px; color:var(--n500);">
+            41 sessions · 428,000 kg lifted
+            <span style="margin-left:auto; color:var(--accent); font-size:17px; line-height:1;">›</span>
+          </div>
+        </div>
+
+        <!-- the rest of You, unchanged — dimmed here to mark it as context -->
+        <div style="opacity:0.5;">
+          <div class="sc-h6" style="margin-top:16px;">Buddy</div>
+          <div class="imp-row rule-row">Train together<span class="scheme">no one nearby</span></div>
+          <div class="imp-row">Known buddies<span class="scheme">1</span></div>
+
+          <div class="sc-h6" style="margin-top:12px;">You built</div>
+          <div class="imp-row rule-row">Custom exercises<span class="scheme">12</span></div>
+          <div class="imp-row rule-row">Routines<span class="scheme">7</span></div>
+          <div class="imp-row">Logged this month<span class="scheme">8 days</span></div>
+
+          <div class="sc-h6" style="margin-top:12px;">Data</div>
+          <div class="imp-row rule-row">Backup<span class="scheme">export · restore</span></div>
+          <div class="imp-row">Settings<span class="scheme">›</span></div>
+        </div>
+
+        <div style="flex:1;"></div>
+      </div>
+      <div class="tabs"><span>Today</span><span>Plan</span><span>Routines</span><span>Library</span><span class="on">You</span></div>
+    </figure>
+
+    <div class="notes">
+      <div class="kicker">01</div>
+      <h2 class="sec">The way in — a card on You</h2>
+      <ul>
+        <li>The card sits <strong>under the profile header, above Buddy</strong> — the greyed
+          sections are today's You screen, untouched. No sixth tab.</li>
+        <li>It wears the <strong>hero gradient</strong> (<code>t.heroGradient</code>, accent-900
+          → surface at 62%), the same treatment as Today's hero — the one card on the screen
+          that leads somewhere big.</li>
+        <li><strong>The headline is computed, not canned</strong>: the largest deviation from an
+          even split (or, when balance is fine, the current streak). The card earns its tap by
+          saying something true before you take it.</li>
+        <li>The mini bars are the radar's data at a glance — six groups, weak ones dimmed. One
+          tap opens Insights (02).</li>
+        <li>Until ~5 sessions are logged the card shows a quiet empty state ("Log a few
+          workouts and your stats appear here") and the coach flow stays hidden — no
+          recommendations on no data.</li>
+      </ul>
+    </div>
+  </section>
+
+  <hr class="fade">
+
+  <!-- ════════ 02 · INSIGHTS ════════ -->
   <section class="shot" id="insights">
     <figure class="phone" aria-label="Insights screen">
       <div class="status"><span>19:24</span><span class="batt"></span></div>
       <div class="screen">
         <div class="sc-h2">Insights</div>
-        <div class="sc-sub">14 weeks · 41 sessions</div>
+        <div class="sc-sub">14 weeks · 41 sessions · 3.1 / week</div>
 
         <div style="margin-top:8px;"><span class="seg"><span class="on">8 weeks</span><span>6 months</span><span>All</span></span></div>
 
-        <div class="card" style="margin-top:8px; padding-bottom:6px;">
-          <div class="sc-h6">Muscle balance</div>
+        <div class="card" style="margin-top:7px; padding-bottom:5px;">
+          <div class="sc-h6">Muscle balance <span style="float:right; color:var(--n600); text-transform:none; letter-spacing:0;">% of sets · dashed = even</span></div>
           <div id="radar" style="display:flex; justify-content:center;"></div>
-          <div class="cap" style="margin-top:3px;">Share of working sets · dashed ring = even split</div>
         </div>
 
-        <div class="sc-h6" style="margin-top:9px;">Weak points</div>
+        <div class="sc-h6" style="margin-top:6px;">Weak points</div>
         <div>
           <div class="balance-row rule-row">
             <span class="name low">Hamstrings</span>
@@ -264,25 +313,30 @@
           </div>
         </div>
 
-        <div class="card" style="margin-top:8px; padding-bottom:4px;">
+        <div class="card" style="margin-top:7px; padding-bottom:3px;">
           <div class="sc-h6">Volume per week <span style="float:right; color:var(--n600); text-transform:none; letter-spacing:0;">load only</span></div>
           <div id="vol"></div>
         </div>
 
-        <div class="tiles" style="margin-top:8px;">
-          <div class="tile"><div class="v">3.1</div><div class="k">Per week</div></div>
-          <div class="tile"><div class="v">428k</div><div class="k">kg total</div></div>
-          <div class="tile"><div class="v">70 × 8</div><div class="k">Bench, best</div></div>
+        <div class="sc-h6" style="margin-top:6px;">Favourites</div>
+        <div>
+          <div class="imp-row rule-row" style="padding:3.5px 0;">Bench Press<span class="tag neutral">exercise</span><span class="scheme">logged 38 ×</span></div>
+          <div class="imp-row" style="padding:3.5px 0;">Chest Day<span class="tag neutral">routine</span><span class="scheme">16 sessions</span></div>
+        </div>
+
+        <div class="card" style="margin-top:6px; border-style:dashed; padding:6px 14px;">
+          <div class="kicker">Fun fact</div>
+          <div style="font-size:12.5px; margin-top:3px; line-height:1.45;">This month you lifted <strong style="font-weight:500;">45,400 kg</strong> — about 30 family cars.</div>
         </div>
 
         <div style="flex:1;"></div>
-        <div class="btn primary" style="margin-bottom:8px;">Get recommendations →</div>
+        <div class="btn primary" style="margin-bottom:6px; padding:7px 12px;">Get recommendations →</div>
       </div>
       <div class="tabs"><span>Today</span><span>Plan</span><span>Routines</span><span>Library</span><span class="on">You</span></div>
     </figure>
 
     <div class="notes">
-      <div class="kicker">01</div>
+      <div class="kicker">02</div>
       <h2 class="sec">Insights — what the diary already knows</h2>
       <ul>
         <li><strong>Everything on this screen is derivable today</strong> — from
@@ -295,18 +349,23 @@
           muscle group.</li>
         <li>Volume counts <strong>load sets only</strong>, same gate as <code>totals()</code> —
           kilometre-minutes stay out of the kg number, so the chart never lies.</li>
-        <li>Set verdicts (<code>lastMarks</code> — "heavier next time", a stalled squat marked
-          "lighter" twice) feed the weak-point read: a lift you keep down-marking is a
-          weakness the share-of-sets numbers can't see.</li>
-        <li>Entry point: a card on <strong>You</strong> (the counts already live there) and the
-          same CTA under the plan calendar. The period seg re-scopes every panel at once.</li>
+        <li><strong>Favourites are counted, not chosen</strong>: the exercise appearing in the
+          most logged sessions, the routine with the most <code>history</code> entries — by the
+          name frozen at log time, so a renamed routine keeps its record.</li>
+        <li><strong>Fun facts are unit-aware</strong>: load volume maps to weights (cars, a
+          747), logged <code>distance</code> to geography (the Sahara line goes here the day a
+          run is logged). One curated comparison list, deterministic pick per month — the same
+          fact all month, a new one next month.</li>
+        <li>Set verdicts (<code>lastMarks</code> — a stalled squat marked "lighter" twice) feed
+          the weak-point read: a lift you keep down-marking is a weakness the share-of-sets
+          numbers can't see.</li>
       </ul>
     </div>
   </section>
 
   <hr class="fade">
 
-  <!-- ════════ 02 · GOAL ════════ -->
+  <!-- ════════ 03 · GOAL ════════ -->
   <section class="shot" id="goal">
     <figure class="phone" aria-label="Goal picker screen">
       <div class="status"><span>19:25</span><span class="batt"></span></div>
@@ -352,7 +411,7 @@
     </figure>
 
     <div class="notes">
-      <div class="kicker">02</div>
+      <div class="kicker">03</div>
       <h2 class="sec">Goal — one pick, a few dials</h2>
       <ul>
         <li>Goals are <strong>radio chips</strong> (the <code>Chip</code> component, radio
@@ -371,7 +430,7 @@
 
   <hr class="fade">
 
-  <!-- ════════ 03 · PROMPT ════════ -->
+  <!-- ════════ 04 · PROMPT ════════ -->
   <section class="shot" id="prompt">
     <figure class="phone" aria-label="Prompt export screen">
       <div class="status"><span>19:25</span><span class="batt"></span></div>
@@ -379,24 +438,21 @@
         <div class="sc-h2">Your prompt</div>
         <div class="sc-sub">Fix weak points · 3× per week</div>
 
-        <div class="promptbox clipped" style="margin-top:12px; flex:1; min-height:0;">You are an experienced strength coach. I train with the Spotter workout diary. Below is a summary of my real training data. Recommend exercises and weekly routines for my goal.
+        <div class="promptbox clipped" style="margin-top:12px; flex:1; min-height:0;">You are an experienced strength coach. Below is my real training data from the Spotter workout diary. Recommend exercises and weekly routines for my goal.
 
-<span class="hl">MY GOAL</span>  Fix my weak points. 3 sessions/week, ~60 min. Equipment: barbell, dumbbells, machines, bodyweight.
+<span class="hl">MY GOAL</span>  Fix my weak points. 3 sessions/week, ~60 min. Gear: barbell, dumbbells, machines, bodyweight.
 
-<span class="hl">MUSCLE BALANCE</span> — share of working sets, last 8 weeks
-Chest 31 · Arms 22 · Shoulders 14 · Core 12 · Back 12 · Legs 9 (%)
-Weak: hamstrings 2%, calves 0%, one cardio session in 8 weeks
+<span class="hl">MUSCLE BALANCE</span> (8 wks, % of sets)  Chest 31 · Arms 22 · Shoulders 14 · Core 12 · Back 12 · Legs 9 — weak: hamstrings 2%, calves 0%, cardio once.
 
-<span class="hl">KEY LIFTS</span> — latest sets (8-week trend)
-Bench Press 70 kg × 8 (+7.5) · Lat Pulldown 55 × 10 (+5) · Squat 80 × 5 (stalled 6 wks, marked "lighter" twice) · Deadlift — never trained
+<span class="hl">KEY LIFTS</span>  Bench 70 kg × 8 (+7.5) · Pulldown 55 × 10 (+5) · Squat 80 × 5 (stalled, marked "lighter" twice) · Deadlift never trained.
 
 <span class="hl">RULES FOR YOUR ANSWER</span>
-1. Briefly say what to change and why (max 200 words).
-2. End with ONE fenced code block tagged <span class="hl">spotter</span> — JSON my app imports:
-<span class="dim">```spotter
-{ "exercises": [ { "name": "…", "group": "…", "equipment": "…", "measure": "load" } ],
-  "routines": [ { "name": "…", "items": [ { "exercise": "…", "sets": 3, "reps": 8, "kg": 40 } ] } ] }
-```</span>
+1. Briefly explain what to change and why.
+2. Then ONE fenced code block tagged <span class="hl">spotter</span> — JSON my app imports: <span class="dim">```spotter { "exercises": […], "routines": […] } ```</span>
+3. After the block, close with exactly:
+   <span class="hl">1. Copy this entire message.
+   2. Open Spotter → You → Statistics &amp; Coach → Import.
+   3. Paste. Spotter finds the plan and previews it.</span>
 Prefer exercises I already have: Bench Press, Squat, Lat Pulldown, …</div>
 
         <div style="display:flex; gap:8px; margin-top:12px;">
@@ -411,15 +467,19 @@ Prefer exercises I already have: Bench Press, Squat, Lat Pulldown, …</div>
     </figure>
 
     <div class="notes">
-      <div class="kicker">03</div>
+      <div class="kicker">04</div>
       <h2 class="sec">Prompt — readable by you, parseable by them</h2>
       <ul>
         <li>The prompt is <strong>shown in full, not hidden</strong> — it is exactly what
           leaves the phone, which is what makes the privacy toggles on the previous screen
           honest.</li>
-        <li>It ends with the <strong>reply contract</strong>: the AI is told to close with one
-          fenced <code>```spotter</code> block in a fixed JSON shape. Everything before the
-          block is prose for the user; the block is for the app.</li>
+        <li>It ends with the <strong>reply contract</strong>: rule 2 makes the AI close its
+          answer with one fenced <code>```spotter</code> block in a fixed JSON shape.
+          Everything before the block is prose for the user; the block is for the app.</li>
+        <li><strong>Rule 3 makes the answer carry its own way home.</strong> The AI ends with
+          "copy this entire message → open Spotter → paste", so whoever wandered off into a
+          chat app gets walked back to the Import screen by the reply itself — no memory of
+          the flow required.</li>
         <li>The exercise list at the end tells the AI what already exists (from
           <code>allEx()</code>), so recommendations reuse the library instead of inventing
           "Flat Barbell Chest Press" beside Bench Press.</li>
@@ -434,7 +494,7 @@ Prefer exercises I already have: Bench Press, Squat, Lat Pulldown, …</div>
 
   <hr class="fade">
 
-  <!-- ════════ 04 · IMPORT ════════ -->
+  <!-- ════════ 05 · IMPORT ════════ -->
   <section class="shot" id="import">
     <figure class="phone" aria-label="Import preview screen">
       <div class="status"><span>19:31</span><span class="batt"></span></div>
@@ -490,7 +550,7 @@ Prefer exercises I already have: Bench Press, Squat, Lat Pulldown, …</div>
     </figure>
 
     <div class="notes">
-      <div class="kicker">04</div>
+      <div class="kicker">05</div>
       <h2 class="sec">Import — preview first, additive always</h2>
       <ul>
         <li>Paste the AI's <strong>whole reply</strong> — the parser finds the one
@@ -524,9 +584,9 @@ Prefer exercises I already have: Bench Press, Squat, Lat Pulldown, …</div>
 {
   <span class="k">"exercises"</span>: [
     { <span class="k">"name"</span>: <span class="s">"Romanian Deadlift"</span>,
-      <span class="k">"group"</span>: <span class="s">"Hamstrings"</span>,      <span class="c">// matched to `groups` keys</span>
-      <span class="k">"equipment"</span>: <span class="s">"Barbell"</span>,       <span class="c">// matched to `kinds` keys</span>
-      <span class="k">"measure"</span>: <span class="s">"load"</span> }          <span class="c">// load | time | distance | duration</span>
+      <span class="k">"group"</span>: <span class="s">"Hamstrings"</span>,   <span class="c">// matched to `groups` keys</span>
+      <span class="k">"equipment"</span>: <span class="s">"Barbell"</span>,    <span class="c">// matched to `kinds` keys</span>
+      <span class="k">"measure"</span>: <span class="s">"load"</span> }       <span class="c">// load|time|distance|duration</span>
   ],
   <span class="k">"routines"</span>: [
     { <span class="k">"name"</span>: <span class="s">"Lower Body A"</span>,
@@ -535,7 +595,11 @@ Prefer exercises I already have: Bench Press, Squat, Lat Pulldown, …</div>
           <span class="k">"sets"</span>: 3, <span class="k">"reps"</span>: 8, <span class="k">"kg"</span>: 40 }
       ] }
   ]
-}</div>
+}
+<span class="c">// …and, after the block, the AI's answer ends with:</span>
+<span class="c">// 1. Copy this entire message.</span>
+<span class="c">// 2. Open Spotter → You → Statistics & Coach → Import.</span>
+<span class="c">// 3. Paste — Spotter finds the plan and shows a preview.</span></div>
     <div class="notes" style="padding-top:0;">
       <div class="kicker">The contract</div>
       <h2 class="sec">One JSON shape, two producers</h2>
@@ -553,12 +617,13 @@ Prefer exercises I already have: Bench Press, Squat, Lat Pulldown, …</div>
 
       <h2 class="sec" style="margin-top:28px;">Open questions</h2>
       <ul class="qs" style="margin-top:12px; padding-left:18px;">
-        <li><strong>Where Insights lives</strong> — a card on You (mocked) vs. its own tab.
-          Six tabs is a lot; You already holds the counts.</li>
         <li><strong>Radar vs. bars only</strong> — the radar is glanceable but shape-sensitive
           to axis order; if it misleads, the ranked rows alone carry the screen.</li>
         <li><strong>1RM estimates</strong> — "best set" is shown; estimated 1RM trends are a
           nicer strength signal but imply a formula (Epley et al.) we'd have to stand behind.</li>
+        <li><strong>Fun-fact comparisons</strong> — one curated, unit-aware list (weights for
+          kg volume, geography for km). Needs a tone pass so an off week never reads as
+          mockery.</li>
         <li><strong>German</strong> — the prompt should be authored in the user's language;
           the contract stays English-keyed either way.</li>
       </ul>
@@ -568,57 +633,75 @@ Prefer exercises I already have: Bench Press, Squat, Lat Pulldown, …</div>
 </div>
 
 <script>
-  // ── Muscle-balance radar ──────────────────────────────────────────────
+  // shared data: share of working sets by muscle group, last 8 weeks
+  const BALANCE = [
+    ['Chest', 31], ['Arms', 22], ['Shoulders', 14],
+    ['Core', 12], ['Back', 12], ['Legs', 9],
+  ];
+  const MAX = 31, EVEN = 16.7;
+  const isWeak = (v) => v < EVEN * 0.75;
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const mk = (n, at, parent) => {
+    const e = document.createElementNS(svgNS, n);
+    for (const k in at) e.setAttribute(k, at[k]);
+    parent.appendChild(e); return e;
+  };
+
+  // ── You-card mini bars — the radar's data at a glance ────────────────
   (function () {
-    const data = [
-      ['Chest', 31], ['Arms', 22], ['Shoulders', 14],
-      ['Core', 12], ['Back', 12], ['Legs', 9],
-    ];
-    const max = 31, even = 16.7 / max;
-    const W = 290, H = 154, cx = W / 2, cy = H / 2 + 2, R = 55;
+    const W = 284, H = 34, bw = 42, gap = (W - 6 * bw) / 5, base = H;
+    const svg = mk('svg', { width: W, height: H, viewBox: `0 0 ${W} ${H}` },
+      document.getElementById('minibars'));
+    BALANCE.forEach(([, v], i) => {
+      const h = Math.max(2, (v / MAX) * (H - 4)), x = i * (bw + gap), r = 3;
+      mk('path', {
+        d: `M${x},${base} v${-(h - r)} q0,${-r} ${r},${-r} h${bw - 2 * r} q${r},0 ${r},${r} v${h - r} z`,
+        fill: '#9184d9', opacity: isWeak(v) ? 0.38 : 0.95,
+      }, svg);
+    });
+    // even-split hairline across the strip
+    const ey = base - (EVEN / MAX) * (H - 4);
+    mk('line', { x1: 0, y1: ey, x2: W, y2: ey, stroke: '#9397ab', 'stroke-dasharray': '3 4', opacity: 0.7 }, svg);
+  })();
+
+  // ── Muscle-balance radar ─────────────────────────────────────────────
+  (function () {
+    const W = 290, H = 136, cx = W / 2, cy = H / 2, R = 42;
     const pt = (i, r) => {
-      const a = -Math.PI / 2 + (i * 2 * Math.PI) / data.length;
+      const a = -Math.PI / 2 + (i * 2 * Math.PI) / BALANCE.length;
       return [cx + Math.cos(a) * R * r, cy + Math.sin(a) * R * r];
     };
-    const svgNS = 'http://www.w3.org/2000/svg';
-    const svg = document.createElementNS(svgNS, 'svg');
-    svg.setAttribute('width', W); svg.setAttribute('height', H);
-    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-    const el = (n, at, parent) => {
-      const e = document.createElementNS(svgNS, n);
-      for (const k in at) e.setAttribute(k, at[k]);
-      (parent || svg).appendChild(e); return e;
-    };
+    const svg = mk('svg', { width: W, height: H, viewBox: `0 0 ${W} ${H}` },
+      document.getElementById('radar'));
     // rings + spokes, recessive
     [1 / 3, 2 / 3, 1].forEach((r) =>
-      el('circle', { cx, cy, r: R * r, fill: 'none', stroke: 'rgba(233,233,237,0.09)' }));
-    data.forEach((_, i) => {
+      mk('circle', { cx, cy, r: R * r, fill: 'none', stroke: 'rgba(233,233,237,0.09)' }, svg));
+    BALANCE.forEach((_, i) => {
       const [x, y] = pt(i, 1);
-      el('line', { x1: cx, y1: cy, x2: x, y2: y, stroke: 'rgba(233,233,237,0.09)' });
+      mk('line', { x1: cx, y1: cy, x2: x, y2: y, stroke: 'rgba(233,233,237,0.09)' }, svg);
     });
     // even-split reference
-    el('circle', {
-      cx, cy, r: R * even, fill: 'none',
+    mk('circle', {
+      cx, cy, r: R * (EVEN / MAX), fill: 'none',
       stroke: '#9397ab', 'stroke-dasharray': '3 4', 'stroke-width': 1, opacity: 0.8,
-    });
+    }, svg);
     // the profile
-    const poly = data.map(([, v], i) => pt(i, v / max).join(',')).join(' ');
-    el('polygon', { points: poly, fill: 'rgba(145,132,217,0.18)', stroke: '#9184d9', 'stroke-width': 2, 'stroke-linejoin': 'round' });
-    data.forEach(([, v], i) => {
-      const [x, y] = pt(i, v / max);
-      el('circle', { cx: x, cy: y, r: 2.6, fill: '#9184d9' });
+    const poly = BALANCE.map(([, v], i) => pt(i, v / MAX).join(',')).join(' ');
+    mk('polygon', { points: poly, fill: 'rgba(145,132,217,0.18)', stroke: '#9184d9', 'stroke-width': 2, 'stroke-linejoin': 'round' }, svg);
+    BALANCE.forEach(([, v], i) => {
+      const [x, y] = pt(i, v / MAX);
+      mk('circle', { cx: x, cy: y, r: 2.6, fill: '#9184d9' }, svg);
     });
     // labels — one line per axis, weak axes greyed, value in muted ink
-    data.forEach(([name, v], i) => {
-      const a = -Math.PI / 2 + (i * 2 * Math.PI) / data.length;
+    BALANCE.forEach(([name, v], i) => {
+      const a = -Math.PI / 2 + (i * 2 * Math.PI) / BALANCE.length;
       const lx = cx + Math.cos(a) * (R + 13), ly = cy + Math.sin(a) * (R + 13);
       const anchor = Math.abs(Math.cos(a)) < 0.3 ? 'middle' : Math.cos(a) > 0 ? 'start' : 'end';
-      const weak = v < 16.7 * 0.75;
-      const t1 = el('text', {
+      const t1 = mk('text', {
         x: lx, y: ly + (Math.sin(a) > 0.5 ? 10 : Math.sin(a) < -0.5 ? -4 : 3.5),
         'text-anchor': anchor, 'font-size': 10.5,
-        fill: weak ? '#75798c' : '#e9e9ed',
-      });
+        fill: isWeak(v) ? '#75798c' : '#e9e9ed',
+      }, svg);
       t1.textContent = name + ' ';
       const ts = document.createElementNS(svgNS, 'tspan');
       ts.setAttribute('fill', '#75798c');
@@ -626,44 +709,35 @@ Prefer exercises I already have: Bench Press, Squat, Lat Pulldown, …</div>
       ts.textContent = v + '%';
       t1.appendChild(ts);
     });
-    document.getElementById('radar').appendChild(svg);
   })();
 
-  // ── Weekly volume bars ────────────────────────────────────────────────
+  // ── Weekly volume bars ───────────────────────────────────────────────
   (function () {
     const vals = [7.1, 8.4, 6.2, 9.8, 8.9, 10.6, 11.2, 12.4]; // ×1000 kg
-    const W = 276, H = 78, padL = 4, padB = 13, padT = 14;
+    const W = 276, H = 52, padL = 4, padB = 11, padT = 13;
     const max = 14, bw = 20, gap = (W - padL * 2 - bw * vals.length) / (vals.length - 1);
     const y = (v) => padT + (H - padT - padB) * (1 - v / max);
-    const svgNS = 'http://www.w3.org/2000/svg';
-    const svg = document.createElementNS(svgNS, 'svg');
-    svg.setAttribute('width', W); svg.setAttribute('height', H);
-    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-    const el = (n, at) => {
-      const e = document.createElementNS(svgNS, n);
-      for (const k in at) e.setAttribute(k, at[k]);
-      svg.appendChild(e); return e;
-    };
+    const svg = mk('svg', { width: W, height: H, viewBox: `0 0 ${W} ${H}` },
+      document.getElementById('vol'));
     [7, 14].forEach((g) =>
-      el('line', { x1: 0, y1: y(g), x2: W, y2: y(g), stroke: 'rgba(233,233,237,0.09)' }));
+      mk('line', { x1: 0, y1: y(g), x2: W, y2: y(g), stroke: 'rgba(233,233,237,0.09)' }, svg));
     const base = y(0);
     vals.forEach((v, i) => {
       const x = padL + i * (bw + gap), last = i === vals.length - 1;
       // rounded at the data end only, flat on the baseline
       const top = y(v), r = 4, h = base - top;
-      el('path', {
+      mk('path', {
         d: `M${x},${base} v${-(h - r)} q0,${-r} ${r},${-r} h${bw - 2 * r} q${r},0 ${r},${r} v${h - r} z`,
         fill: '#9184d9', opacity: last ? 1 : 0.42,
-      });
+      }, svg);
       if (last) {
-        const t = el('text', { x: x + bw / 2, y: top - 5, 'text-anchor': 'middle', 'font-size': 10, fill: '#e7e5fe' });
+        const t = mk('text', { x: x + bw / 2, y: top - 5, 'text-anchor': 'middle', 'font-size': 10, fill: '#e7e5fe' }, svg);
         t.textContent = '12.4k';
       }
     });
-    const t0 = el('text', { x: padL, y: H - 3, 'font-size': 9, fill: '#75798c' });
+    const t0 = mk('text', { x: padL, y: H - 2, 'font-size': 9, fill: '#75798c' }, svg);
     t0.textContent = '16 Jun';
-    const t1 = el('text', { x: W - padL, y: H - 3, 'text-anchor': 'end', 'font-size': 9, fill: '#75798c' });
+    const t1 = mk('text', { x: W - padL, y: H - 2, 'text-anchor': 'end', 'font-size': 9, fill: '#75798c' }, svg);
     t1.textContent = 'this week';
-    document.getElementById('vol').appendChild(svg);
   })();
 </script>
