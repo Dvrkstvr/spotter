@@ -131,6 +131,104 @@ export type TurnMode = 'alternate' | 'parallel';
  */
 export type TurnChoice = { mode: TurnMode; rev: number };
 
+/* ── who goes first ────────────────────────────────────────────────────── */
+
+/**
+ * How the tie is broken when the two of you are level on an exercise — which
+ * is the only moment turn order is ever undecided, and so the only thing this
+ * changes. `host` is what the app always did; `random` flips a coin per
+ * exercise; `ask` puts the question to both of you and keeps the coin as the
+ * fallback.
+ */
+export type FirstUp = 'host' | 'random' | 'ask';
+
+export const FIRST_UPS: readonly FirstUp[] = ['host', 'random', 'ask'];
+const FIRST_UP_SET = new Set<string>(FIRST_UPS);
+
+/**
+ * The session's first-up policy: one last-writer-wins register for the whole
+ * workout, the same discipline as `TurnChoice` one level up. `seed` rides
+ * with the policy rather than beside it, because they have to change
+ * together — a phone that adopted the policy but kept its own seed would flip
+ * a different coin and the two screens would disagree about whose set it is.
+ * Re-picking a policy mints a fresh seed, which is also how you re-roll.
+ */
+export type FirstUpChoice = { policy: FirstUp; seed: number; rev: number };
+
+/** One phone's answer to "who's up?" on one exercise, under the `ask` policy. */
+export type Bid = 'me' | 'you';
+
+/**
+ * The coin, as a pure function of the shared seed and the exercise — so both
+ * phones land on the same answer with nothing to exchange, and a phone that
+ * reconnects mid-workout recomputes instead of resyncing. FNV-1a over the id,
+ * mixed with the seed; one well-stirred bit is the coin.
+ */
+export const flipLeader = (seed: number, exId: string): 'host' | 'guest' => {
+  let h = (0x811c9dc5 ^ seed) >>> 0;
+  for (let i = 0; i < exId.length; i++) {
+    h ^= exId.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return ((h >>> 16) & 1) === 0 ? 'host' : 'guest';
+};
+
+/**
+ * Who leads this exercise. Both phones run this over the same inputs and must
+ * agree, so everything it reads is either shared (`first`) or symmetric (the
+ * two bids, swapped). A lone bid stands — if only one of you had an opinion,
+ * that opinion is the answer; two that cancel out (both "I'll go", or both
+ * "you go") decide nothing, so the coin does.
+ */
+export const leaderOf = (
+  first: FirstUpChoice,
+  exId: string,
+  myBid: Bid | undefined,
+  theirBid: Bid | undefined,
+  role: 'host' | 'guest' | null
+): 'host' | 'guest' => {
+  if (first.policy === 'host') return 'host';
+  if (first.policy === 'random') return flipLeader(first.seed, exId);
+
+  const me = role === 'guest' ? 'guest' : 'host';
+  const them = me === 'host' ? 'guest' : 'host';
+  if (myBid && theirBid) {
+    if (myBid === 'me' && theirBid === 'you') return me;
+    if (myBid === 'you' && theirBid === 'me') return them;
+    return flipLeader(first.seed, exId);
+  }
+  if (myBid) return myBid === 'me' ? me : them;
+  if (theirBid) return theirBid === 'me' ? them : me;
+  return flipLeader(first.seed, exId);
+};
+
+/**
+ * Merge a peer's first-up register. Same rule as `mergeTurns`: higher rev
+ * wins, an equal rev with a different value goes to the host. Adopting never
+ * bumps a rev, so the two phones can't echo each other.
+ */
+export const mergeFirstUp = (
+  mine: FirstUpChoice,
+  theirs: FirstUpChoice | undefined,
+  role: 'host' | 'guest' | null
+): FirstUpChoice | null => {
+  if (!theirs || !FIRST_UP_SET.has(theirs.policy) || typeof theirs.seed !== 'number') return null;
+  if (typeof theirs.rev !== 'number' || theirs.rev < mine.rev) return null;
+  if (theirs.rev === mine.rev) {
+    const same = theirs.policy === mine.policy && theirs.seed === mine.seed;
+    if (same || role !== 'guest') return null;
+  }
+  return { policy: theirs.policy, seed: theirs.seed, rev: theirs.rev };
+};
+
+/**
+ * The question is still open on *this* phone — the policy is `ask` and you
+ * haven't answered. Your own answer is what puts the row away, not theirs: a
+ * phone in a pocket must not leave the other one being asked all exercise.
+ */
+export const bidPending = (first: FirstUpChoice, myBid: Bid | undefined) =>
+  first.policy === 'ask' && !myBid;
+
 /**
  * One phone's live session state, as broadcast to the buddy. Always the full
  * state, never an event stream — receiving any one message is enough to be
@@ -144,6 +242,14 @@ export type BuddyProgress = {
   finished: boolean;
   /** their turn-mode registers, merged by rev on arrival */
   modes: Record<string, TurnChoice>;
+  /**
+   * Their first-up register, merged by rev like `modes`, and their own bids
+   * per exercise, which are read rather than merged — a bid is one phone's
+   * answer and never becomes the other's. Both optional so a message from a
+   * phone that predates them still parses as progress.
+   */
+  first?: FirstUpChoice;
+  bids?: Record<string, Bid>;
 };
 
 type ProgressSource = {
@@ -154,14 +260,16 @@ type ProgressSource = {
 export const progressOf = (
   session: ProgressSource,
   activeIndex: number,
-  modes: Record<string, TurnChoice>,
+  shared: { modes: Record<string, TurnChoice>; first: FirstUpChoice; bids: Record<string, Bid> },
   finished = false
 ): BuddyProgress => ({
   rid: session.rid,
   active: finished ? null : (session.list[activeIndex]?.ex ?? null),
   list: session.list.map((e) => ({ ex: e.ex, done: e.sets.map((x) => x.done) })),
   finished,
-  modes,
+  modes: shared.modes,
+  first: shared.first,
+  bids: shared.bids,
 });
 
 /**

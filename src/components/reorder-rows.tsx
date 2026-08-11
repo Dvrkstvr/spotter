@@ -7,15 +7,19 @@
  * accent while dragging, and a 2px accent line marks where the row will land.
  *
  * A row with an empty label is a divider in the lists that read these — hence
- * the "leave empty for a divider" placeholder.
+ * the "leave empty for a divider" placeholder. A divider is an added row like
+ * any other, so it drags anywhere, the seeded block included; only the × is
+ * withheld from the seeded rows themselves (see `fixed`).
  */
 import { useState } from 'react';
-import { Animated, PanResponder, Pressable, Text, View } from 'react-native';
+import { Animated, PanResponder, Text, View } from 'react-native';
 
 import { GripIcon } from '@/components/icon';
+import { HoldBtn } from '@/components/hold-btn';
 import { Input } from '@/design/ui';
 import { themed, useColors, useThemed } from '@/design/theme';
-import { color, font } from '@/design/tokens';
+import { color, font, slop } from '@/design/tokens';
+import { useStore } from '@/store/workout-store';
 
 export type ReorderRow = {
   key: string;
@@ -23,6 +27,14 @@ export type ReorderRow = {
   /** Overrides the list placeholder — e.g. the other language's name. */
   placeholder?: string;
   count: number | '';
+  /**
+   * A seeded entry: no ×, because these keys are what exercises are filed
+   * under. Deleting one doesn't tidy the list, it strands every exercise
+   * pointing at it — they fall back to rendering the raw key (`LowerBack`) and
+   * drop out of the library's filter row. Renaming and reordering stay open,
+   * which is what the list is actually for.
+   */
+  fixed?: boolean;
 };
 
 const GAP = 5;
@@ -42,6 +54,7 @@ export function ReorderRows({
 }) {
   const styles = useThemed(sheet);
   const c = useColors();
+  const { L } = useStore();
   const [drag, setDrag] = useState<{ from: number; to: number } | null>(null);
   const [rowHeight, setRowHeight] = useState(36);
   const [dy] = useState(() => new Animated.Value(0));
@@ -100,7 +113,7 @@ export function ReorderRows({
           >
             <View
               {...responderFor(i).panHandlers}
-              accessibilityLabel="Drag to reorder"
+              accessibilityLabel={L.dragReorder}
               style={styles.grip}
             >
               <GripIcon color={isDragging ? c.accent : c.neutral700} />
@@ -112,14 +125,24 @@ export function ReorderRows({
               onChangeText={(v) => onLabel(i, v)}
             />
             <Text style={styles.count}>{row.count}</Text>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Remove"
-              onPress={() => onDelete(i)}
-              style={styles.del}
-            >
-              <Text style={styles.delGlyph}>×</Text>
-            </Pressable>
+            {/* The slot is held open on a fixed row rather than removed: every
+                input in the list keeps the same width, so a seeded row and one
+                you added still read as one column. */}
+            {row.fixed ? (
+              <View style={styles.del} />
+            ) : (
+              // Held, not tapped: these keys are what exercises are filed
+              // under, and a deleted one strands them — the opposite of the
+              // recoverable taps the app hands out freely.
+              <HoldBtn
+                label="×"
+                accessibilityLabel={L.remove}
+                hitSlop={slop}
+                onConfirm={() => onDelete(i)}
+                style={styles.del}
+                labelStyle={styles.delGlyph}
+              />
+            )}
           </Animated.View>
         );
       })}
@@ -138,6 +161,14 @@ const sheet = themed(() => ({
     fontSize: 11,
     color: color.neutral600,
   },
-  del: { width: 22, height: 26, alignItems: 'center', justifyContent: 'center' },
+  del: {
+    width: 22,
+    height: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+    borderColor: 'transparent',
+  },
   delGlyph: { fontFamily: font.regular, fontSize: 15, color: color.neutral600 },
 }));

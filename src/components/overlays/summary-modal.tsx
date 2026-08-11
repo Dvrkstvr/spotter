@@ -11,8 +11,8 @@ import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
 
 import { RiseIn } from '@/components/motion';
 import { useBackClose } from '@/hooks/use-back-close';
-import { themed, useThemed } from '@/design/theme';
-import { color, elevation, fill, font, radius, tracking, wash } from '@/design/tokens';
+import { themed, useColors, useThemed } from '@/design/theme';
+import { color, elevation, fill, font, Palette, radius, tracking, wash } from '@/design/tokens';
 import { Btn, CardKicker, H3, Input } from '@/design/ui';
 import { useStore } from '@/store/workout-store';
 
@@ -34,19 +34,23 @@ export function SummaryModal() {
   return (
     <View style={[StyleSheet.absoluteFill, styles.backdrop]}>
       <RiseIn style={styles.card}>
-        <CardKicker>{L.saved}</CardKicker>
+        {/* A zero-tick finish logged nothing: no "Saved", no stats, no
+            confetti — the note says what happened and the card bows out. */}
+        {!summary.empty && <CardKicker>{L.saved}</CardKicker>}
         <H3 size={23} style={styles.title}>
           {summary.name}
         </H3>
 
-        <View style={styles.stats}>
-          {summary.stats.map((stat, i) => (
-            <RiseIn key={stat.k} delay={150 + i * 90} style={styles.stat}>
-              <Text style={styles.statKey}>{stat.k}</Text>
-              <StatValue v={stat.v} delay={150 + i * 90} />
-            </RiseIn>
-          ))}
-        </View>
+        {!summary.empty && (
+          <View style={styles.stats}>
+            {summary.stats.map((stat, i) => (
+              <RiseIn key={stat.k} delay={150 + i * 90} style={styles.stat}>
+                <Text style={styles.statKey}>{stat.k}</Text>
+                <StatValue v={stat.v} delay={150 + i * 90} />
+              </RiseIn>
+            ))}
+          </View>
+        )}
 
         <Text style={styles.note}>{summary.note}</Text>
 
@@ -69,9 +73,12 @@ export function SummaryModal() {
           </View>
         )}
 
-        {/* The design labels this button "Done" literally, not from the dictionary. */}
-        <Btn variant="primary" block label="Done" style={styles.doneBtn} onPress={close} />
-        <Confetti />
+        {/* The design wrote "Done" literally, but the design was
+            single-language — the dictionary's own word for this verdict is
+            the one thing that must not be English on a German phone's
+            payoff screen. */}
+        <Btn variant="primary" block label={L.ok} style={styles.doneBtn} onPress={close} />
+        {!summary.empty && <Confetti />}
       </RiseIn>
     </View>
   );
@@ -100,13 +107,14 @@ function StatValue({ v, delay }: { v: number | string; delay: number }) {
   return <Text style={styles.statValue}>{shown}</Text>;
 }
 
-const CONFETTI_COLORS = [
-  color.accent300,
-  color.accent,
-  color.accent2,
-  color.accent600,
-  color.neutral400,
-  color.accent100,
+/** Takes the palette for the same reason ui.tsx's `btnVariant` does. */
+const confettiColors = (c: Palette) => [
+  c.accent300,
+  c.accent,
+  c.accent2,
+  c.accent600,
+  c.neutral400,
+  c.accent100,
 ];
 
 /** Flight time in seconds, and the shared-progress keyframe stops. */
@@ -121,10 +129,12 @@ const GRAVITY = 480;
  */
 function Confetti() {
   const styles = useThemed(sheet);
+  const c = useColors();
   const [p] = useState(() => new Animated.Value(0));
   const [w, setW] = useState(0);
-  const [parts] = useState(() =>
-    Array.from({ length: 30 }, () => {
+  const [parts] = useState(() => {
+    const palette = confettiColors(c);
+    return Array.from({ length: 30 }, () => {
       const ang = -Math.PI / 2 + (Math.random() - 0.5) * 2.1;
       const speed = 70 + Math.random() * 170;
       return {
@@ -133,11 +143,11 @@ function Confetti() {
         vy: Math.sin(ang) * speed,
         w: 3.5 + Math.random() * 3,
         h: 7 + Math.random() * 4,
-        color: CONFETTI_COLORS[(Math.random() * CONFETTI_COLORS.length) | 0],
+        color: palette[(Math.random() * palette.length) | 0],
         spin: (Math.random() - 0.5) * 720,
       };
-    })
-  );
+    });
+  });
 
   useEffect(() => {
     if (!w) return;

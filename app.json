@@ -39,7 +39,15 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Spotter uses your photos for your profile picture and your own exercise reference images."
+          "photosPermission": "Spotter uses your photos for your profile picture and your own exercise reference images.",
+          "cameraPermission": "Spotter opens the camera only when you add a photo to an exercise how-to, so you can shoot the machine in front of you."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#9184d9"
         }
       ],
       [

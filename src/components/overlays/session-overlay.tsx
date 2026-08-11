@@ -27,6 +27,7 @@ import { useRouter } from 'expo-router';
 import { ReactNode, RefObject, useEffect, useRef, useState } from 'react';
 import {
   Animated,
+  AppState,
   PanResponder,
   Pressable,
   ScrollView,
@@ -43,15 +44,21 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 
 import { HoldBtn } from '@/components/hold-btn';
-import { CHECK_D } from '@/components/icon';
+import { CHECK_D, Icon, MARK_D } from '@/components/icon';
 import { FullScreen, Sheet } from '@/components/sheet';
+import type { Bid } from '@/data/buddy-sync';
+import { FIRST_UPS } from '@/data/buddy-sync';
+import { isSingle, Measure, measureOf, SET_MARKS, SetMark } from '@/data/exercises';
 import { buzz } from '@/data/haptics';
+import { Strings } from '@/data/i18n';
 import { useBackClose } from '@/hooks/use-back-close';
 import { useBuddyLive } from '@/hooks/use-buddy-live';
 import { themed, useColors, useThemed } from '@/design/theme';
-import { color, fill as absFill, font, motion, radius, t, tracking, wash } from '@/design/tokens';
-import { Btn, H3, H4, Input, missingName, Tag } from '@/design/ui';
-import { fmt, num, prevNums, useStore } from '@/store/workout-store';
+import {
+  color, fill as absFill, font, linger, motion, radius, slop, t, tracking, wash,
+} from '@/design/tokens';
+import { Btn, CardKicker, Field, H3, H4, Input, missingName, Seg, Tag } from '@/design/ui';
+import { fmt, LoggedSet, markLabel, num, prevNums, useStore } from '@/store/workout-store';
 
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 
@@ -66,15 +73,45 @@ const PX_PER_STEP = 12;
 const mmss = (total: number) =>
   `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
 
+/**
+ * What to head the two set-row columns with.
+ *
+ * Takes `L` rather than reading the dictionary itself: that keeps it a call
+ * with a reactive argument, which is what stops the React Compiler hoisting it
+ * out of the component and freezing the labels in whichever language loaded
+ * first — the same rule `missingName(c)` follows for colours.
+ */
+const unitsFor = (m: Measure, L: Strings): { left: string; right: string; single: boolean } => {
+  const single = isSingle(m);
+  if (m === 'duration') return { left: '', right: L.unitMin, single };
+  if (m === 'distance') return { left: L.unitKm, right: L.unitMin, single };
+  return { left: L.unitKg, right: m === 'time' ? L.unitSec : L.reps, single };
+};
+
+/**
+ * The "last time" ghost as it should read on this row.
+ *
+ * A single-field measure stores both halves anyway — "— × 90" — so the dash
+ * has to be dropped here rather than at the point it was written, which is
+ * what keeps one persistence format for every measure.
+ */
+const prevLabel = (prev: string, single: boolean) => {
+  if (!single) return prev;
+  const right = (prev || '').split('×')[1]?.trim();
+  return right ? right : '—';
+};
+
 export function SessionOverlay() {
   const styles = useThemed(sheet);
   const c = useColors();
-  const { s, L, patch, ex, gInfo, kInfo, exInfo, setup, mutSession, totals, finishSession } =
+  const { s, L, patch, ex, gInfo, kInfo, exInfo, setup, mutSession, totals, finishSession, bidFirst } =
     useStore();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const buddyLive = useBuddyLive();
   const [overview, setOverview] = useState(false);
+  // Which set has the mark sheet open, by index into the active exercise.
+  const [markAt, setMarkAt] = useState<number | null>(null);
   // A number being dragged owns the gesture; the list must not scroll under it.
   const [scrubbing, setScrubbing] = useState(false);
 
@@ -91,8 +128,10 @@ export function SessionOverlay() {
 
   /**
    * What is left of the wait, in seconds. Counted in `elapsed` ticks rather
-   * than wall time, so it stays pure and re-renders for free. `restSeconds`
-   * of 0 is the setting turned off, and collapses this to a constant 0.
+   * than wall time, so it stays pure and re-renders for free — `elapsed` itself
+   * is wall-anchored, so a minute spent with the screen locked still counts.
+   * `restSeconds` of 0 is the setting turned off, and collapses this to a
+   * constant 0.
    */
   const restLeft =
     s.rest && !s.rest.skipped ? Math.max(0, s.restSeconds - (s.elapsed - s.rest.at)) : 0;
@@ -102,13 +141,20 @@ export function SessionOverlay() {
   const restRunning = restLeft > 0 && !!s.rest?.own;
   const wasResting = useRef(restRunning);
   useEffect(() => {
-    if (wasResting.current && !restRunning && s.haptics) buzz.rest();
+    // Only in the hand. A rest that ran out during a lock transitions on the
+    // frame the screen comes back, and a buzz then would be about something
+    // that finished ten minutes ago — <RestAlarm> is the channel that reaches
+    // a pocket, and it already did.
+    const inHand = AppState.currentState === 'active';
+    if (wasResting.current && !restRunning && s.haptics && inHand) buzz.rest();
     wasResting.current = restRunning;
   }, [restRunning, s.haptics]);
 
   // The counter's 3px tick whenever another set lands. Hooks stay above the
   // early return; the effect just never fires without a session.
   const [tick] = useState(() => new Animated.Value(0));
+  /** The clamped bounce for a swipe past either end — see the swipe responder. */
+  const [endNudge] = useState(() => new Animated.Value(0));
   const doneCount = session ? totals().done : 0;
   const prevDoneCount = useRef(doneCount);
   useEffect(() => {
@@ -117,7 +163,7 @@ export function SessionOverlay() {
     prevDoneCount.current = doneCount;
     if (!rose) return;
     Animated.sequence([
-      Animated.timing(tick, { toValue: -3, duration: 80, easing: motion.tap.easing, useNativeDriver: true }),
+      Animated.timing(tick, { toValue: -3, duration: linger.rise, easing: motion.tap.easing, useNativeDriver: true }),
       Animated.spring(tick, { toValue: 0, ...motion.payoff, useNativeDriver: true }),
     ]).start();
     if (s.haptics) buzz.set();
@@ -133,7 +179,8 @@ export function SessionOverlay() {
   const theirTurn = !!buddyLive?.turn && !buddyLive.mine;
 
   // The first wait of a shared exercise has no set behind it: the buddy simply
-  // goes first (ties go to the host). Give it the same shape, so the guest sees
+  // goes first (whoever the first-up policy hands the level score to — see
+  // `leaderOf`). Give it the same shape, so the phone that isn't leading sees
   // "their set" rather than a screen that looks like their own — but mark it
   // `own: false`, so it lets go the moment the turn comes back. A rest of your
   // own outranks it and is left alone.
@@ -149,15 +196,12 @@ export function SessionOverlay() {
     });
   }, [theirTurn, patch]);
 
-  // A new exercise is a fresh start — you walked to another machine. Only on a
-  // real change: on mount the current exercise is not a new one.
-  const activeEx = session?.list[s.active]?.ex ?? null;
-  const prevEx = useRef(activeEx);
-  useEffect(() => {
-    if (prevEx.current === activeEx) return;
-    prevEx.current = activeEx;
-    patch((st) => (st.rest ? { rest: null } : null));
-  }, [activeEx, patch]);
+  // Changing exercise deliberately does NOT clear a running rest any more: a
+  // swipe forward to peek at what's next and a swipe straight back was
+  // costing the whole countdown (and its scheduled notification) with no
+  // feedback. A rest is about your body, not the machine you are standing at
+  // — it draws on whatever set is next wherever you land, and "start now" is
+  // still one tap if you disagree.
 
   if (!session) return null;
 
@@ -167,6 +211,7 @@ export function SessionOverlay() {
   const i = count ? Math.min(s.active, count - 1) : -1;
   const entry = i >= 0 ? session.list[i] : null;
   const meta = entry ? ex(entry.ex) : undefined;
+  const units = unitsFor(measureOf(meta), L);
 
   const tot = totals();
   const progressPct = tot.all ? Math.round((tot.done / tot.all) * 100) : 0;
@@ -185,6 +230,9 @@ export function SessionOverlay() {
       const cur = e.sets[j];
       if (!cur.w && !cur.reps) {
         const g = prevNums(cur.prev);
+        // Nothing typed and nothing to copy: refuse rather than log the
+        // "BW × 0" that would haunt next session as the last-time ghost.
+        if (!g.w && !g.r) return;
         cur.w = g.w;
         cur.reps = g.r;
       }
@@ -197,8 +245,12 @@ export function SessionOverlay() {
    * rest, and the buddy being mid-set. Both are advisory, both are one tap to
    * override, and either alone is enough — the rest doesn't end because they
    * got quicker, and their turn doesn't end because your clock ran out.
+   *
+   * `skipped` silences only the countdown it was a tap on: the buddy's turn
+   * is a different fact, usually one that hadn't happened yet when you
+   * skipped, so it still holds the row.
    */
-  const held = !s.rest?.skipped && (restRunning || theirTurn);
+  const held = (restRunning && !s.rest?.skipped) || theirTurn;
   const waiting = held
     ? {
         label:
@@ -212,15 +264,52 @@ export function SessionOverlay() {
       }
     : null;
 
+  /**
+   * The same slot, asking instead of telling: under the `ask` policy, while
+   * you're level on the exercise and this phone hasn't answered. It takes the
+   * row's place because it is the same question — what is happening before my
+   * next set — and it answers rather than blocks: the fields and the tick keep
+   * working underneath, the turn underneath is already decided by the coin,
+   * and if neither of you ever taps, the coin is simply what stands.
+   */
+  const asking =
+    buddyLive?.asking && entry
+      ? {
+          label: restLeft > 0 ? `${L.whosUp} · ${mmss(restLeft)}` : L.whosUp,
+          mine: L.bidMine,
+          theirs: L.bidTheirs,
+          onBid: (b: Bid) => bidFirst(entry.ex, b),
+        }
+      : null;
+
   // Horizontal drag moves between exercises. Nothing else on this screen
   // travels sideways, so the threshold can be generous without stealing the
   // vertical scroll or a tap into an input.
+  //
+  // A swipe past either end answers with a small clamped bounce: with no
+  // visual affordance for the gesture, silence at the ends is
+  // indistinguishable from the swipe not registering.
+  const bounce = (dir: number) =>
+    Animated.sequence([
+      Animated.timing(endNudge, {
+        toValue: dir * 14,
+        duration: motion.tap.duration,
+        easing: motion.tap.easing,
+        useNativeDriver: true,
+      }),
+      Animated.timing(endNudge, { toValue: 0, ...motion.quick, useNativeDriver: true }),
+    ]).start();
   const swipe = PanResponder.create({
     onMoveShouldSetPanResponder: (_, g) =>
       count > 1 && Math.abs(g.dx) > 24 && Math.abs(g.dx) > Math.abs(g.dy) * 1.8,
     onPanResponderRelease: (_, g) => {
-      if (g.dx <= -50) go(i + 1);
-      else if (g.dx >= 50) go(i - 1);
+      if (g.dx <= -50) {
+        if (isLast) bounce(-1);
+        else go(i + 1);
+      } else if (g.dx >= 50) {
+        if (i <= 0) bounce(1);
+        else go(i - 1);
+      }
     },
   });
 
@@ -229,7 +318,8 @@ export function SessionOverlay() {
       <View style={[styles.header, { paddingTop: 12 + insets.top }]}>
         <View style={styles.headerRow}>
           <View style={styles.headerText}>
-            <Text style={styles.kicker}>{L.logging}</Text>
+            {/* The system's kicker, not a private near-copy of it. */}
+            <CardKicker>{L.logging}</CardKicker>
             <H3 size={22} style={styles.title} numberOfLines={1}>
               {session.name}
             </H3>
@@ -254,6 +344,7 @@ export function SessionOverlay() {
         </View>
       </View>
 
+      <Animated.View style={{ flex: 1, transform: [{ translateX: endNudge }] }}>
       <ExerciseSlide index={i}>
         <View style={styles.exercise} {...swipe.panHandlers}>
           {entry && meta ? (
@@ -317,8 +408,13 @@ export function SessionOverlay() {
                 <View style={styles.colHead}>
                   <Text style={[styles.colLabel, styles.colIndex]}>#</Text>
                   <Text style={[styles.colLabel, styles.colPrev]}>{L.lastTime}</Text>
-                  <Text style={[styles.colLabel, styles.colFlex]}>kg</Text>
-                  <Text style={[styles.colLabel, styles.colFlex]}>{L.reps}</Text>
+                  {/* Usually only the labels change. `duration` is the one
+                      measure that drops a column outright — the remaining
+                      cell keeps flex:1 and simply takes the whole span. */}
+                  {!units.single && (
+                    <Text style={[styles.colLabel, styles.colFlex]}>{units.left}</Text>
+                  )}
+                  <Text style={[styles.colLabel, styles.colFlex]}>{units.right}</Text>
                   <View style={styles.colCheck} />
                 </View>
 
@@ -327,10 +423,13 @@ export function SessionOverlay() {
                     key={j}
                     index={j}
                     set={set}
+                    single={units.single}
                     live={j === liveIdx}
                     waiting={j === liveIdx ? waiting : null}
+                    asking={j === liveIdx ? asking : null}
                     onLog={() => logSet(j)}
                     onScrub={setScrubbing}
+                    onMark={() => setMarkAt(j)}
                     onCopy={(w, r) =>
                       mutSession(i, (e) => {
                         e.sets[j].w = w;
@@ -342,8 +441,11 @@ export function SessionOverlay() {
                     onToggle={(w, r) =>
                       mutSession(i, (e) => {
                         const cur = e.sets[j];
-                        // Ticking an untouched set logs last time's numbers.
+                        // Ticking an untouched set logs last time's numbers —
+                        // and when there are none either, refuses: a "BW × 0"
+                        // record helps nobody and becomes next time's ghost.
                         if (!cur.done && !cur.w && !cur.reps) {
+                          if (!w && !r) return;
                           cur.w = w;
                           cur.reps = r;
                         }
@@ -360,7 +462,15 @@ export function SessionOverlay() {
                   onConfirm={() =>
                     mutSession(i, (e) => {
                       const last = e.sets[e.sets.length - 1];
-                      e.sets.push({ w: '', reps: '', done: false, prev: last ? last.prev : '—' });
+                      e.sets.push({
+                        w: '',
+                        reps: '',
+                        done: false,
+                        prev: last ? last.prev : '—',
+                        // The ghost and its verdict travel together, here as
+                        // everywhere else a row is built.
+                        prevMark: last ? last.prevMark : null,
+                      });
                     })
                   }
                   style={styles.addSet}
@@ -375,6 +485,7 @@ export function SessionOverlay() {
           )}
         </View>
       </ExerciseSlide>
+      </Animated.View>
 
       <View style={[styles.footer, { paddingBottom: 10 + insets.bottom }]}>
         {/* The exercise just sealed and this is where you're going next — the
@@ -387,7 +498,7 @@ export function SessionOverlay() {
               label={L.addExerciseBtn}
               style={styles.cta}
               labelStyle={styles.ctaLabel}
-              onPress={() => patch({ picker: 'session', query: '' })}
+              onPress={() => patch({ picker: 'session' })}
             />
           ) : !isLast ? (
             // Leaving an exercise with sets still open is a held gesture, and
@@ -419,7 +530,147 @@ export function SessionOverlay() {
       </View>
 
       {overview && <Overview onClose={() => setOverview(false)} onJump={go} />}
+
+      {/* Guarded on the index still being there: Add set can't shrink the list,
+          but the buddy's copy of a routine can, and a sheet opened over a set
+          that no longer exists would be a sheet with nothing behind it. */}
+      {entry && markAt !== null && markAt < entry.sets.length && (
+        <MarkSheet
+          index={markAt}
+          set={entry.sets[markAt]}
+          exName={meta ? exInfo(meta).text : entry.ex}
+          onClose={() => setMarkAt(null)}
+          onPick={(m) =>
+            mutSession(i, (e) => {
+              const cur = e.sets[markAt];
+              // Tapping the mark you already carry takes it back off, and the
+              // words go with it: a note nothing points at would never be
+              // shown again, and half-erased is worse than erased.
+              cur.mark = m ?? undefined;
+              if (!m) cur.note = undefined;
+            })
+          }
+          onNote={(v) =>
+            mutSession(i, (e) => {
+              const cur = e.sets[markAt];
+              cur.note = v;
+              // Words imply a mark, and emptying them takes back the one they
+              // implied — so you can open this sheet and just type, and the
+              // row still ends up with exactly one state to draw.
+              if (v.trim() && !cur.mark) cur.mark = 'note';
+              else if (!v.trim() && cur.mark === 'note') cur.mark = undefined;
+            })
+          }
+        />
+      )}
     </FullScreen>
+  );
+}
+
+/* ── the mark sheet ──────────────────────────────────────────────────────── */
+
+/**
+ * What the set said about the next one.
+ *
+ * Four verdicts and no more, because this gets answered while you are still
+ * breathing hard: heavier, lighter, that was the weight, or words. The words
+ * sit under all four rather than only under `note` — "heavier, but my grip
+ * went first" is one thought, and making the user choose between the arrow and
+ * the sentence would lose whichever they didn't pick.
+ *
+ * Last time's verdict is printed at the top, because this is also the one
+ * screen with room to read a note in full: the row itself only has a glyph.
+ */
+function MarkSheet({
+  index,
+  set,
+  exName,
+  onClose,
+  onPick,
+  onNote,
+}: {
+  index: number;
+  set: LoggedSet;
+  exName: string;
+  onClose: () => void;
+  /** null clears the mark */
+  onPick: (m: SetMark | null) => void;
+  onNote: (v: string) => void;
+}) {
+  const styles = useThemed(sheet);
+  const c = useColors();
+  const { L } = useStore();
+  useBackClose(onClose);
+
+  return (
+    <Sheet zIndex={84} maxHeight="70%" onClose={onClose}>
+      <H4>{L.setLabel.replace('{n}', String(index + 1))}</H4>
+      <Text style={styles.markSub} numberOfLines={1}>
+        {exName}
+      </Text>
+
+      {set.prevMark && (
+        <View style={styles.markPrev}>
+          <Icon d={MARK_D[set.prevMark.mark]} size={13} color={c.neutral500} strokeWidth={2.2} />
+          <Text style={styles.markPrevText}>
+            {L.markLastTime.replace(
+              '{t}',
+              set.prevMark.note?.trim() || markLabel(set.prevMark.mark, L)
+            )}
+          </Text>
+        </View>
+      )}
+
+      <View style={styles.markRow}>
+        {SET_MARKS.map((m) => {
+          const on = set.mark === m;
+          return (
+            <Pressable
+              key={m}
+              accessibilityRole="radio"
+              accessibilityState={{ selected: on }}
+              onPress={() => onPick(on ? null : m)}
+              style={[
+                styles.markTile,
+                {
+                  borderColor: on ? c.accent : c.divider,
+                  backgroundColor: on ? c.wash.accent(14) : 'transparent',
+                },
+              ]}
+            >
+              <Icon
+                d={MARK_D[m]}
+                size={22}
+                color={on ? c.accent200 : c.neutral400}
+                strokeWidth={2}
+              />
+              <Text
+                style={[styles.markTileLabel, on && { color: c.accent200 }]}
+                numberOfLines={2}
+              >
+                {markLabel(m, L)}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {/* Only once there is something to clear — the way out of a state you
+          are not in is noise. */}
+      {set.mark && <Text style={styles.markHelp}>{L.markClear}</Text>}
+
+      <Field label={L.markNoteLabel} style={styles.markField}>
+        <Input
+          value={set.note ?? ''}
+          placeholder={L.markNotePlaceholder}
+          onChangeText={onNote}
+          multiline
+          style={styles.markInput}
+        />
+      </Field>
+
+      <Btn variant="secondary" block label={L.close} style={styles.markClose} onPress={onClose} />
+    </Sheet>
   );
 }
 
@@ -433,7 +684,8 @@ export function SessionOverlay() {
 function Overview({ onClose, onJump }: { onClose: () => void; onJump: (to: number) => void }) {
   const styles = useThemed(sheet);
   const c = useColors();
-  const { s, L, patch, ex, exInfo, totals, clock, finishSession } = useStore();
+  const { s, L, patch, ex, exInfo, totals, clock, finishSession, setFirstUp, removeSessionEx } =
+    useStore();
   useBackClose(onClose);
 
   const session = s.session;
@@ -480,10 +732,42 @@ function Overview({ onClose, onJump }: { onClose: () => void; onJump: (to: numbe
                 {done}/{all}
               </Text>
               {finished && <Text style={styles.ovTick}>✓</Text>}
+              {/* The undo for a wrong pick. Only while nothing is ticked —
+                  see `removeSessionEx` — so what it can throw away is at most
+                  a plan, never a set that happened. Held, not tapped: typed
+                  numbers are still a plan, but they were still typed. */}
+              {done === 0 && (
+                <HoldBtn
+                  label="×"
+                  accessibilityLabel={L.removeExercise}
+                  hitSlop={slop}
+                  onConfirm={() => removeSessionEx(k)}
+                  style={styles.ovRemove}
+                  labelStyle={styles.ovRemoveGlyph}
+                />
+              )}
             </Pressable>
           );
         })}
       </View>
+
+      {/* Only while there is somebody to go first ahead of. Changing it here
+          changes it on both phones — one register, last writer wins — and the
+          new seed re-rolls every exercise you haven't reached. */}
+      {s.sessionShared && (
+        <>
+          <Text style={styles.ovSetting}>{L.whoFirst}</Text>
+          <Seg
+            style={styles.ovSeg}
+            options={FIRST_UPS.map((p) => ({
+              key: p,
+              label: p === 'host' ? L.firstHost : p === 'random' ? L.firstRandom : L.firstAsk,
+              on: s.firstUp.policy === p,
+              pick: () => setFirstUp(p),
+            }))}
+          />
+        </>
+      )}
 
       <Btn
         variant="ghost"
@@ -492,7 +776,7 @@ function Overview({ onClose, onJump }: { onClose: () => void; onJump: (to: numbe
         style={styles.ovAdd}
         onPress={() => {
           onClose();
-          patch({ picker: 'session', query: '' });
+          patch({ picker: 'session' });
         }}
       />
 
@@ -502,6 +786,7 @@ function Overview({ onClose, onJump }: { onClose: () => void; onJump: (to: numbe
       <HoldBtn
         variant="primary"
         hold={tot.done < tot.all}
+        dashed={tot.done < tot.all}
         label={tot.done < tot.all ? L.holdFinish : L.finish}
         onConfirm={finishSession}
         style={styles.ovFinish}
@@ -719,21 +1004,32 @@ function NumCell({
 function SetRow({
   index,
   set,
+  single,
   live,
   waiting,
+  asking,
   onCopy,
   onW,
   onReps,
   onToggle,
   onLog,
   onScrub,
+  onMark,
 }: {
   index: number;
-  set: { w: string; reps: string; done: boolean; prev: string };
+  set: LoggedSet;
+  /** `duration` — one wide field instead of two, and no weight to walk to */
+  single: boolean;
   /** the set you're on — raised, with numbers at thumb size */
   live: boolean;
   /** the buddy is mid-set: this one is yours but not yet */
   waiting: { label: string; startLabel: string; onStart: () => void } | null;
+  /**
+   * Nobody has said who takes this one yet. Same slot as `waiting` and wins it
+   * — an open question outranks a countdown — but never gates the row: the
+   * fields and the tick above it keep working whether it is answered or not.
+   */
+  asking: { label: string; mine: string; theirs: string; onBid: (b: Bid) => void } | null;
   onCopy: (w: string, r: string) => void;
   onW: (v: string) => void;
   onReps: (v: string) => void;
@@ -741,8 +1037,12 @@ function SetRow({
   /** enter on the reps field — log it, don't toggle it */
   onLog: () => void;
   onScrub: (on: boolean) => void;
+  /** open the mark sheet for this set */
+  onMark: () => void;
 }) {
   const styles = useThemed(sheet);
+  const c = useColors();
+  const { L } = useStore();
   const ghost = prevNums(set.prev);
   const repsRef = useRef<TextInput>(null);
   const [dim] = useState(() => new Animated.Value(set.done ? 0.6 : 1));
@@ -765,7 +1065,7 @@ function SetRow({
       flash.setValue(1);
       Animated.timing(flash, {
         toValue: 0,
-        duration: 550,
+        duration: linger.flash,
         easing: motion.quick.easing,
         useNativeDriver: true,
       }).start();
@@ -778,14 +1078,14 @@ function SetRow({
     fly.setValue(0);
     Animated.timing(fly, {
       toValue: 1,
-      duration: 320,
+      duration: linger.fly,
       easing: motion.move.easing,
       useNativeDriver: true,
     }).start(({ finished }) => finished && setFlying(false));
     catchV.setValue(1);
     Animated.timing(catchV, {
       toValue: 0,
-      duration: 450,
+      duration: linger.catch,
       delay: 150,
       easing: motion.quick.easing,
       useNativeDriver: true,
@@ -794,37 +1094,64 @@ function SetRow({
 
   // Row geometry: [16 index][8][66 prev][8][kg flex][8][reps flex][8][34 check].
   // Measured on the inner row, so the live row's own padding never enters it
-  // and the ghost still flies from the "last time" figure into the kg cell.
-  const inputW = Math.max(0, (rowW - 148) / 2);
+  // and the ghost still flies from the "last time" figure into the cell it
+  // lands in. A `duration` row drops the kg cell and one 8px gap with it, so
+  // the single remaining field spans what the pair used to.
+  const inputW = single ? Math.max(0, rowW - 140) : Math.max(0, (rowW - 148) / 2);
   const flyDx = 74 + inputW / 2;
 
   return (
     <View style={styles.rowWrap}>
-      <View style={[live && styles.liveBox, live && waiting && styles.liveBoxWaiting]}>
+      <View
+        style={[live && styles.liveBox, live && (waiting || asking) && styles.liveBoxWaiting]}
+      >
         <View onLayout={(e) => setRowW(e.nativeEvent.layout.width)}>
           <Animated.View pointerEvents="none" style={[styles.rowFlash, { opacity: flash }]} />
           <Animated.View style={[styles.setRow, { opacity: dim }]}>
-            <Text style={[styles.setIndex, live && !waiting && styles.setIndexLive]}>
-              {index + 1}
-            </Text>
-            <Pressable onPress={copy} style={styles.colPrev}>
-              <Text style={styles.prevText}>{set.prev}</Text>
+            {/* The row's number is also where its verdict lives, and the two
+                never need to be read at once: which set this is, you can
+                count, and once you have judged it the judgement is the more
+                useful thing to spend 16px on. Taking the mark over the digit
+                rather than adding a column is also what keeps every figure in
+                the geometry above untouched. */}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={
+                set.mark ? markLabel(set.mark, L) : L.setLabel.replace('{n}', String(index + 1))
+              }
+              onPress={onMark}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 4 }}
+              style={styles.markCell}
+            >
+              {set.mark ? (
+                <Icon d={MARK_D[set.mark]} size={15} color={c.accent400} strokeWidth={2.2} />
+              ) : (
+                <Text style={[styles.setIndex, live && !waiting && !asking && styles.setIndexLive]}>
+                  {index + 1}
+                </Text>
+              )}
             </Pressable>
-            <NumCell
-              style={styles.colFlex}
-              live={live}
-              value={set.w}
-              ghost={ghost.w}
-              step={0.5}
-              onText={onW}
-              onScrub={onScrub}
-              keyboardType="decimal-pad"
-              // Enter walks the row: weight → reps → logged. `submit` keeps
-              // the keyboard up so the hand-off doesn't flash it away.
-              returnKeyType="next"
-              submitBehavior="submit"
-              onSubmitEditing={() => repsRef.current?.focus()}
-            />
+            <Pressable onPress={copy} style={styles.colPrev}>
+              <Text style={styles.prevText}>{prevLabel(set.prev, single)}</Text>
+            </Pressable>
+            {!single && (
+              <NumCell
+                style={styles.colFlex}
+                live={live}
+                value={set.w}
+                ghost={ghost.w}
+                step={0.5}
+                onText={onW}
+                onScrub={onScrub}
+                keyboardType="decimal-pad"
+                // Enter walks the row: weight → reps → logged. `submit` keeps
+                // the keyboard up so the hand-off doesn't flash it away. With
+                // one field there is nowhere to walk to, so Enter just logs.
+                returnKeyType="next"
+                submitBehavior="submit"
+                onSubmitEditing={() => repsRef.current?.focus()}
+              />
+            )}
             <NumCell
               style={styles.colFlex}
               live={live}
@@ -869,13 +1196,58 @@ function SetRow({
           )}
         </View>
 
-        {live && waiting && (
-          <Pressable onPress={waiting.onStart} style={styles.waitRow}>
-            <Text style={styles.waitLabel} numberOfLines={1}>
-              {waiting.label}
+        {/* What you told yourself last time, on the row you are deciding on —
+            which is the entire reason a mark is worth writing. Only while the
+            set is still open: once it is ticked the advice has been taken or
+            ignored, and the row's own mark is the live one. */}
+        {/* Pressable like the own-note line below: answering last time's
+            advice is the natural moment to mark this set, and this line is
+            also the only mark affordance a new user ever gets shown. */}
+        {live && !set.done && set.prevMark && (
+          <Pressable onPress={onMark} style={styles.markLine}>
+            <Icon d={MARK_D[set.prevMark.mark]} size={12} color={c.neutral500} strokeWidth={2.2} />
+            <Text style={styles.markLineText} numberOfLines={1}>
+              {L.markLastTime.replace(
+                '{t}',
+                set.prevMark.note?.trim() || markLabel(set.prevMark.mark, L)
+              )}
             </Text>
-            <Text style={styles.waitStart}>{waiting.startLabel} ›</Text>
           </Pressable>
+        )}
+
+        {/* Your own words, where you wrote them. The glyph in the index cell
+            says the set has something to say; this is the saying. */}
+        {set.mark && set.note?.trim() ? (
+          <Pressable onPress={onMark} style={styles.markLine}>
+            <Icon d={MARK_D[set.mark]} size={12} color={c.accent400} strokeWidth={2.2} />
+            <Text style={[styles.markLineText, styles.markLineOwn]} numberOfLines={2}>
+              {set.note.trim()}
+            </Text>
+          </Pressable>
+        ) : null}
+
+        {live && asking ? (
+          <View style={styles.waitRow}>
+            <Text style={styles.waitLabel} numberOfLines={1}>
+              {asking.label}
+            </Text>
+            <Pressable onPress={() => asking.onBid('me')} style={styles.bidBtn}>
+              <Text style={styles.bidMine}>{asking.mine}</Text>
+            </Pressable>
+            <Pressable onPress={() => asking.onBid('you')} style={styles.bidBtn}>
+              <Text style={styles.bidTheirs}>{asking.theirs}</Text>
+            </Pressable>
+          </View>
+        ) : (
+          live &&
+          waiting && (
+            <Pressable onPress={waiting.onStart} style={styles.waitRow}>
+              <Text style={styles.waitLabel} numberOfLines={1}>
+                {waiting.label}
+              </Text>
+              <Text style={styles.waitStart}>{waiting.startLabel} ›</Text>
+            </Pressable>
+          )
         )}
       </View>
     </View>
@@ -969,7 +1341,7 @@ function ProgressBar({ pct }: { pct: number }) {
     edge.setValue(0.9);
     Animated.timing(edge, {
       toValue: 0,
-      duration: 500,
+      duration: linger.edge,
       easing: motion.quick.easing,
       useNativeDriver: true,
     }).start();
@@ -977,7 +1349,7 @@ function ProgressBar({ pct }: { pct: number }) {
       glow.setValue(0.7);
       Animated.timing(glow, {
         toValue: 0,
-        duration: 900,
+        duration: linger.glow,
         easing: motion.quick.easing,
         useNativeDriver: true,
       }).start();
@@ -1030,7 +1402,7 @@ function SealSweep({ sealed }: { sealed: boolean }) {
     if (!sealed) return;
     Animated.timing(sweep, {
       toValue: 1,
-      duration: 550,
+      duration: linger.sweep,
       easing: motion.move.easing,
       useNativeDriver: true,
     }).start();
@@ -1124,13 +1496,6 @@ const sheet = themed(() => ({
   header: { paddingHorizontal: 16, paddingBottom: 8 },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   headerText: { flex: 1 },
-  kicker: {
-    fontFamily: font.regular,
-    fontSize: 10.5,
-    letterSpacing: tracking(10.5, 0.08),
-    textTransform: 'uppercase',
-    color: color.accent,
-  },
   title: { marginTop: 2, letterSpacing: tracking(22, -0.02) },
   count: {
     fontFamily: font.regular,
@@ -1251,6 +1616,15 @@ const sheet = themed(() => ({
     fontVariant: ['tabular-nums'],
   },
   waitStart: { fontFamily: font.regular, fontSize: 11.5, color: color.accent },
+  /**
+   * The two answers to "who's up?". Same line and same weight as "start now"
+   * — this is one more thing you may tap on the waiting row, not a dialog —
+   * with only the claim accented, so glancing at the row still reads as "the
+   * set is not yours yet" rather than as two equal buttons demanding a choice.
+   */
+  bidBtn: { paddingHorizontal: 8, paddingVertical: 3, marginVertical: -3 },
+  bidMine: { fontFamily: font.regular, fontSize: 11.5, color: color.accent },
+  bidTheirs: { fontFamily: font.regular, fontSize: 11.5, color: color.neutral500 },
   rowFlash: { ...absFill, borderRadius: radius.sm, backgroundColor: wash.accent(12) },
   /** Over the two inputs — 16+66 plus two 8px gaps to their left, the 34px
       check plus one to their right. */
@@ -1272,8 +1646,14 @@ const sheet = themed(() => ({
     fontVariant: ['tabular-nums'],
     alignSelf: 'flex-start',
   },
-  setIndex: { width: 16, fontFamily: font.regular, fontSize: 12, color: color.neutral600 },
+  /** The index column, now a tap target — 16px wide, thumb-sized by hitSlop. */
+  markCell: { width: 16, alignItems: 'flex-start', justifyContent: 'center' },
+  setIndex: { fontFamily: font.regular, fontSize: 12, color: color.neutral600 },
   setIndexLive: { color: color.accent400 },
+  /** A mark's line under the row — last time's advice, or this set's words. */
+  markLine: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 5, paddingLeft: 2 },
+  markLineText: { flex: 1, fontFamily: font.regular, fontSize: 11, color: color.neutral500 },
+  markLineOwn: { color: color.neutral400 },
   prevText: {
     fontFamily: font.regular,
     fontSize: 11.5,
@@ -1354,7 +1734,7 @@ const sheet = themed(() => ({
   modeChip: {
     paddingVertical: 3,
     paddingHorizontal: 8,
-    borderRadius: 6,
+    borderRadius: radius.md * 0.75,
     borderWidth: 1,
     borderColor: color.divider,
   },
@@ -1401,8 +1781,59 @@ const sheet = themed(() => ({
     fontVariant: ['tabular-nums'],
   },
   ovTick: { fontFamily: font.regular, fontSize: 12, color: color.accent400 },
+  ovRemove: {
+    width: 26,
+    height: 26,
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+    borderColor: 'transparent',
+  },
+  ovRemoveGlyph: { fontFamily: font.regular, fontSize: 15, color: color.neutral600 },
+  ovSetting: {
+    fontFamily: font.regular,
+    fontSize: 11.5,
+    color: color.neutral500,
+    marginTop: 14,
+    marginBottom: 6,
+    letterSpacing: tracking(11.5, 0.02),
+  },
+  ovSeg: { marginBottom: 2 },
   ovAdd: { alignSelf: 'flex-start', marginTop: 8 },
   ovAddLabel: { fontSize: 12.5 },
   ovFinish: { width: '100%', height: 46, marginTop: 16 },
   ovFinishLabel: { fontSize: 15 },
+
+  markSub: { fontFamily: font.regular, fontSize: 11.5, color: color.neutral500, marginTop: 3 },
+  markPrev: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    marginTop: 12,
+    paddingVertical: 7,
+    paddingHorizontal: 9,
+    borderRadius: radius.md,
+    backgroundColor: wash.text(5),
+  },
+  markPrevText: { flex: 1, fontFamily: font.regular, fontSize: 11.5, color: color.neutral400 },
+  /** Four tiles across, so the whole vocabulary is one glance and one tap. */
+  markRow: { flexDirection: 'row', gap: 7, marginTop: 14 },
+  markTile: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    borderWidth: 1,
+    borderRadius: radius.md,
+  },
+  markTileLabel: {
+    fontFamily: font.regular,
+    fontSize: 11,
+    textAlign: 'center',
+    color: color.neutral400,
+  },
+  markHelp: { fontFamily: font.regular, fontSize: 10.5, color: color.neutral600, marginTop: 8 },
+  markField: { marginTop: 14 },
+  markInput: { minHeight: 66, paddingTop: 9, textAlignVertical: 'top' },
+  markClose: { marginTop: 16, height: 40 },
 }));

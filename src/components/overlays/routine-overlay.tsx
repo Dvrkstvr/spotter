@@ -16,7 +16,6 @@ import { useState } from 'react';
 import {
   Animated,
   PanResponder,
-  Pressable,
   ScrollView,
   StyleProp,
   Text,
@@ -27,20 +26,41 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { GripIcon } from '@/components/icon';
+import { HoldBtn } from '@/components/hold-btn';
 import { FullScreen } from '@/components/sheet';
 import { useBackClose } from '@/hooks/use-back-close';
 import { radio } from '@/data/buddy-radio';
-import { DOW, Routine } from '@/data/exercises';
+import { measureOf, Routine } from '@/data/exercises';
+import { countN, DAYS_SHORT } from '@/data/i18n';
 import { themed, useColors, useThemed } from '@/design/theme';
-import { color, font, t, tracking, wash } from '@/design/tokens';
+import { color, font, slop, t, tracking, wash } from '@/design/tokens';
 import { Btn, Input, missingName } from '@/design/ui';
-import { CoDraft, fmt, myName, num, useStore } from '@/store/workout-store';
+import { CoDraft, fmt, myName, num, schemeLine, unitTag, useStore } from '@/store/workout-store';
+
+/**
+ * Write a reps or kg cell — and record that somebody chose it.
+ *
+ * The number on its own isn't enough. A row starts life carrying whatever the
+ * picker filled in from the exercise, and those are nobody's decision, so the
+ * session leaves them alone in favour of what you actually lifted last time.
+ * Typing in the cell is what turns the figure into a plan (`planned` on
+ * `RoutineItem`), and a plan is what reaches the session — which is the whole
+ * reason two people sit down and set weights together.
+ *
+ * The sets column is deliberately not marked: it already translates, as the
+ * number of rows you get.
+ */
+const planNum = (r: Routine, n: number, field: 'reps' | 'w', v: number) => {
+  r.items[n][field] = v;
+  r.items[n].planned = true;
+};
 
 export function RoutineOverlay() {
   const styles = useThemed(sheet);
   const c = useColors();
-  const { s, L, patch, ex, routine, gInfo, kInfo, exInfo, rInfo, mutRoutine, start, draftPayload } =
-    useStore();
+  const {
+    s, L, patch, ex, routine, gInfo, kInfo, exInfo, rInfo, mutRoutine, deleteRoutine, start, draftPayload,
+  } = useStore();
   const insets = useSafeAreaInsets();
   const close = () => patch({ routineOpen: null });
   useBackClose(close);
@@ -52,8 +72,13 @@ export function RoutineOverlay() {
   // disconnected mid-draft this falls back to the plain editor.
   const draft = s.coDraft?.rid === r.id && s.buddy ? s.coDraft : null;
 
-  const days = DOW.filter((_, i) => s.schedule[i] === r.id).join(' · ') || L.unscheduled;
-  const summary = `${days} · ${r.items.reduce((a, i) => a + i.sets, 0)} ${L.setsWord}`;
+  const days =
+    DAYS_SHORT[s.lang].filter((_, i) => s.schedule[i] === r.id).join(' · ') || L.unscheduled;
+  const summary = `${days} · ${countN(
+    r.items.reduce((a, i) => a + i.sets, 0),
+    L.setCountOne,
+    L.setCount
+  )}`;
 
   // Ending the draft: tell the buddy (the payload makes the message
   // self-sufficient — their phone merges it even if it missed updates),
@@ -120,7 +145,7 @@ export function RoutineOverlay() {
             {L.sets}
           </Text>
           <Text style={[styles.colLabel, styles.colNarrow]}>{L.reps}</Text>
-          <Text style={[styles.colLabel, styles.colWide]}>kg</Text>
+          <Text style={[styles.colLabel, styles.colWide]}>{L.unitKg}</Text>
           <View style={styles.colDel} />
         </View>
 
@@ -134,9 +159,20 @@ export function RoutineOverlay() {
               return (
                 <View key={`${item.ex}-${n}`} style={styles.row}>
                   <View style={styles.rowText}>
-                    <Text style={[styles.rowName, name?.missing && missingName(c)]}>{name?.text}</Text>
-                    <Text style={styles.rowKind}>
-                      {e ? `${kInfo(e.kind).text} · ${gInfo(e.group).text}` : ''}
+                    {/* One line, like the co-draft rows below and every other
+                        list — a long custom name must not break the grid. */}
+                    <Text style={[styles.rowName, name?.missing && missingName(c)]} numberOfLines={1}>
+                      {name?.text}
+                    </Text>
+                    {/* The column headers say "reps" and "kg" for the whole
+                        grid, but a routine can mix measures — Full Body A
+                        ends on a plank. The tag is where that row says so. */}
+                    <Text style={styles.rowKind} numberOfLines={1}>
+                      {e
+                        ? [kInfo(e.kind).text, gInfo(e.group).text, unitTag(measureOf(e), L)]
+                            .filter(Boolean)
+                            .join(' · ')
+                        : ''}
                     </Text>
                   </View>
                   <Input
@@ -154,9 +190,9 @@ export function RoutineOverlay() {
                     keyboardType="number-pad"
                     defaultValue={String(item.reps)}
                     onChangeText={(v) =>
-                      mutRoutine(r.id, (copy) => {
-                        copy.items[n].reps = Math.max(1, Math.round(num(v, item.reps)));
-                      })
+                      mutRoutine(r.id, (copy) =>
+                        planNum(copy, n, 'reps', Math.max(1, Math.round(num(v, item.reps))))
+                      )
                     }
                   />
                   <Input
@@ -164,18 +200,19 @@ export function RoutineOverlay() {
                     keyboardType="decimal-pad"
                     defaultValue={fmt(item.w)}
                     onChangeText={(v) =>
-                      mutRoutine(r.id, (copy) => {
-                        copy.items[n].w = Math.max(0, num(v, item.w));
-                      })
+                      mutRoutine(r.id, (copy) => planNum(copy, n, 'w', Math.max(0, num(v, item.w))))
                     }
                   />
-                  <Pressable
-                    accessibilityLabel="Remove exercise"
-                    onPress={() => mutRoutine(r.id, (copy) => { copy.items.splice(n, 1); })}
+                  {/* Held, not tapped: the × sits a thumb-width from the kg
+                      cell and takes the row's planned numbers with it. */}
+                  <HoldBtn
+                    label="×"
+                    accessibilityLabel={L.removeExercise}
+                    hitSlop={slop}
+                    onConfirm={() => mutRoutine(r.id, (copy) => { copy.items.splice(n, 1); })}
                     style={styles.colDel}
-                  >
-                    <Text style={styles.delGlyph}>×</Text>
-                  </Pressable>
+                    labelStyle={styles.delGlyph}
+                  />
                 </View>
               );
             })}
@@ -193,7 +230,7 @@ export function RoutineOverlay() {
           block
           label={L.addExerciseBtn}
           style={styles.addBtn}
-          onPress={() => patch({ picker: 'routine', query: '' })}
+          onPress={() => patch({ picker: 'routine' })}
         />
         {draft ? (
           <View style={styles.endRow}>
@@ -212,14 +249,25 @@ export function RoutineOverlay() {
             />
           </View>
         ) : (
-          <Btn
-            variant="primary"
-            block
-            label={L.startRoutine}
-            style={styles.startBtn}
-            labelStyle={styles.startLabel}
-            onPress={() => start(r.id)}
-          />
+          <>
+            <Btn
+              variant="primary"
+              block
+              label={L.startRoutine}
+              style={styles.startBtn}
+              labelStyle={styles.startLabel}
+              onPress={() => start(r.id)}
+            />
+            {/* The only way a routine leaves the phone, so it wears the hold
+                grammar. Hidden mid-co-draft: deleting what the buddy is
+                still editing is a conversation, not a button. */}
+            <HoldBtn
+              label={L.holdDeleteRoutine}
+              onConfirm={() => deleteRoutine(r.id)}
+              style={styles.deleteBtn}
+              labelStyle={styles.deleteLabel}
+            />
+          </>
         )}
       </ScrollView>
     </FullScreen>
@@ -235,7 +283,7 @@ export function RoutineOverlay() {
 function DraftRows({ r, draft, buddy }: { r: Routine; draft: CoDraft; buddy: string }) {
   const styles = useThemed(sheet);
   const c = useColors();
-  const { s, ex, exInfo, gInfo, kInfo, mutRoutine, moveRoutineItem } = useStore();
+  const { s, L, ex, exInfo, gInfo, kInfo, mutRoutine, moveRoutineItem } = useStore();
 
   const [drag, setDrag] = useState<{ from: number; to: number } | null>(null);
   const [rowHeight, setRowHeight] = useState(52);
@@ -294,7 +342,7 @@ function DraftRows({ r, draft, buddy }: { r: Routine; draft: CoDraft; buddy: str
           >
             <View
               {...responderFor(n).panHandlers}
-              accessibilityLabel="Drag to reorder"
+              accessibilityLabel={L.dragReorder}
               style={styles.grip}
             >
               <GripIcon color={isDragging ? c.accent : c.neutral700} />
@@ -309,10 +357,16 @@ function DraftRows({ r, draft, buddy }: { r: Routine; draft: CoDraft; buddy: str
                 {name?.text}
               </Text>
               <Text style={styles.rowKind} numberOfLines={1}>
-                {e ? `${kInfo(e.kind).text} · ${gInfo(e.group).text}` : ''}
+                {e
+                  ? [kInfo(e.kind).text, gInfo(e.group).text, unitTag(measureOf(e), L)]
+                      .filter(Boolean)
+                      .join(' · ')
+                  : ''}
               </Text>
               <Text style={styles.buddyLine} numberOfLines={1}>
-                {vals ? `${buddy} · ${vals.reps} × ${fmt(vals.w)} kg` : `${buddy} · —`}
+                {vals
+                  ? `${buddy} · ${schemeLine({ sets: 1, ...vals }, measureOf(e), L, true)}`
+                  : `${buddy} · —`}
               </Text>
             </View>
             <NumCell
@@ -330,9 +384,9 @@ function DraftRows({ r, draft, buddy }: { r: Routine; draft: CoDraft; buddy: str
               keyboard="number-pad"
               value={String(item.reps)}
               onText={(v) =>
-                mutRoutine(r.id, (copy) => {
-                  copy.items[n].reps = Math.max(1, Math.round(num(v, item.reps)));
-                })
+                mutRoutine(r.id, (copy) =>
+                  planNum(copy, n, 'reps', Math.max(1, Math.round(num(v, item.reps))))
+                )
               }
             />
             <NumCell
@@ -340,18 +394,17 @@ function DraftRows({ r, draft, buddy }: { r: Routine; draft: CoDraft; buddy: str
               keyboard="decimal-pad"
               value={fmt(item.w)}
               onText={(v) =>
-                mutRoutine(r.id, (copy) => {
-                  copy.items[n].w = Math.max(0, num(v, item.w));
-                })
+                mutRoutine(r.id, (copy) => planNum(copy, n, 'w', Math.max(0, num(v, item.w))))
               }
             />
-            <Pressable
-              accessibilityLabel="Remove exercise"
-              onPress={() => mutRoutine(r.id, (copy) => { copy.items.splice(n, 1); })}
+            <HoldBtn
+              label="×"
+              accessibilityLabel={L.removeExercise}
+              hitSlop={slop}
+              onConfirm={() => mutRoutine(r.id, (copy) => { copy.items.splice(n, 1); })}
               style={styles.colDel}
-            >
-              <Text style={styles.delGlyph}>×</Text>
-            </Pressable>
+              labelStyle={styles.delGlyph}
+            />
           </Animated.View>
         );
       })}
@@ -429,7 +482,15 @@ const sheet = themed(() => ({
   colName: { flex: 1, textAlign: 'left' },
   colNarrow: { width: 38 },
   colWide: { width: 56 },
-  colDel: { width: 22, height: 26, alignItems: 'center', justifyContent: 'center' },
+  colDel: {
+    width: 22,
+    height: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+    borderColor: 'transparent',
+  },
   colShared: { color: color.accent700 },
 
   row: {
@@ -487,6 +548,8 @@ const sheet = themed(() => ({
   },
   addBtn: { marginTop: 12, height: 40 },
   startBtn: { marginTop: 8, height: 44 },
+  deleteBtn: { marginTop: 8, height: 40 },
+  deleteLabel: { color: color.neutral500 },
   startLabel: { fontSize: 15 },
   endRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
   endBtn: { flex: 1, height: 44 },

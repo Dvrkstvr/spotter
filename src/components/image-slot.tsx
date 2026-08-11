@@ -9,9 +9,9 @@
 import * as ImagePicker from 'expo-image-picker';
 import { Image, Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
 
-import { ImageGlyph } from '@/components/icon';
+import { CAMERA_D, Icon, ImageGlyph } from '@/components/icon';
 import { themed, useColors, useThemed } from '@/design/theme';
-import { fill, font, wash } from '@/design/tokens';
+import { fill, font, radius, slop, wash } from '@/design/tokens';
 import { useStore } from '@/store/workout-store';
 
 export type SlotShape = 'rect' | 'rounded' | 'circle' | 'pill';
@@ -21,6 +21,8 @@ export function ImageSlot({
   shape = 'rounded',
   cornerRadius = 12,
   placeholder,
+  camera = false,
+  cameraLabel,
   style,
 }: {
   /** Persistence key — must be unique across the app. */
@@ -29,6 +31,17 @@ export function ImageSlot({
   /** Corner radius for shape="rounded". */
   cornerRadius?: number;
   placeholder: string;
+  /**
+   * Offer a shutter button beside the slot as well as the library.
+   *
+   * Off everywhere but the how-to sheet, and that is the whole point: CAMERA
+   * is a dangerous permission, so the dialog has to belong to a moment the
+   * user went looking for. Photographing the machine you are standing at, in
+   * a sheet you opened to edit, is that moment. Setting a profile picture is
+   * not — that slot picks from the library and never mentions the camera.
+   */
+  camera?: boolean;
+  cameraLabel?: string;
   style?: StyleProp<ViewStyle>;
 }) {
   const styles = useThemed(sheet);
@@ -39,15 +52,28 @@ export function ImageSlot({
   const br =
     shape === 'circle' || shape === 'pill' ? 9999 : shape === 'rounded' ? cornerRadius : 0;
 
+  const keep = (res: ImagePicker.ImagePickerResult) => {
+    if (res.canceled) return;
+    patch((st) => ({ images: { ...st.images, [id]: res.assets[0].uri } }));
+  };
+
   const pick = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) return;
-    const res = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      quality: 0.9,
-    });
-    if (res.canceled) return;
-    patch((st) => ({ images: { ...st.images, [id]: res.assets[0].uri } }));
+    keep(await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.9 }));
+  };
+
+  /**
+   * The only place in the app that asks for CAMERA, and it asks here rather
+   * than up front on purpose: the permission dialog lands on the tap that
+   * asked for it, so the reason is on screen behind it. `mediaTypes: images`
+   * keeps this a stills capture, which is what lets RECORD_AUDIO stay blocked
+   * — that permission is only wanted for video.
+   */
+  const shoot = async () => {
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (!perm.granted) return;
+    keep(await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.9 }));
   };
 
   return (
@@ -70,12 +96,46 @@ export function ImageSlot({
           <View pointerEvents="none" style={[styles.ring, { borderRadius: br }]} />
         </>
       )}
+
+      {/* Inside the frame rather than beside it: three of these sit in the
+          how-to sheet, and a row of buttons under each would cost more height
+          than the slots themselves. The touch lands on the badge, not the
+          slot behind it — nested Pressables give the inner one the responder. */}
+      {camera && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={cameraLabel}
+          onPress={shoot}
+          hitSlop={slop}
+          style={({ pressed }) => [styles.shutter, pressed && styles.shutterOn]}
+        >
+          <Icon d={CAMERA_D} size={13} strokeWidth={1.6} color={c.neutral300} />
+        </Pressable>
+      )}
     </Pressable>
   );
 }
 
 const sheet = themed(() => ({
-  frame: { overflow: 'hidden', backgroundColor: 'rgba(127, 127, 127, 0.08)' },
+  /** The original's 8%-grey frame — as the same text wash `t.rule` uses, so
+      it follows the theme instead of being the app's one literal colour. */
+  frame: { overflow: 'hidden', backgroundColor: wash.text(8) },
+  /** Bottom-right, on its own scrim so it reads over a photo as well as over
+      the empty frame's dashed ring. */
+  shutter: {
+    position: 'absolute',
+    right: 5,
+    bottom: 5,
+    width: 26,
+    height: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.sm,
+    backgroundColor: wash.bg(72),
+    borderWidth: 1,
+    borderColor: wash.text(14),
+  },
+  shutterOn: { backgroundColor: wash.accent(30) },
   empty: {
     ...fill,
     alignItems: 'center',

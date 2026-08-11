@@ -9,6 +9,26 @@
 export type Lang = 'en' | 'de';
 
 /**
+ * The device's language, narrowed to one of the two this app speaks.
+ *
+ * `Intl` rather than `expo-localization`: a native module would mean an
+ * optional bridge (see AGENTS.md) and a rebuild of both phones, for one
+ * string. Hermes exposes the platform locale here on Android, and the only
+ * question this app ever has is "is it German?" — so anything else, including
+ * a runtime with Intl compiled out, lands on English.
+ *
+ * Only ever read on a genuine first run — see `firstRunDefaults`.
+ */
+export function deviceLang(): Lang {
+  try {
+    const tag = Intl.DateTimeFormat().resolvedOptions().locale;
+    return tag.toLowerCase().startsWith('de') ? 'de' : 'en';
+  } catch {
+    return 'en';
+  }
+}
+
+/**
  * A user-named thing's display names, one per language it has been named in.
  * Missing languages fall back to whichever is filled, shown greyed as a cue
  * that the translation doesn't exist yet.
@@ -25,15 +45,33 @@ export const DICT = {
     addSetting: '+ Add setting', lastSession: 'Last session', usedIn: 'Used in', howTo: 'How to', close: 'Close',
     dropGif: 'Drop a GIF or video frame', startPos: 'Start position', endPos: 'End position', videoLink: 'Video link',
     pasteUrl: 'Paste a video URL', cues: 'Cues', setup: 'Setup', newExercise: 'New exercise', name: 'Name',
+    // Only the how-to slots offer this — it is what asks for CAMERA.
+    takePhoto: 'Take a photo',
     addCue: '+ Add cue', cuePlaceholder: 'What to remember', editHowTo: 'Edit the how-to',
+    remove: 'Remove', dragReorder: 'Drag to reorder',
     resetExercise: 'Reset to the original',
     exampleEx: 'e.g. Incline Cable Fly', muscleGroup: 'Muscle group', equipment: 'Equipment', cancel: 'Cancel', save: 'Save',
+    createNamed: 'Create “{name}”',
     back: '‹ Back', backRoutines: '‹ Routines', addExercise: 'Add exercise', addExerciseBtn: '+ Add exercise',
-    startRoutine: 'Start this routine', exercise: 'Exercise', sets: 'Sets', reps: 'Reps', logging: 'Logging',
+    startRoutine: 'Start this routine', holdDeleteRoutine: 'Hold to delete this routine',
+    exercise: 'Exercise', sets: 'Sets', reps: 'Reps', logging: 'Logging',
+    // Set-row column headers. Which pair shows is the exercise's `Measure`.
+    unitKg: 'kg', unitSec: 'sec', unitKm: 'km', unitMin: 'min',
+    measure: 'What a set is', measureLoad: 'Weight × reps', measureTime: 'Weight × seconds',
+    measureDistance: 'Distance × minutes', measureDuration: 'Minutes only',
+    measureHint: 'Minutes only is for things that have no sets — a climbing session, a match, a class.',
+    measureFixed: 'Set when the exercise was made — changing it would orphan everything already logged.',
     lastTime: 'Last time', addSet: 'Add set', sameAsLast: 'Same as last time', next: 'Next ›', nextExercise: 'Next exercise', discard: 'Discard',
+    // What a set says about the next one — see `SetMark`. The tile labels are
+    // short because four of them share a row; the sentence they read as is
+    // built by `markLastTime`.
+    setLabel: 'Set {n}', markUp: 'Heavier', markDown: 'Lighter', markOk: 'Just right', markNote: 'Note',
+    markNoteLabel: 'Note to yourself', markNotePlaceholder: 'What to remember for next time',
+    markLastTime: 'Last time · {t}', markClear: 'Tap the mark again to clear it',
     holdAddSet: 'Hold to add a set', startNow: 'Start now', restLeftLabel: 'Rest · {t}',
     holdNext: 'Hold for the next exercise',
     emptySessionNote: 'No exercises yet — add the first one and log as you go.',
+    removeExercise: 'Remove exercise',
     buddyLeftNote: '{name} disconnected — finishing on your own.',
     holdFinish: 'Hold to finish',
     finishWorkout: 'Finish workout', completedToday: 'Completed today', startAgain: 'Start again', agoToday: 'today',
@@ -41,7 +79,8 @@ export const DICT = {
     addGroup: '+ Add group', addEquipment: '+ Add equipment', all: 'All', rest: 'Rest', restDay: 'Rest day',
     restNote: 'Enjoy your day to the fullest.',
     emptySession: 'Empty session', addAsYouGo: 'add as you go', freeSession: 'Free session', newRoutine: 'New routine',
-    exCount: 'exercises', setCount: 'sets', ofSets: 'of', setsWord: 'sets', thisMonth: 'This month', volume: 'Volume',
+    exCount: 'exercises', exCountOne: 'exercise', setCount: 'sets', setCountOne: 'set',
+    ofSets: 'of', setsWord: 'sets', thisMonth: 'This month', volume: 'Volume',
     time: 'Time', loggedMonth: 'logged this month', unscheduled: 'unscheduled', bodyweight: 'bodyweight',
     dayDone: 'Done — logged this session.', dayPlannedPast: 'Planned, not logged.', dayPlanned: 'Planned.',
     dayFree: 'Nothing planned. Start a free session any time.', addDetails: 'Add your details below',
@@ -56,9 +95,14 @@ export const DICT = {
     authEnterHint: "Enter the code shown on {name}'s phone.",
     authWrong: 'Wrong code — check again.', linkLost: 'Reconnecting…',
     connected: 'Connected', disconnect: 'Disconnect', dividerHint: 'leave empty for a divider', trainingWith: 'training with you',
-    chooseWorkout: 'Choose a workout', thisWeek: 'This week', seePlan: 'See plan',
+    chooseWorkout: 'Choose a workout', thisWeek: 'This week', seePlan: 'See plan', routinesWord: 'routines',
     chooseRoutine: 'Choose routine',
     saveAsRoutine: 'Save as new routine', routineSaved: 'Saved to your routines.',
+    loggedSessions: 'Logged', withBuddy: 'with {name}',
+    noDetail: 'Logged before this phone kept the set-by-set detail.',
+    nameRoutine: 'Name this routine',
+    noRoutines: 'No routines yet — build one with “+ New”, or keep a logged session as one from its day on the Plan tab.',
+    noResults: 'Nothing matches that search.',
     buddySync: 'Buddy sync', sync: 'Sync', connectingTo: 'Connecting to {name}…',
     syncDemoNote: 'Demo transport — nothing leaves this phone yet.',
     missingHere: 'Missing on your device', missingThere: 'Missing on {name}’s device',
@@ -81,6 +125,10 @@ export const DICT = {
     stBothDone: 'Both done — ready for the next exercise',
     yourTurn: 'Your set', theirTurn: "{name}'s set", together: 'Lift together',
     modeAlternate: 'Take turns', modeParallel: 'Parallel',
+    whoFirst: 'Who goes first', firstHost: 'Starter', firstRandom: 'Random', firstAsk: 'Ask',
+    whoFirstHint:
+      'Breaks the tie when you are level on an exercise. Random flips once per exercise; Ask puts it to you both and falls back to the coin.',
+    whosUp: "Who's up?", bidMine: "I'll go", bidTheirs: 'You go',
     jumpTo: 'Go to {ex}',
     planSynced: 'In sync with {name}', planDiffers: "Differs on {name}'s phone",
     planMissing: "Not on {name}'s phone yet",
@@ -104,6 +152,13 @@ export const DICT = {
     restHint: 'Runs after every set you tick off. Off hides the countdown entirely.',
     hapticsLabel: 'Vibration',
     hapticsHint: 'A short buzz when a set is ticked, and when a rest runs out.',
+    restAlertLabel: 'Notify when a rest ends',
+    restAlertHint: 'Reaches you with the phone locked or in a pocket. It clears itself when you come back to the app.',
+    // The alarm itself. The body is the exercise you are resting inside; this
+    // line is the fallback for a freeform session that has none yet.
+    restOverTitle: 'Rest is over', restOverBody: 'Your next set is up.',
+    // Names the Android notification channel, in the phone's own settings.
+    restAlertChannel: 'Rest timer',
     privacy: 'Privacy', trainAlone: 'Train alone',
     trainAloneHint:
       'Hides everything to do with a training partner and switches the radio off. The people you have paired with are remembered.',
@@ -119,6 +174,7 @@ export const DICT = {
     restoreBody:
       'Restoring overwrites the routines, exercises and logged sessions on this phone. It cannot be undone.',
     restoreGo: 'Restore',
+    holdRestore: 'Hold to restore',
   },
   de: {
     today: 'Heute', plan: 'Plan', routines: 'Routinen', exercises: 'Übungen', you: 'Profil', settings: 'Einstellungen',
@@ -129,15 +185,28 @@ export const DICT = {
     addSetting: '+ Einstellung', lastSession: 'Letzte Einheit', usedIn: 'Verwendet in', howTo: 'Anleitung', close: 'Schließen',
     dropGif: 'GIF oder Videobild ablegen', startPos: 'Startposition', endPos: 'Endposition', videoLink: 'Video-Link',
     pasteUrl: 'Video-URL einfügen', cues: 'Hinweise', setup: 'Einstellung', newExercise: 'Neue Übung', name: 'Name',
+    takePhoto: 'Foto aufnehmen',
     addCue: '+ Hinweis hinzufügen', cuePlaceholder: 'Worauf du achten willst', editHowTo: 'Anleitung bearbeiten',
+    remove: 'Entfernen', dragReorder: 'Zum Sortieren ziehen',
     resetExercise: 'Auf das Original zurücksetzen',
     exampleEx: 'z. B. Schrägbank-Kabelzug', muscleGroup: 'Muskelgruppe', equipment: 'Gerät', cancel: 'Abbrechen', save: 'Speichern',
+    createNamed: '„{name}“ anlegen',
     back: '‹ Zurück', backRoutines: '‹ Routinen', addExercise: 'Übung hinzufügen', addExerciseBtn: '+ Übung hinzufügen',
-    startRoutine: 'Diese Routine starten', exercise: 'Übung', sets: 'Sätze', reps: 'Whd.', logging: 'Aufzeichnung',
+    startRoutine: 'Diese Routine starten', holdDeleteRoutine: 'Zum Löschen der Routine halten',
+    exercise: 'Übung', sets: 'Sätze', reps: 'Whd.', logging: 'Aufzeichnung',
+    unitKg: 'kg', unitSec: 'Sek.', unitKm: 'km', unitMin: 'Min.',
+    measure: 'Was ein Satz ist', measureLoad: 'Gewicht × Whd.', measureTime: 'Gewicht × Sekunden',
+    measureDistance: 'Distanz × Minuten', measureDuration: 'Nur Minuten',
+    measureHint: 'Nur Minuten ist für alles ohne Sätze — eine Kletter-Session, ein Spiel, ein Kurs.',
+    measureFixed: 'Beim Anlegen festgelegt — eine Änderung würde alles bereits Aufgezeichnete entwerten.',
     lastTime: 'Letztes Mal', addSet: 'Satz hinzufügen', sameAsLast: 'Wie letztes Mal', next: 'Weiter ›', nextExercise: 'Nächste Übung', discard: 'Verwerfen',
+    setLabel: 'Satz {n}', markUp: 'Schwerer', markDown: 'Leichter', markOk: 'Genau richtig', markNote: 'Notiz',
+    markNoteLabel: 'Notiz an dich selbst', markNotePlaceholder: 'Was du dir fürs nächste Mal merken willst',
+    markLastTime: 'Letztes Mal · {t}', markClear: 'Nochmal tippen entfernt die Markierung',
     holdAddSet: 'Halten für neuen Satz', startNow: 'Jetzt starten', restLeftLabel: 'Pause · {t}',
     holdNext: 'Für die nächste Übung halten',
     emptySessionNote: 'Noch keine Übungen — füg die erste hinzu und trag ein, was du machst.',
+    removeExercise: 'Übung entfernen',
     buddyLeftNote: '{name} hat die Verbindung getrennt — du machst allein weiter.',
     holdFinish: 'Zum Beenden halten',
     finishWorkout: 'Training beenden', completedToday: 'Heute erledigt', startAgain: 'Nochmal starten', agoToday: 'heute',
@@ -145,7 +214,8 @@ export const DICT = {
     addGroup: '+ Gruppe hinzufügen', addEquipment: '+ Gerät hinzufügen', all: 'Alle', rest: 'Frei', restDay: 'Ruhetag',
     restNote: 'Genieß deinen Tag in vollen Zügen.',
     emptySession: 'Freies Training', addAsYouGo: 'unterwegs ergänzen', freeSession: 'Freies Training', newRoutine: 'Neue Routine',
-    exCount: 'Übungen', setCount: 'Sätze', ofSets: 'von', setsWord: 'Sätze', thisMonth: 'Diesen Monat', volume: 'Volumen',
+    exCount: 'Übungen', exCountOne: 'Übung', setCount: 'Sätze', setCountOne: 'Satz',
+    ofSets: 'von', setsWord: 'Sätze', thisMonth: 'Diesen Monat', volume: 'Volumen',
     time: 'Dauer', loggedMonth: 'diesen Monat erledigt', unscheduled: 'nicht geplant', bodyweight: 'Körpergewicht',
     dayDone: 'Erledigt — Einheit aufgezeichnet.', dayPlannedPast: 'Geplant, nicht aufgezeichnet.', dayPlanned: 'Geplant.',
     dayFree: 'Nichts geplant. Du kannst jederzeit frei trainieren.', addDetails: 'Trag deine Daten unten ein',
@@ -161,9 +231,14 @@ export const DICT = {
     authEnterHint: 'Gib den Code ein, der auf {name}s Handy steht.',
     authWrong: 'Falscher Code — schau nochmal.', linkLost: 'Verbinde neu …',
     connected: 'Verbunden', disconnect: 'Trennen', dividerHint: 'leer lassen für eine Trennlinie', trainingWith: 'trainiert mit dir',
-    chooseWorkout: 'Training auswählen', thisWeek: 'Diese Woche', seePlan: 'Plan ansehen',
+    chooseWorkout: 'Training auswählen', thisWeek: 'Diese Woche', seePlan: 'Plan ansehen', routinesWord: 'Routinen',
     chooseRoutine: 'Routine wählen',
     saveAsRoutine: 'Als neue Routine speichern', routineSaved: 'In deinen Routinen gespeichert.',
+    loggedSessions: 'Aufgezeichnet', withBuddy: 'mit {name}',
+    noDetail: 'Aufgezeichnet, bevor dieses Handy die einzelnen Sätze behalten hat.',
+    nameRoutine: 'Name der Routine',
+    noRoutines: 'Noch keine Routinen — erstell eine mit „+ Neu“ oder speichere eine aufgezeichnete Einheit über ihren Tag im Plan-Tab.',
+    noResults: 'Nichts passt zu dieser Suche.',
     buddySync: 'Buddy-Sync', sync: 'Sync', connectingTo: 'Verbinde mit {name} …',
     syncDemoNote: 'Demo-Übertragung — noch verlässt nichts dieses Handy.',
     missingHere: 'Fehlt auf deinem Gerät', missingThere: 'Fehlt bei {name}',
@@ -186,6 +261,10 @@ export const DICT = {
     stBothDone: 'Beide fertig — bereit für die nächste Übung',
     yourTurn: 'Dein Satz', theirTurn: 'Satz von {name}', together: 'Macht ihn zusammen',
     modeAlternate: 'Abwechselnd', modeParallel: 'Parallel',
+    whoFirst: 'Wer fängt an', firstHost: 'Starter', firstRandom: 'Zufall', firstAsk: 'Fragen',
+    whoFirstHint:
+      'Entscheidet, wenn ihr bei einer Übung gleichauf seid. „Zufall“ wirft einmal pro Übung; „Fragen“ überlässt es euch beiden und wirft sonst die Münze.',
+    whosUp: 'Wer fängt an?', bidMine: 'Ich', bidTheirs: 'Du',
     jumpTo: 'Zu {ex}',
     planSynced: 'Synchron mit {name}', planDiffers: 'Auf {name}s Handy anders',
     planMissing: 'Noch nicht auf {name}s Handy',
@@ -209,6 +288,10 @@ export const DICT = {
     restHint: 'Läuft nach jedem Satz, den du abhakst. „Aus“ blendet den Countdown ganz aus.',
     hapticsLabel: 'Vibration',
     hapticsHint: 'Ein kurzes Summen, wenn ein Satz abgehakt ist und wenn die Pause um ist.',
+    restAlertLabel: 'Benachrichtigen, wenn die Pause endet',
+    restAlertHint: 'Erreicht dich auch bei gesperrtem Bildschirm oder in der Tasche. Sie verschwindet von selbst, sobald du die App wieder öffnest.',
+    restOverTitle: 'Pause vorbei', restOverBody: 'Dein nächster Satz steht an.',
+    restAlertChannel: 'Pausen-Timer',
     privacy: 'Privatsphäre', trainAlone: 'Allein trainieren',
     trainAloneHint:
       'Blendet alles rund um Trainingspartner aus und schaltet das Radio ab. Wer gekoppelt ist, bleibt gespeichert.',
@@ -224,6 +307,7 @@ export const DICT = {
     restoreBody:
       'Beim Wiederherstellen werden Routinen, Übungen und aufgezeichnete Einheiten auf diesem Handy überschrieben. Das lässt sich nicht rückgängig machen.',
     restoreGo: 'Wiederherstellen',
+    holdRestore: 'Zum Wiederherstellen halten',
   },
 } as const;
 
@@ -238,7 +322,12 @@ export type Strings = { [K in keyof (typeof DICT)['en']]: string };
  * Day tables are Monday-based, matching `DOW` and the schedule keys.
  */
 
-const DAYS_SHORT = {
+/**
+ * Exported for the screens that draw weekday labels from a schedule index —
+ * `DOW` in exercises.ts stays the *internal* key set and must never be
+ * rendered: it reads as English regardless of language.
+ */
+export const DAYS_SHORT = {
   en: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
   de: ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'],
 } as const;
@@ -276,3 +365,6 @@ export const fmtDayTiny = (lang: Lang, d: Date) =>
 /** 'last done 3 days ago' / 'zuletzt vor 3 Tagen', composed from the dict. */
 export const fmtLastDone = (L: Strings, days: number) =>
   `${L.lastDone} ${days === 0 ? L.agoToday : days === 1 ? L.oneDayAgo : L.daysAgo.replace('{n}', String(days))}`;
+
+/** '1 exercise' / '3 exercises' — the dictionaries carry both forms. */
+export const countN = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;

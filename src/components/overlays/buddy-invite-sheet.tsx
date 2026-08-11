@@ -8,6 +8,7 @@
 import { Text, View } from 'react-native';
 
 import { radio } from '@/data/buddy-radio';
+import { countN } from '@/data/i18n';
 import { useBackClose } from '@/hooks/use-back-close';
 import { Sheet } from '@/components/sheet';
 import { themed, useThemed } from '@/design/theme';
@@ -34,7 +35,7 @@ export function BuddyInviteSheet() {
   if (!inv) return null;
 
   const routineName = resolveNames(inv.routine.names, s.lang).text;
-  const exCount = `${inv.routine.items.length} ${L.exCount}`;
+  const exCount = countN(inv.routine.items.length, L.exCountOne, L.exCount);
 
   return (
     <Sheet zIndex={89} maxHeight="50%" onClose={decline}>

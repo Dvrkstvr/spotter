@@ -30,6 +30,7 @@ import { ScheduleSheet } from '@/components/overlays/schedule-sheet';
 import { SessionOverlay } from '@/components/overlays/session-overlay';
 import { SettingsOverlay } from '@/components/overlays/settings-overlay';
 import { SummaryModal } from '@/components/overlays/summary-modal';
+import { RestAlarm } from '@/components/rest-alarm';
 import { useStore } from '@/store/workout-store';
 
 export function Overlays() {
@@ -45,6 +46,10 @@ export function Overlays() {
   return (
     <>
       {social && <BuddyRadio />}
+      {/* Not gated on `social`, and not inside the session: a rest is yours
+          whether or not anyone is training with you, and it has to survive the
+          session being tucked behind the tabs. Renders nothing. */}
+      <RestAlarm />
       {s.exOpen && <ExerciseSheet />}
       {s.routineOpen && <RoutineOverlay />}
       {s.settingsOpen && <SettingsOverlay />}

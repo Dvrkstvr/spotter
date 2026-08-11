@@ -167,6 +167,10 @@ const assets = [
   { file: 'android-icon-background.png', w: 512, h: 512, fill: 0, bg: PALETTE.bg },
   { file: 'android-icon-foreground.png', w: 512, h: 512, fill: 0.6 },
   { file: 'android-icon-monochrome.png', w: 432, h: 432, fill: 0.6, mono: true },
+  // The status-bar icon. Android keeps only the alpha channel and tints the
+  // rest, so this is the same white mark as the monochrome layer — but drawn
+  // near the edges, because nothing masks it and 24dp is small enough already.
+  { file: 'notification-icon.png', w: 96, h: 96, fill: 0.92, mono: true },
   { file: 'splash-icon.png', w: 512, h: Math.round(512 / ASPECT), fill: 0.92 },
   { file: 'favicon.png', w: 48, h: 48, fill: 0.72, bg: PALETTE.bg },
 ];

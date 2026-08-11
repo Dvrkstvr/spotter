@@ -4,27 +4,37 @@
  *
  * Ordered by how often someone opens it for a thing: the palette and the rest
  * timer get changed and changed back, the muscle-group and equipment lists are
- * long and set up once, and the destructive half sits at the bottom next to
- * About, where nobody lands by accident.
+ * long and set up once — so they are folded away (see `Fold`) — and the
+ * destructive half sits at the bottom next to About, where nobody lands by
+ * accident.
  *
  * Muscle groups and equipment are user-owned: renaming one relabels it
  * everywhere, and leaving a label blank turns that entry into a divider in the
- * exercise library and its filter row.
+ * exercise library and its filter row. Owned, not authored — the seeded keys
+ * are what every exercise is filed under, so those rows rename and reorder but
+ * never delete (`SEEDED`). A divider you add is a row like any other and drags
+ * into the middle of them.
  */
 import Constants from 'expo-constants';
-import { useState } from 'react';
-import { Alert, Pressable, ScrollView, Switch, Text, View } from 'react-native';
+import { ReactNode, useState } from 'react';
+import { Animated, Pressable, ScrollView, Switch, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { HoldBtn } from '@/components/hold-btn';
+import { RiseIn } from '@/components/motion';
 import { ReorderRows } from '@/components/reorder-rows';
-import { FullScreen } from '@/components/sheet';
-import { pickAndRead, saveAndShare } from '@/data/backup';
+import { FullScreen, Sheet } from '@/components/sheet';
+import { Envelope, pickAndRead, saveAndShare } from '@/data/backup';
 import { hasRadio, isSimRadio, sayGoodbye } from '@/data/buddy-radio';
+import { FIRST_UPS } from '@/data/buddy-sync';
+import { DEFAULT_GROUPS, DEFAULT_KINDS } from '@/data/exercises';
+import { dismissRestAlarms, ensureAlarmPermission } from '@/data/rest-alarm';
 import { useBackClose } from '@/hooks/use-back-close';
 import { themed, useColors, useDark, useThemed } from '@/design/theme';
 import {
   color,
   font,
+  motion,
   radius,
   t,
   ThemeMode,
@@ -33,13 +43,22 @@ import {
   themeSwatch,
   tracking,
 } from '@/design/tokens';
-import { Btn, H2, H6, Seg } from '@/design/ui';
+import { Btn, H2, H4, H6, Seg } from '@/design/ui';
 import { resolveNames, STORAGE_VERSION, useStore } from '@/store/workout-store';
 
 /** Rest lengths worth a tap. 0 is the timer off — see `restSeconds`. */
 const RESTS = [0, 60, 90, 120, 180, 300];
 
 const MODES: ThemeMode[] = ['system', 'light', 'dark'];
+
+/**
+ * The keys that ship with the app, by list. A row whose key is in here keeps
+ * its name and its place editable but loses its × — see `ReorderRow.fixed`.
+ */
+const SEEDED = {
+  group: new Set(DEFAULT_GROUPS.map((g) => g.key)),
+  kind: new Set(DEFAULT_KINDS.map((k) => k.key)),
+};
 
 /**
  * `blurple` → `themeBlurple`, the dictionary key holding its display name.
@@ -61,6 +80,9 @@ export function SettingsOverlay() {
   /** What the last export or restore did, until something else happens. */
   const [note, setNote] = useState<string | null>(null);
 
+  /** A validated backup waiting on the hold-to-restore confirm. */
+  const [pendingRestore, setPendingRestore] = useState<Envelope | null>(null);
+
   /**
    * Rows edit the active language only. An entry with no name in this
    * language shows the other language's name as its placeholder — greyed, the
@@ -74,6 +96,7 @@ export function SettingsOverlay() {
         label: g.labels[s.lang] ?? '',
         placeholder: r.missing ? r.text : L.dividerHint,
         count: allEx().filter((e) => e[field] === g.key).length || ('' as const),
+        fixed: SEEDED[field].has(g.key),
       };
     });
 
@@ -111,6 +134,18 @@ export function SettingsOverlay() {
     patch({ privateMode: on });
   };
 
+  /**
+   * Switching it on here is the calmest place to ask Android for the
+   * permission — the user just said they want it. Switching it off clears the
+   * tray with it, so a rest already announced doesn't outlive the setting;
+   * <RestAlarm> cancels anything still scheduled on its own.
+   */
+  const setRestAlert = (on: boolean) => {
+    patch({ restAlert: on });
+    if (on) ensureAlarmPermission();
+    else dismissRestAlarms();
+  };
+
   const doExport = async () => {
     setNote(null);
     if (!(await saveAndShare(exportState(), STORAGE_VERSION, L.exportBackup)))
@@ -124,14 +159,9 @@ export function SettingsOverlay() {
     if (env === 'invalid') return setNote(L.restoreFailed);
     // Confirm at the last possible moment — with the file already in hand, so
     // the question is about this backup rather than about the idea of one.
-    Alert.alert(L.restoreTitle, L.restoreBody, [
-      { text: L.cancel, style: 'cancel' },
-      {
-        text: L.restoreGo,
-        style: 'destructive',
-        onPress: () => setNote(L.restoreDone.replace('{n}', String(importState(env)))),
-      },
-    ]);
+    // In the app's own grammar: the most destructive action here is the one
+    // place that used to get an unthemed OS alert with a tap-to-confirm.
+    setPendingRestore(env);
   };
 
   return (
@@ -196,11 +226,32 @@ export function SettingsOverlay() {
         </View>
         <Text style={styles.hint}>{L.restHint}</Text>
 
+        {/* Only ever consulted when a session is shared — but it belongs here
+            rather than in the session, because it is the answer you want the
+            app to already know by the time you're both standing at the rack.
+            The live session gets its own copy it can change (see `firstUp`). */}
+        <Text style={styles.rowLabel}>{L.whoFirst}</Text>
+        <Seg
+          options={FIRST_UPS.map((p) => ({
+            key: p,
+            label: p === 'host' ? L.firstHost : p === 'random' ? L.firstRandom : L.firstAsk,
+            on: s.firstUpDefault === p,
+            pick: () => patch({ firstUpDefault: p }),
+          }))}
+        />
+        <Text style={styles.hint}>{L.whoFirstHint}</Text>
+
         <ToggleRow
           label={L.hapticsLabel}
           hint={L.hapticsHint}
           on={s.haptics}
           set={(v) => patch({ haptics: v })}
+        />
+        <ToggleRow
+          label={L.restAlertLabel}
+          hint={L.restAlertHint}
+          on={s.restAlert}
+          set={setRestAlert}
         />
 
         <H6 style={styles.head}>{L.privacy}</H6>
@@ -221,41 +272,43 @@ export function SettingsOverlay() {
           }))}
         />
 
-        <H6 style={styles.head}>{L.muscleGroups}</H6>
-        <ReorderRows
-          rows={groupRows}
-          placeholder={L.dividerHint}
-          onLabel={(i, v) => setLabel('groups', i, v)}
-          onDelete={(i) => patch((st) => ({ groups: st.groups.filter((_, j) => j !== i) }))}
-          onReorder={(from, to) => reorder('groups', from, to)}
-        />
-        <Btn
-          variant="ghost"
-          label={L.addGroup}
-          labelStyle={styles.ghostLabel}
-          style={styles.addBtn}
-          onPress={() =>
-            patch((st) => ({ groups: [...st.groups, { key: `g${Date.now()}`, labels: {} }] }))
-          }
-        />
+        <Fold label={L.muscleGroups}>
+          <ReorderRows
+            rows={groupRows}
+            placeholder={L.dividerHint}
+            onLabel={(i, v) => setLabel('groups', i, v)}
+            onDelete={(i) => patch((st) => ({ groups: st.groups.filter((_, j) => j !== i) }))}
+            onReorder={(from, to) => reorder('groups', from, to)}
+          />
+          <Btn
+            variant="ghost"
+            label={L.addGroup}
+            labelStyle={styles.ghostLabel}
+            style={styles.addBtn}
+            onPress={() =>
+              patch((st) => ({ groups: [...st.groups, { key: `g${Date.now()}`, labels: {} }] }))
+            }
+          />
+        </Fold>
 
-        <H6 style={styles.head}>{L.equipment}</H6>
-        <ReorderRows
-          rows={kindRows}
-          placeholder={L.dividerHint}
-          onLabel={(i, v) => setLabel('kinds', i, v)}
-          onDelete={(i) => patch((st) => ({ kinds: st.kinds.filter((_, j) => j !== i) }))}
-          onReorder={(from, to) => reorder('kinds', from, to)}
-        />
-        <Btn
-          variant="ghost"
-          label={L.addEquipment}
-          labelStyle={styles.ghostLabel}
-          style={styles.addBtn}
-          onPress={() =>
-            patch((st) => ({ kinds: [...st.kinds, { key: `k${Date.now()}`, labels: {} }] }))
-          }
-        />
+        <Fold label={L.equipment}>
+          <ReorderRows
+            rows={kindRows}
+            placeholder={L.dividerHint}
+            onLabel={(i, v) => setLabel('kinds', i, v)}
+            onDelete={(i) => patch((st) => ({ kinds: st.kinds.filter((_, j) => j !== i) }))}
+            onReorder={(from, to) => reorder('kinds', from, to)}
+          />
+          <Btn
+            variant="ghost"
+            label={L.addEquipment}
+            labelStyle={styles.ghostLabel}
+            style={styles.addBtn}
+            onPress={() =>
+              patch((st) => ({ kinds: [...st.kinds, { key: `k${Date.now()}`, labels: {} }] }))
+            }
+          />
+        </Fold>
 
         <H6 style={styles.head}>{L.data}</H6>
         <Pressable onPress={doExport} style={styles.actionRow}>
@@ -281,7 +334,104 @@ export function SettingsOverlay() {
           {L.copyright.replace('{year}', String(new Date().getFullYear()))}
         </Text>
       </ScrollView>
+
+      {pendingRestore && (
+        <RestoreConfirm
+          onConfirm={() => {
+            setNote(L.restoreDone.replace('{n}', String(importState(pendingRestore))));
+            setPendingRestore(null);
+          }}
+          onClose={() => setPendingRestore(null)}
+        />
+      )}
     </FullScreen>
+  );
+}
+
+/**
+ * The hold-to-restore confirm. Its own component so `useBackClose` mounts
+ * with it — registered last, so Android back closes the question before it
+ * closes Settings.
+ */
+function RestoreConfirm({ onConfirm, onClose }: { onConfirm: () => void; onClose: () => void }) {
+  const styles = useThemed(sheet);
+  const { L } = useStore();
+  useBackClose(onClose);
+  return (
+    <Sheet zIndex={5} onClose={onClose}>
+      <H4>{L.restoreTitle}</H4>
+      <Text style={styles.confirmBody}>{L.restoreBody}</Text>
+      <HoldBtn variant="primary" label={L.holdRestore} onConfirm={onConfirm} style={styles.confirmHold} />
+      <Btn variant="secondary" block label={L.cancel} onPress={onClose} />
+    </Sheet>
+  );
+}
+
+/**
+ * A section that starts folded — the two list sections, and only those.
+ *
+ * Twenty muscle groups and five equipment kinds are a screen and a half of
+ * rows, sitting between the settings people change twice a week and the ones
+ * they came here for once. They are the same rows either way; what folding
+ * buys is that Data and About are now a scroll rather than a hunt.
+ *
+ * Folded is local state and resets with the overlay: which lists you had open
+ * last week is not a preference, and persisting it would mean a `PERSIST` key
+ * for a caret.
+ *
+ * The header carries the heading's own spacing so a folded section leaves the
+ * same gap an unfolded one does — `foldHead`'s 18 + 4 is `head`'s 22, and the
+ * body's 4 + 4 is its 8.
+ */
+function Fold({ label, children }: { label: string; children: ReactNode }) {
+  const styles = useThemed(sheet);
+  const [open, setOpen] = useState(false);
+  const [spin] = useState(() => new Animated.Value(0));
+
+  // Fired from the handler rather than an effect, the way <Btn> settles its
+  // press scale: one gesture, one animation, no render in between.
+  const toggle = () => {
+    const next = !open;
+    setOpen(next);
+    Animated.timing(spin, {
+      toValue: next ? 1 : 0,
+      ...motion.move,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  return (
+    <View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        accessibilityState={{ expanded: open }}
+        onPress={toggle}
+        style={styles.foldHead}
+      >
+        <H6 style={styles.foldLabel}>{label}</H6>
+        <Animated.Text
+          style={[
+            styles.foldCaret,
+            {
+              transform: [
+                {
+                  rotate: spin.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: ['-90deg', '0deg'],
+                  }),
+                },
+              ],
+            },
+          ]}
+        >
+          ▾
+        </Animated.Text>
+      </Pressable>
+      {/* Unfolding is a riseIn, the way every other block of content arrives
+          here; folding is a cut, because there is nothing left to watch. */}
+      {open && <RiseIn style={styles.foldBody}>{children}</RiseIn>}
+    </View>
   );
 }
 
@@ -355,6 +505,14 @@ function ToggleRow({
 }
 
 const sheet = themed(() => ({
+  confirmBody: {
+    fontFamily: font.regular,
+    fontSize: 13,
+    lineHeight: 13 * 1.5,
+    color: color.neutral400,
+    marginTop: 8,
+  },
+  confirmHold: { marginTop: 16, height: 42, marginBottom: 8 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -368,6 +526,19 @@ const sheet = themed(() => ({
   tight: { letterSpacing: tracking(t.h2, -0.02) },
   head: { marginTop: 22, marginBottom: 8, color: color.neutral500 },
   firstHead: { marginTop: 20 },
+
+  foldHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 18,
+    paddingVertical: 4,
+  },
+  // Takes the row, so the caret stays pinned right whatever the label is in.
+  foldLabel: { flex: 1, color: color.neutral500 },
+  foldCaret: { fontFamily: font.regular, fontSize: 11, color: color.accent },
+  foldBody: { marginTop: 4 },
+
   ghostLabel: { fontSize: 12.5 },
   addBtn: { alignSelf: 'flex-start', marginTop: 7 },
 

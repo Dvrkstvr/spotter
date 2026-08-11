@@ -322,6 +322,60 @@ export function Seg({ options, style }: { options: SegOption[]; style?: StylePro
   );
 }
 
+/* ── chips ─────────────────────────────────────────────────────────────── */
+
+/**
+ * The selectable pill the pickers share — the library's filter row, a
+ * sheet's muscle-group / equipment / measure choices. One component instead
+ * of the four hand-rolled copies that had drifted to three paddings and a
+ * literal radius.
+ */
+export function Chip({
+  label,
+  on,
+  onPress,
+  missing,
+  style,
+  textStyle,
+}: {
+  label: string;
+  on: boolean;
+  onPress: () => void;
+  /** Renders the label in the missing-translation grey italic. */
+  missing?: boolean;
+  style?: StyleProp<ViewStyle>;
+  textStyle?: StyleProp<TextStyle>;
+}) {
+  const styles = useThemed(sheet);
+  const c = useColors();
+  return (
+    <Pressable
+      accessibilityRole="radio"
+      accessibilityState={{ selected: on }}
+      onPress={onPress}
+      style={[
+        styles.chip,
+        {
+          backgroundColor: on ? c.wash.accent(16) : 'transparent',
+          borderColor: on ? c.accent : c.divider,
+        },
+        style,
+      ]}
+    >
+      <Text
+        style={[
+          styles.chipLabel,
+          { color: on ? c.accent200 : c.neutral400 },
+          missing && missingName(c),
+          textStyle,
+        ]}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
 /* ── tags ──────────────────────────────────────────────────────────────── */
 
 export type TagTone = 'accent' | 'accent-2' | 'neutral' | 'outline';
@@ -436,6 +490,13 @@ const sheet = themed(() => ({
     borderWidth: 1,
     borderColor: color.accent,
   },
+  chip: {
+    paddingVertical: 5,
+    paddingHorizontal: 11,
+    borderRadius: radius.md * 0.75,
+    borderWidth: 1,
+  },
+  chipLabel: { fontFamily: font.regular, fontSize: 11.5 },
   tag: {
     flexDirection: 'row',
     alignItems: 'center',

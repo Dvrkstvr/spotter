@@ -13,7 +13,7 @@ import { ImageSlot } from '@/components/image-slot';
 import { Sheet } from '@/components/sheet';
 import { useBackClose } from '@/hooks/use-back-close';
 import { themed, useColors, useThemed } from '@/design/theme';
-import { color, font, radius } from '@/design/tokens';
+import { color, font, radius, slop } from '@/design/tokens';
 import { Btn, Field, H4, H6, Input, missingName, Tag } from '@/design/ui';
 import { useStore } from '@/store/workout-store';
 
@@ -52,10 +52,15 @@ export function InstructionsSheet() {
       </View>
 
       <View style={styles.mainFrame}>
+        {/* The three how-to slots are the only ones that offer the camera —
+            a photo of the machine in front of you is the reason the app has
+            any business asking for it. */}
         <ImageSlot
           id={`instr-main-${e.id}`}
           shape="rect"
           placeholder={L.dropGif}
+          camera
+          cameraLabel={L.takePhoto}
           style={styles.mainSlot}
         />
       </View>
@@ -66,6 +71,8 @@ export function InstructionsSheet() {
             id={`instr-a-${e.id}`}
             shape="rect"
             placeholder={L.startPos}
+            camera
+            cameraLabel={L.takePhoto}
             style={styles.pairSlot}
           />
         </View>
@@ -74,6 +81,8 @@ export function InstructionsSheet() {
             id={`instr-b-${e.id}`}
             shape="rect"
             placeholder={L.endPos}
+            camera
+            cameraLabel={L.takePhoto}
             style={styles.pairSlot}
           />
         </View>
@@ -115,7 +124,8 @@ export function InstructionsSheet() {
                   onChangeText={(v) => mutCues(e.id, (a) => { a[i] = v; })}
                 />
                 <Pressable
-                  accessibilityLabel="Remove cue"
+                  accessibilityLabel={L.remove}
+                  hitSlop={slop}
                   onPress={() => mutCues(e.id, (a) => { a.splice(i, 1); })}
                   style={styles.del}
                 >

@@ -8,16 +8,48 @@ import { Fragment } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import { Screen } from '@/components/screen';
-import { Exercise } from '@/data/exercises';
+import { Exercise, measureOf } from '@/data/exercises';
+import { Strings } from '@/data/i18n';
 import { themed, useColors, useThemed } from '@/design/theme';
 import { color, font, t, tracking } from '@/design/tokens';
-import { Btn, H2, H6, Hr, Input, missingName } from '@/design/ui';
-import { fmt, resolveNames, useStore } from '@/store/workout-store';
+import { Btn, Chip, H2, H6, Hr, Input, missingName } from '@/design/ui';
+import { fmt, prevNums, resolveNames, useStore } from '@/store/workout-store';
+
+/**
+ * The right-hand figure in a library row: the number off the set you last
+ * finished on — working weight, distance, or minutes by measure — or why
+ * there isn't one.
+ *
+ * Reads the logged ghost (`lastFor`'s sets), not `e.last`: the seed's number
+ * is written once and never again, so after the first real session it would
+ * quietly disagree with the exercise sheet one tap away. `lastFor` already
+ * falls back to the seeded `lastSets` for a lift never logged on this phone.
+ *
+ * Takes `L` rather than reading the dictionary, so the React Compiler can't
+ * hoist it and freeze the label in one language.
+ */
+const lastLabel = (e: Exercise, L: Strings, sets: string[]) => {
+  const { w, r } = prevNums(sets[sets.length - 1] ?? '');
+  switch (measureOf(e)) {
+    case 'duration':
+      return r && r !== '—' ? `${r} ${L.unitMin}` : '—';
+    // A run doesn't have a load — it isn't lifting your bodyweight, it's
+    // covering ground — so its figure is the distance, or the dash.
+    case 'distance':
+      return w && w !== '0' ? `${w} ${L.unitKm}` : '—';
+    default:
+      if (w && w !== '0') return `${w} ${L.unitKg}`;
+      // "Bodyweight" describes a load: an explicit BW set last time, or a
+      // bodyweight exercise that has never been logged.
+      if (w === '0' || e.kind === 'Bodyweight') return L.bodyweight;
+      return e.last ? `${fmt(e.last)} ${L.unitKg}` : '—';
+  }
+};
 
 export default function LibraryScreen() {
   const styles = useThemed(sheet);
   const c = useColors();
-  const { s, L, patch, allEx, kInfo, exInfo } = useStore();
+  const { s, L, patch, allEx, kInfo, exInfo, lastFor } = useStore();
 
   const q = s.query.trim().toLowerCase();
   const filters = [
@@ -28,12 +60,23 @@ export default function LibraryScreen() {
     }),
   ];
 
+  // What a group answers to in search: its name in every language it has one
+  // in — the names on screen — with the raw key as a fallback. Matching the
+  // key alone meant "Brust" found nothing and a renamed group still answered
+  // to a name it no longer wears.
+  const groupText = new Map(
+    s.groups.map((g) => [
+      g.key,
+      [g.key, ...Object.values(g.labels)].filter(Boolean).join(' ').toLowerCase(),
+    ])
+  );
+
   // Search matches the canonical name and every language's alias.
   const match = (e: Exercise) =>
     (!q ||
       e.name.toLowerCase().includes(q) ||
       Object.values(e.names ?? {}).some((n) => n?.toLowerCase().includes(q)) ||
-      e.group.toLowerCase().includes(q)) &&
+      (groupText.get(e.group) ?? e.group.toLowerCase()).includes(q)) &&
     (s.filter === 'All' || e.kind === s.filter);
 
   const groups = s.groups
@@ -46,7 +89,9 @@ export default function LibraryScreen() {
         items: allEx().filter((e) => e.group === g.key && match(e)),
       };
     })
-    .filter((g) => g.items.length || g.isDivider);
+    // Dividers punctuate the full list; between zero results they are just
+    // stray rules floating in blank space.
+    .filter((g) => g.items.length || (g.isDivider && !q));
 
   return (
     <Screen>
@@ -60,7 +105,12 @@ export default function LibraryScreen() {
           labelStyle={styles.newLabel}
           onPress={() =>
             patch((st) => ({
-              creating: { name: '', group: st.groups[0]?.key ?? '', kind: st.kinds[0]?.key ?? '' },
+              creating: {
+                name: '',
+                group: st.groups[0]?.key ?? '',
+                kind: st.kinds[0]?.key ?? '',
+                measure: 'load',
+              },
             }))
           }
         />
@@ -76,32 +126,20 @@ export default function LibraryScreen() {
       <View style={styles.filters}>
         {filters.map((f, i) =>
           f.label.trim() ? (
-            <Pressable
+            <Chip
               key={f.key}
+              label={f.label}
+              on={f.key === s.filter}
+              missing={f.missing}
               onPress={() => patch({ filter: f.key })}
-              style={[
-                styles.chip,
-                {
-                  backgroundColor: f.key === s.filter ? c.wash.accent(16) : 'transparent',
-                  borderColor: f.key === s.filter ? c.accent : c.divider,
-                },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.chipLabel,
-                  { color: f.key === s.filter ? c.accent200 : c.neutral400 },
-                  f.missing && missingName(c),
-                ]}
-              >
-                {f.label}
-              </Text>
-            </Pressable>
+            />
           ) : (
             <View key={`${f.key}${i}`} style={styles.chipDivider} />
           )
         )}
       </View>
+
+      {groups.length === 0 && <Text style={styles.empty}>{L.noResults}</Text>}
 
       {groups.map((g, gi) => (
         <Fragment key={gi}>
@@ -120,9 +158,7 @@ export default function LibraryScreen() {
                     <Text style={[styles.rowName, name.missing && missingName(c)]}>{name.text}</Text>
                     <Text style={[styles.rowKind, kind.missing && missingName(c)]}>{kind.text}</Text>
                   </View>
-                  <Text style={styles.rowLast}>
-                    {e.last ? `${fmt(e.last)} kg` : e.kind === 'Bodyweight' ? L.bodyweight : '—'}
-                  </Text>
+                  <Text style={styles.rowLast}>{lastLabel(e, L, lastFor(e.id).sets)}</Text>
                 </Pressable>
               );
             })}
@@ -142,10 +178,9 @@ const sheet = themed(() => ({
   search: { marginTop: 12 },
 
   filters: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 10 },
-  chip: { paddingVertical: 4, paddingHorizontal: 10, borderRadius: 6, borderWidth: 1 },
-  chipLabel: { fontFamily: font.regular, fontSize: 11 },
   chipDivider: { width: 1, height: 18, backgroundColor: color.divider, marginHorizontal: 3 },
 
+  empty: { fontFamily: font.regular, fontSize: 12.5, color: color.neutral500, marginTop: 18 },
   groupRule: { marginTop: 16, marginBottom: 4 },
   groupHead: { marginTop: 18, marginBottom: 7, color: color.neutral500 },
 
