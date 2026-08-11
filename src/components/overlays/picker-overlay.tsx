@@ -11,7 +11,7 @@ import { useBackClose } from '@/hooks/use-back-close';
 import { themed, useColors, useThemed } from '@/design/theme';
 import { color, font, t, wash } from '@/design/tokens';
 import { Btn, H2, Input, missingName } from '@/design/ui';
-import { Exercise } from '@/data/exercises';
+import { Exercise, styleFirst } from '@/data/exercises';
 import { myName, useStore } from '@/store/workout-store';
 
 export function PickerOverlay() {
@@ -26,8 +26,9 @@ export function PickerOverlay() {
   // trip through the picker must not wipe a search typed there.
   const [query, setQuery] = useState('');
   const q = query.trim().toLowerCase();
-  // Search matches the canonical name and every language's alias.
-  const list = allEx().filter(
+  // Search matches the canonical name and every language's alias. Style
+  // sorts the result — what you train leads, filter (stable) keeps it so.
+  const list = styleFirst(allEx(), s.style).filter(
     (e) =>
       !q ||
       e.name.toLowerCase().includes(q) ||

@@ -155,6 +155,18 @@ export const routineInStyle = (
   ex: (id: string) => Exercise | undefined
 ) => routineStyleScore(r, s, ex) > 0;
 
+/**
+ * A flat exercise list in style order: what you train first, everything else
+ * after, nothing hidden — sort is stable, so both halves keep the order they
+ * arrived in. `mixed` returns the list untouched: "don't sort it" is the
+ * option's whole promise, and it is also what every phone that never answered
+ * the style question has.
+ */
+export const styleFirst = (list: Exercise[], s: StyleKey): Exercise[] =>
+  s === 'mixed'
+    ? list
+    : [...list].sort((a, b) => Number(inStyle(b, s)) - Number(inStyle(a, s)));
+
 export const EX: Exercise[] = [
   { id: 'bench', name: 'Bench Press', group: 'Chest', kind: 'Barbell', last: 70, lastSets: ['70 × 8', '70 × 8', '70 × 7', '65 × 8'] },
   { id: 'incline', name: 'Incline Dumbbell Press', group: 'Chest', kind: 'Dumbbell', last: 24, lastSets: ['24 × 10', '24 × 9', '22 × 10'] },
