@@ -28,6 +28,7 @@ import type {
 import type { BuddySnapshot } from '@/data/buddy-transport';
 import { mergeFirstUp, mergeTurns, routineClosure } from '@/data/buddy-sync';
 import { todayDom, todayISO } from '@/data/date';
+import { deviceInstallId, randomInstallId } from '@/data/identity';
 import {
   DEFAULT_GROUPS,
   DEFAULT_KINDS,
@@ -234,6 +235,12 @@ export type State = {
   privateMode: boolean;
   settingsOpen: boolean;
   scanning: boolean;
+  /**
+   * This phone's install id, advertised alongside the profile name (see
+   * `encodePeerName`). ANDROID_ID when available — it survives reinstalls —
+   * else a random id generated once and persisted with everything else.
+   */
+  selfId: string;
   buddy: string | null;
   /**
    * Everyone this phone has paired with, by display name. The pairing is the
@@ -243,15 +250,31 @@ export type State = {
    * other, which only works if it outlasts every link that ever dropped.
    */
   knownBuddies: string[];
+  /**
+   * Roster name → that buddy's install id, recorded from their snapshot. The
+   * id is what makes a renamed buddy still the same buddy: a known id
+   * arriving under a new name renames the roster entry (`rememberBuddy`)
+   * instead of introducing a stranger. Its own persisted key rather than a
+   * reshaped `knownBuddies` — `PERSIST` is additive, and both phones carry
+   * real name-keyed rosters.
+   */
+  buddyIds: Record<string, string>;
   /** whether the buddy-sync overlay is open */
   buddySync: boolean;
   /** pairing confirmed, snapshot not here yet — it decides if the sync screen opens */
   buddySyncPending: boolean;
   /** live radio state (real transport only; all transient) */
-  nearbyPeers: { endpointId: string; name: string }[];
+  nearbyPeers: { endpointId: string; id: string | null; name: string }[];
   buddyEndpoint: string | null;
   /** a connection awaiting the users' code check — both phones confirm */
-  pendingAuth: { endpointId: string; name: string; digits: string; incoming: boolean } | null;
+  pendingAuth: {
+    endpointId: string;
+    /** the knocker's install id, null from older builds */
+    id: string | null;
+    name: string;
+    digits: string;
+    incoming: boolean;
+  } | null;
   /** the connected peer's shareable data, from either transport */
   buddySnapshot: BuddySnapshot | null;
   /* — shared workout (all transient; see IMPROVEMENTS.md #8) — */
@@ -366,8 +389,12 @@ const initialState: State = {
   privateMode: false,
   settingsOpen: false,
   scanning: false,
+  // ANDROID_ID resolves at module load and never changes; the random
+  // fallback is minted once here and then pinned by persistence.
+  selfId: deviceInstallId() ?? randomInstallId(),
   buddy: null,
   knownBuddies: [],
+  buddyIds: {},
   buddySync: false,
   buddySyncPending: false,
   nearbyPeers: [],
@@ -453,8 +480,8 @@ const STORAGE_KEY_V1 = 'workout-diary/v1';
 const PERSIST = [
   'routines', 'schedule', 'history', 'lastLog', 'lastMarks', 'custom', 'profile',
   'setups', 'videos', 'lang', 'groups', 'kinds', 'images', 'exEdits', 'cueEdits',
-  'knownBuddies', 'themeMode', 'theme', 'restSeconds', 'firstUpDefault', 'haptics', 'restAlert',
-  'privateMode',
+  'knownBuddies', 'buddyIds', 'selfId', 'themeMode', 'theme', 'restSeconds', 'firstUpDefault',
+  'haptics', 'restAlert', 'privateMode',
 ] as const satisfies readonly (keyof State)[];
 
 type Persisted = Pick<State, (typeof PERSIST)[number]>;
@@ -1259,11 +1286,34 @@ function useWorkoutState() {
     return Array.isArray(restored.history) ? restored.history.length : 0;
   };
 
-  /** Remember a buddy we just paired with, so the radio can find them again. */
-  const rememberBuddy = (name: string) =>
-    patch((s) =>
-      s.knownBuddies.includes(name) ? null : { knownBuddies: [...s.knownBuddies, name] }
-    );
+  /**
+   * Remember a buddy we just paired with, so the radio can find them again —
+   * and record their install id when one arrived. The id is the rename
+   * detector: a known id showing up under a new display name renames the
+   * roster entry (and the live pairing) instead of adding a stranger, which
+   * is the whole reason ids exist.
+   */
+  const rememberBuddy = (name: string, id: string | null = null) =>
+    patch((s) => {
+      const oldName = id
+        ? Object.keys(s.buddyIds).find((n) => s.buddyIds[n] === id && n !== name)
+        : undefined;
+      if (oldName) {
+        const { [oldName]: _dropped, ...rest } = s.buddyIds;
+        return {
+          knownBuddies: [...s.knownBuddies.filter((n) => n !== oldName && n !== name), name],
+          buddyIds: { ...rest, [name]: id! },
+          ...(s.buddy === oldName ? { buddy: name } : {}),
+        };
+      }
+      const known = s.knownBuddies.includes(name);
+      const newId = id !== null && s.buddyIds[name] !== id;
+      if (known && !newId) return null;
+      return {
+        ...(known ? {} : { knownBuddies: [...s.knownBuddies, name] }),
+        ...(newId ? { buddyIds: { ...s.buddyIds, [name]: id! } } : {}),
+      };
+    });
 
   /**
    * Tear the pairing down — both when this phone taps Disconnect and when the
@@ -1305,7 +1355,10 @@ function useWorkoutState() {
    */
   const forgetBuddy = (name: string) => {
     if (state.buddy === name) endPairing();
-    patch((s) => ({ knownBuddies: s.knownBuddies.filter((n) => n !== name) }));
+    patch((s) => {
+      const { [name]: _dropped, ...buddyIds } = s.buddyIds;
+      return { knownBuddies: s.knownBuddies.filter((n) => n !== name), buddyIds };
+    });
   };
 
   /**

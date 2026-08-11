@@ -4,7 +4,7 @@ import { Animated, Pressable, Text, View } from 'react-native';
 
 import { Sheet } from '@/components/sheet';
 import { hasRadio, radio } from '@/data/buddy-radio';
-import { diffBuddy, shareableSlice } from '@/data/buddy-sync';
+import { diffBuddy, encodePeerName, shareableSlice } from '@/data/buddy-sync';
 import { connectPeer, scanPeers } from '@/data/buddy-transport';
 import { useBackClose } from '@/hooks/use-back-close';
 import { themed, useThemed } from '@/design/theme';
@@ -59,9 +59,10 @@ export function ScanSheet() {
     if (hasRadio && radio) {
       // Just request — the code stage decides the pairing; <BuddyRadio>
       // opens the sync screen once the connection lands.
-      const me = myName(s);
       setSentTo(n.id);
-      radio.requestConnection(me, n.id).catch(() => setSentTo(null));
+      radio
+        .requestConnection(encodePeerName(s.selfId, myName(s)), n.id)
+        .catch(() => setSentTo(null));
       return;
     }
     // Mock pairing connects first — the sync screen only opens if the two

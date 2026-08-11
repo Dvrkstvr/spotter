@@ -5,11 +5,16 @@
  * equivalent is a tap that opens the photo picker. Empty-state chrome follows
  * the original: an 8%-grey frame, a 1.5px dashed ring, and a centred glyph and
  * caption at the original's opacities.
+ *
+ * Whatever fills the slot is moved out of the picker/camera cache into the
+ * app's document directory first (src/data/photos.ts) — the cache is the
+ * OS's to clear, and a reference photo has to outlive it.
  */
 import * as ImagePicker from 'expo-image-picker';
 import { Image, Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
 
 import { CAMERA_D, Icon, ImageGlyph } from '@/components/icon';
+import { deletePersisted, persistImage } from '@/data/photos';
 import { themed, useColors, useThemed } from '@/design/theme';
 import { fill, font, radius, slop, wash } from '@/design/tokens';
 import { useStore } from '@/store/workout-store';
@@ -52,15 +57,20 @@ export function ImageSlot({
   const br =
     shape === 'circle' || shape === 'pill' ? 9999 : shape === 'rounded' ? cornerRadius : 0;
 
-  const keep = (res: ImagePicker.ImagePickerResult) => {
+  const keep = async (res: ImagePicker.ImagePickerResult) => {
     if (res.canceled) return;
-    patch((st) => ({ images: { ...st.images, [id]: res.assets[0].uri } }));
+    // Durable copy first; fall back to the cache URI if that fails —
+    // better a fragile photo than none.
+    const durable = await persistImage(res.assets[0].uri, id).catch(() => res.assets[0].uri);
+    const old = uri;
+    patch((st) => ({ images: { ...st.images, [id]: durable } }));
+    if (old && old !== durable) deletePersisted(old);
   };
 
   const pick = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) return;
-    keep(await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.9 }));
+    await keep(await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.9 }));
   };
 
   /**
@@ -73,7 +83,7 @@ export function ImageSlot({
   const shoot = async () => {
     const perm = await ImagePicker.requestCameraPermissionsAsync();
     if (!perm.granted) return;
-    keep(await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.9 }));
+    await keep(await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.9 }));
   };
 
   return (

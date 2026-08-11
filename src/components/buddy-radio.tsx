@@ -22,7 +22,11 @@ import { useEffect, useRef } from 'react';
 
 import { ensureRadioPermissions, radio } from '@/data/buddy-radio';
 import {
+  decodePeerName,
   diffBuddy,
+  encodePeerName,
+  isKnownPeer,
+  matchesBuddy,
   parseBuddyMessage,
   progressOf,
   routineClosure,
@@ -63,7 +67,8 @@ export function BuddyRadio() {
     let alive = true;
     ensureRadioPermissions().then((ok) => {
       if (!ok || !alive) return;
-      r.startAdvertising(myName(ref.current.s)).catch(() => {});
+      const st = ref.current.s;
+      r.startAdvertising(encodePeerName(st.selfId, myName(st))).catch(() => {});
       r.startDiscovery().catch(() => {});
     });
     return () => {
@@ -220,16 +225,27 @@ export function BuddyRadio() {
     const subs = [
       r.addListener('onEndpointFound', (e) => {
         const st = ref.current;
+        const peer = decodePeerName(e.name);
         st.patch((s) => ({
-          nearbyPeers: [...s.nearbyPeers.filter((p) => p.endpointId !== e.endpointId), e],
+          nearbyPeers: [
+            ...s.nearbyPeers.filter((p) => p.endpointId !== e.endpointId),
+            { endpointId: e.endpointId, ...peer },
+          ],
         }));
         // The buddy of this session reappeared — reconnect without anyone
         // having to tap anything. That is the mid-workout drop, and the only
         // connection this phone ever opens by itself: everyone else on the
         // roster is seen and listed, and stays that way until one of the two
-        // asks for a session and the other one answers.
-        if (!st.s.buddyEndpoint && st.s.buddy === e.name) {
-          r.requestConnection(myName(st.s), e.endpointId).catch(() => {});
+        // asks for a session and the other one answers. Matched by install
+        // id first, so a renamed buddy is still recognised.
+        if (
+          !st.s.buddyEndpoint &&
+          st.s.buddy !== null &&
+          matchesBuddy(st.s.buddy, st.s.buddyIds[st.s.buddy], peer)
+        ) {
+          r.requestConnection(encodePeerName(st.s.selfId, myName(st.s)), e.endpointId).catch(
+            () => {}
+          );
         }
       }),
 
@@ -245,8 +261,13 @@ export function BuddyRadio() {
       // silent — that's the standing-pairing reconnect.
       r.addListener('onConnectionInitiated', (e) => {
         const st = ref.current;
-        // Already trusted — this run or a previous one. No code, no sheet.
-        if (e.name === st.s.buddy || st.s.knownBuddies.includes(e.name)) {
+        const peer = decodePeerName(e.name);
+        // Already trusted — this run or a previous one, by recorded install
+        // id or by name. No code, no sheet.
+        if (
+          (st.s.buddy !== null && matchesBuddy(st.s.buddy, st.s.buddyIds[st.s.buddy], peer)) ||
+          isKnownPeer(st.s, peer)
+        ) {
           r.acceptConnection(e.endpointId).catch(() => {});
           return;
         }
@@ -265,7 +286,8 @@ export function BuddyRadio() {
         st.patch({
           pendingAuth: {
             endpointId: e.endpointId,
-            name: e.name,
+            id: peer.id,
+            name: peer.name,
             digits: e.authDigits,
             incoming: e.isIncoming,
           },
@@ -293,7 +315,13 @@ export function BuddyRadio() {
         });
         r.sendPayload(
           e.endpointId,
-          JSON.stringify({ v: 1, t: 'snapshot', name: myName(st.s), data: shareableSlice(st.s) })
+          JSON.stringify({
+            v: 1,
+            t: 'snapshot',
+            name: myName(st.s),
+            id: st.s.selfId,
+            data: shareableSlice(st.s),
+          })
         ).catch(() => {});
         // This phone opened the link to ask something — the ask follows the
         // snapshot, so the other side knows who is asking by the time it lands.
@@ -324,8 +352,11 @@ export function BuddyRadio() {
         switch (msg.t) {
           case 'snapshot':
             // A snapshot only ever arrives from a peer we accepted, so this
-            // is the moment a pairing becomes a pairing.
-            st.rememberBuddy(msg.name);
+            // is the moment a pairing becomes a pairing — and the moment a
+            // rename lands: same install id, new display name, and
+            // rememberBuddy renames the roster entry instead of adding a
+            // stranger. Older builds send no id and stay name-keyed.
+            st.rememberBuddy(msg.name, msg.id ?? null);
             // Inside the functional patch, where the onConnected patch has
             // already applied — on a fast link the snapshot arrives before
             // React commits, so reading buddySyncPending via the ref races.

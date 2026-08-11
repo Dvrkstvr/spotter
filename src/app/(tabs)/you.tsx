@@ -6,6 +6,7 @@ import { GEAR_D, Icon } from '@/components/icon';
 import { ImageSlot } from '@/components/image-slot';
 import { Screen } from '@/components/screen';
 import { hasRadio, radio, sayGoodbye } from '@/data/buddy-radio';
+import { encodePeerName } from '@/data/buddy-sync';
 import { useBuddyLive } from '@/hooks/use-buddy-live';
 import { themed, useColors, useThemed } from '@/design/theme';
 import { color, font, radius, slop, t, tracking } from '@/design/tokens';
@@ -179,7 +180,12 @@ export default function YouScreen() {
             <View>
               {s.knownBuddies.map((name) => {
                 const linked = s.buddy === name && (!hasRadio || s.buddyEndpoint !== null);
-                const peer = s.nearbyPeers.find((p) => p.name === name);
+                // By recorded install id first: a buddy who renamed
+                // themselves still shows as nearby under their roster name
+                // until the next snapshot adopts the new one.
+                const peer = s.nearbyPeers.find(
+                  (p) => p.name === name || (p.id !== null && p.id === s.buddyIds[name])
+                );
                 // Asking is what opens a link, so there's nothing left to ask
                 // once one is up: the request only shows to a buddy in range
                 // while this phone is connected to nobody. (That's every row —
@@ -209,7 +215,12 @@ export default function YouScreen() {
                         onPress={() => {
                           requestSession(name);
                           if (peer)
-                            radio?.requestConnection(myName(s), peer.endpointId).catch(() => {});
+                            radio
+                              ?.requestConnection(
+                                encodePeerName(s.selfId, myName(s)),
+                                peer.endpointId
+                              )
+                              .catch(() => {});
                         }}
                       />
                     )}

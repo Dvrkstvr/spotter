@@ -184,7 +184,12 @@ Keep these; they're decisions, not drift. Each is commented at its site.
   held gesture; once everything is ticked the same button goes solid and fires
   on a tap. `dashed` on `HoldBtn` borrows the waiting set row's grammar, so the
   outline is the tell before you press rather than a surprise once you do.
-- `<image-slot>` is filled by the photo picker rather than drag-and-drop.
+- `<image-slot>` is filled by the photo picker rather than drag-and-drop —
+  and whatever fills it goes through `src/data/photos.ts` first: downscaled,
+  JPEG'd, and moved out of the OS-clearable picker/camera cache into the
+  document directory. The store only holds durable URIs from then on;
+  `deletePersisted` cleans up replaced files and never touches a URI it
+  doesn't own, which is what keeps pre-existing cache URIs harmless.
 - The design's `recent` array is computed but never rendered — not ported.
 - "Today" is live (`src/data/date.ts`), not the design's pinned Friday
   7 August 2026. Sessions are logged by real date (`history` / `lastLog` in
@@ -332,6 +337,15 @@ Keep these; they're decisions, not drift. Each is commented at its site.
 - **Nothing takes a name off that list but the user** (× / `forgetBuddy`). It is
   how you see who is around when you run into each other, which only works if
   it outlasts every link that ever dropped — including the ones you ended.
+- **A buddy's real identity is their install id, not their name.** The radio
+  advertises `id|name` (`encodePeerName` / `decodePeerName` in buddy-sync;
+  `selfId` is ANDROID_ID or a once-minted random) and the snapshot carries the
+  sender's id — so a rename lands as "same id, new name" and `rememberBuddy`
+  renames the roster entry instead of meeting a stranger. `buddyIds` is a
+  separate persisted key (roster name → id) rather than a reshaped
+  `knownBuddies`: `PERSIST` is additive and both phones carry real name-keyed
+  rosters, which also keeps an id-less older build pairable by name. This is
+  a protocol change — both phones need the build before renames are safe.
 - **The only connection this app opens by itself is back to the buddy of the
   session in progress** (`s.buddy`), because a mid-workout drop has to heal
   without anyone tapping. Everyone else on the roster is discovered, listed and
