@@ -110,6 +110,51 @@ export type Exercise = {
 /** Absent means `load`, so nothing that predates `Measure` has to be touched. */
 export const measureOf = (e: Exercise | undefined): Measure => e?.measure ?? 'load';
 
+/* ── workout style ─────────────────────────────────────────────────────────
+ *
+ * What onboarding asks so the lists can lead with the right half of the
+ * library. A style is an *ordering*, never a filter — everything stays
+ * reachable — and it is derived from facts the library already records
+ * rather than tagged on: a bodyweight movement is calisthenics, the Cardio
+ * group is cardio, everything else is strength. `mixed` means "don't sort".
+ */
+export type StyleKey = 'strength' | 'calisthenics' | 'cardio' | 'mixed';
+
+export const STYLE_KEYS: readonly StyleKey[] = ['strength', 'calisthenics', 'cardio', 'mixed'];
+
+export const isStyleKey = (v: unknown): v is StyleKey =>
+  typeof v === 'string' && (STYLE_KEYS as readonly string[]).includes(v);
+
+export const styleOf = (e: Exercise): Exclude<StyleKey, 'mixed'> =>
+  e.group === 'Cardio' ? 'cardio' : e.kind === 'Bodyweight' ? 'calisthenics' : 'strength';
+
+/** Whether this exercise leads under the given style. `mixed` matches all. */
+export const inStyle = (e: Exercise, s: StyleKey) => s === 'mixed' || styleOf(e) === s;
+
+/**
+ * How much of a routine is the given style: the fraction of its lines that
+ * are. A full-body day that ends on a plank is a little bit calisthenics —
+ * it should *appear* under the style, but rank under the routines that are
+ * nothing else. `mixed` scores everything alike.
+ */
+export const routineStyleScore = (
+  r: Routine,
+  s: StyleKey,
+  ex: (id: string) => Exercise | undefined
+): number => {
+  if (s === 'mixed') return 1;
+  if (!r.items.length) return 0;
+  const hits = r.items.filter((it) => { const e = ex(it.ex); return e && inStyle(e, s); });
+  return hits.length / r.items.length;
+};
+
+/** Whether a routine leads under a style at all: any of its exercises do. */
+export const routineInStyle = (
+  r: Routine,
+  s: StyleKey,
+  ex: (id: string) => Exercise | undefined
+) => routineStyleScore(r, s, ex) > 0;
+
 export const EX: Exercise[] = [
   { id: 'bench', name: 'Bench Press', group: 'Chest', kind: 'Barbell', last: 70, lastSets: ['70 × 8', '70 × 8', '70 × 7', '65 × 8'] },
   { id: 'incline', name: 'Incline Dumbbell Press', group: 'Chest', kind: 'Dumbbell', last: 24, lastSets: ['24 × 10', '24 × 9', '22 × 10'] },

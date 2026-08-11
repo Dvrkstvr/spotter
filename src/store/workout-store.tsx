@@ -38,12 +38,15 @@ import {
   Exercise,
   INFO,
   isSingle,
+  Level,
   MarkNote,
   Measure,
   measureOf,
   Routine,
+  scaleItem,
   SetMark,
   SetupPair,
+  StyleKey,
   V2_GROUP_KEYS,
 } from '@/data/exercises';
 import { deviceLang, DICT, fmtDayLong, Lang, LangMap, Strings } from '@/data/i18n';
@@ -233,6 +236,27 @@ export type State = {
    * `knownBuddies` survives it: this is a curtain, not a divorce.
    */
   privateMode: boolean;
+  /**
+   * Whether the first-run flow has been completed (or skipped). True in
+   * `initialState` on purpose: an existing phone's blob predates the key, so
+   * `filterPersisted` leaves this default standing — and a phone with months
+   * of logged training must never wake up to a welcome tour. Only
+   * `firstRunDefaults` sets it false, and only the flow's last screen sets it
+   * back.
+   */
+  onboarded: boolean;
+  /** Reopened from Settings — same flow, but back can leave it. Transient. */
+  onboardingOpen: boolean;
+  /**
+   * How this person trains. An ordering for the lists, never a filter —
+   * `mixed` (the pre-onboarding default) means "don't sort".
+   */
+  style: StyleKey;
+  /**
+   * What onboarding scaled the starter routines by. Spent the moment the
+   * picks are written; kept so re-running setup starts from the last answer.
+   */
+  level: Level;
   settingsOpen: boolean;
   scanning: boolean;
   /**
@@ -387,6 +411,10 @@ const initialState: State = {
   haptics: true,
   restAlert: true,
   privateMode: false,
+  onboarded: true,
+  onboardingOpen: false,
+  style: 'mixed',
+  level: 'regular',
   settingsOpen: false,
   scanning: false,
   // ANDROID_ID resolves at module load and never changes; the random
@@ -451,6 +479,10 @@ const freshFirstUp = (policy: FirstUp): FirstUpChoice => ({
 const firstRunDefaults = (): Partial<State> => ({
   lang: deviceLang(),
   themeMode: 'system',
+  // The one path that shows onboarding. An abandoned first run saves a blob
+  // with this still false, so the flow comes back on the next launch — the
+  // half that matters most, the routines, is the half at the end.
+  onboarded: false,
 });
 
 type Patch = Partial<State> | ((s: State) => Partial<State> | null);
@@ -481,7 +513,7 @@ const PERSIST = [
   'routines', 'schedule', 'history', 'lastLog', 'lastMarks', 'custom', 'profile',
   'setups', 'videos', 'lang', 'groups', 'kinds', 'images', 'exEdits', 'cueEdits',
   'knownBuddies', 'buddyIds', 'selfId', 'themeMode', 'theme', 'restSeconds', 'firstUpDefault',
-  'haptics', 'restAlert', 'privateMode',
+  'haptics', 'restAlert', 'privateMode', 'onboarded', 'style', 'level',
 ] as const satisfies readonly (keyof State)[];
 
 type Persisted = Pick<State, (typeof PERSIST)[number]>;
@@ -995,6 +1027,65 @@ function useWorkoutState() {
    * there is already the "routine deleted since" case the plan screen and
    * save-as-routine both handle.
    */
+  /**
+   * Write everything the first-run flow decided, in one patch.
+   *
+   * The routine list is the delicate part, because this can run twice — the
+   * flow is reachable again from Settings. `picked` names *seed* routines:
+   * each one lands as a fresh copy of its `DEFAULT_ROUTINES` original with
+   * the level scaling applied, replacing any same-id copy already here (that
+   * is what "run setup again" means). Everything the user made themselves —
+   * saved-as-routine, built with a buddy, id not in the seed set — survives
+   * untouched, in place. An *unpicked* seed that exists on the phone is
+   * dropped, exactly as `deleteRoutine` would: unticking it is the same
+   * decision made in a different room. `history`, `lastLog` and `custom` are
+   * never in the patch — a tour must not be able to eat a diary.
+   *
+   * Scaled numbers are written `planned` (below `regular` only), so the first
+   * session opens with them in the fields — an unplanned row defers to "last
+   * time", and a brand-new user's "last time" is the seed data's, which is
+   * exactly the number the level exists to shrink.
+   */
+  const applyOnboarding = (o: {
+    profile: Profile;
+    style: StyleKey;
+    level: Level;
+    picked: string[];
+    week: Record<number, string>;
+  }) =>
+    patch((s) => {
+      const seeds = o.picked
+        .map((id) => DEFAULT_ROUTINES.find((r) => r.id === id))
+        .filter((r): r is Routine => !!r)
+        .map((r) => ({
+          ...r,
+          names: { ...r.names },
+          items: r.items.map((it) => {
+            const scaled = scaleItem(it, measureOf(ex(it.ex)), o.level);
+            return o.level === 'regular' ? scaled : { ...scaled, planned: true as const };
+          }),
+        }));
+      const seedIds = new Set(DEFAULT_ROUTINES.map((r) => r.id));
+      const kept = s.routines.filter((r) => !seedIds.has(r.id));
+      const routines = [...seeds, ...kept];
+      // The week step only ever offers picked routines, but the schedule is
+      // re-checked anyway: a slot pointing at a routine this patch just
+      // dropped would be the plan screen's deleted-rid case, created here.
+      const ids = new Set(routines.map((r) => r.id));
+      const schedule = Object.fromEntries(
+        Object.entries(o.week).filter(([, rid]) => ids.has(rid))
+      );
+      return {
+        profile: o.profile,
+        style: o.style,
+        level: o.level,
+        routines,
+        schedule,
+        onboarded: true,
+        onboardingOpen: false,
+      };
+    });
+
   const deleteRoutine = (rid: string) =>
     patch((s) => ({
       routines: s.routines.filter((r) => r.id !== rid),
@@ -1777,6 +1868,7 @@ function useWorkoutState() {
     endPairing,
     forgetBuddy,
     requestSession,
+    applyOnboarding,
     startCoDraft,
     draftPayload,
     applyDraft,

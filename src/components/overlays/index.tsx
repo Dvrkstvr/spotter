@@ -17,6 +17,7 @@
  */
 import { BuddyRadio } from '@/components/buddy-radio';
 import { BuddyInviteSheet } from '@/components/overlays/buddy-invite-sheet';
+import { OnboardingOverlay } from '@/components/overlays/onboarding-overlay';
 import { BuddySyncOverlay } from '@/components/overlays/buddy-sync-overlay';
 import { ExerciseSheet } from '@/components/overlays/exercise-sheet';
 import { InstructionsSheet } from '@/components/overlays/instructions-sheet';
@@ -64,6 +65,11 @@ export function Overlays() {
       {social && s.buddyInvite && <BuddyInviteSheet />}
       {social && s.joinAsk !== null && <JoinAskSheet />}
       {s.summary && <SummaryModal />}
+      {/* 95 — above everything, the summary included: on a first run it *is*
+          the app, and reopened from Settings it has to cover Settings. Not
+          gated on `social`: its permission screen is where privateMode gets
+          decided, so it cannot sit behind the flag it writes. */}
+      {(!s.onboarded || s.onboardingOpen) && <OnboardingOverlay />}
     </>
   );
 }

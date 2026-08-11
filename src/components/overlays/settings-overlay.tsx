@@ -321,6 +321,19 @@ export function SettingsOverlay() {
         </Pressable>
         {note && <Text style={styles.note}>{note}</Text>}
 
+        {/* The danger corner: next to restore-from-backup in spirit, past
+            everything people come here weekly for. Reopening the tour is safe
+            in itself — it drafts locally — but *finishing* it re-applies the
+            routine picks, which is why it lives down here and says so. */}
+        <H6 style={styles.head}>{L.dangerHead}</H6>
+        <Pressable
+          onPress={() => patch({ onboardingOpen: true, settingsOpen: false })}
+          style={styles.actionRow}
+        >
+          <Text style={styles.actionLabel}>{L.rerunSetup}</Text>
+          <Text style={styles.hint}>{L.rerunSetupHint}</Text>
+        </Pressable>
+
         <H6 style={styles.head}>{L.about}</H6>
         {aboutRows.map(([label, value]) => (
           <View key={label} style={styles.aboutRow}>
