@@ -5,8 +5,10 @@ import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { GEAR_D, Icon } from '@/components/icon';
 import { ImageSlot } from '@/components/image-slot';
 import { Screen } from '@/components/screen';
+import { StatsCard, STATS_WINDOW_DAYS } from '@/components/stats-card';
 import { hasRadio, radio, sayGoodbye } from '@/data/buddy-radio';
 import { encodePeerName } from '@/data/buddy-sync';
+import { trainingStats } from '@/data/stats';
 import { useBuddyLive } from '@/hooks/use-buddy-live';
 import { themed, useColors, useThemed } from '@/design/theme';
 import { color, font, radius, slop, t, tracking } from '@/design/tokens';
@@ -70,6 +72,12 @@ export default function YouScreen() {
     { k: L.exercises, v: allEx().length },
   ];
 
+  // Two reads of the same history: the last eight weeks say what to work on,
+  // everything ever logged says how much there has been. Derived at render —
+  // `history` is the only input and nothing about this is persisted.
+  const recentStats = trainingStats(s.history, ex, STATS_WINDOW_DAYS);
+  const allTimeStats = trainingStats(s.history, ex);
+
   return (
     <Screen scrollRef={scrollRef}>
       <View style={styles.head}>
@@ -98,6 +106,12 @@ export default function YouScreen() {
           />
           <Text style={styles.identitySub}>{sub}</Text>
         </View>
+      </View>
+
+      {/* Directly under the identity, above Buddy: what the diary knows about
+          you belongs beside who you are, and ahead of who you train with. */}
+      <View style={styles.statsCard}>
+        <StatsCard recent={recentStats} allTime={allTimeStats} L={L} />
       </View>
 
       <H6 style={styles.sectionHead}>{L.aboutYou}</H6>
@@ -427,6 +441,8 @@ const sheet = themed(() => ({
     letterSpacing: tracking(21, -0.02),
   },
   identitySub: { fontFamily: font.regular, fontSize: 11.5, color: color.neutral500, marginTop: 6 },
+
+  statsCard: { marginTop: 18 },
 
   sectionHead: { marginTop: 22, marginBottom: 8, color: color.neutral500 },
 

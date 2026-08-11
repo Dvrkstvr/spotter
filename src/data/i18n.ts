@@ -87,6 +87,22 @@ export const DICT = {
     savedNote: 'Saved to {date}. Next time these numbers show up as “last time”.',
     savedEmpty: 'Nothing was ticked off — nothing logged.', ok: 'Done',
     daysAgo: '{n} days ago', oneDayAgo: 'yesterday',
+    /* — statistics & coach —
+       The six regions are named here rather than read out of `groups`,
+       because a region is an analysis this app performs, not an entry in the
+       user's own list — see `regionOf`. `thousandSep` is the digit grouping
+       character: Hermes has no dependable Intl on Android, so the dictionary
+       is what knows it. */
+    statsTitle: 'Statistics & Coach',
+    regionChest: 'Chest', regionBack: 'Back', regionShoulders: 'Shoulders',
+    regionArms: 'Arms', regionCore: 'Core', regionLegs: 'Legs',
+    statsHeadWeak: '{region} is falling behind — {pct}% of your sets.',
+    statsHeadEven: 'Evenly trained. {region} leads at {pct}%.',
+    statsFootSessions: '{n} sessions', statsFootSession: '1 session',
+    statsFootVolume: '{kg} kg lifted',
+    statsEmpty: 'Log a few workouts and your strengths, weak points and coach show up here.',
+    statsEvenMark: 'even split',
+    thousandSep: ',',
     buddy: 'Buddy', buddySub: 'Open sharing on both phones, pick each other, compare the code — then you train the same session together.',
     invite: 'Share session', inviteShort: 'Invite', nearby: 'Sharing nearby', searching: 'Searching…',
     shareHint: 'Only people who also have sharing open appear here.',
@@ -294,6 +310,17 @@ export const DICT = {
     savedEmpty: 'Nichts abgehakt — nichts gespeichert.', ok: 'Fertig',
     // composed after lastDone ('zuletzt vor …'), so no 'vor' of their own
     daysAgo: '{n} Tagen', oneDayAgo: 'einem Tag',
+    /* — Statistik & Coach — siehe den englischen Block */
+    statsTitle: 'Statistik & Coach',
+    regionChest: 'Brust', regionBack: 'Rücken', regionShoulders: 'Schultern',
+    regionArms: 'Arme', regionCore: 'Rumpf', regionLegs: 'Beine',
+    statsHeadWeak: '{region} kommt zu kurz — {pct}% deiner Sätze.',
+    statsHeadEven: 'Gleichmäßig trainiert. {region} führt mit {pct}%.',
+    statsFootSessions: '{n} Einheiten', statsFootSession: '1 Einheit',
+    statsFootVolume: '{kg} kg bewegt',
+    statsEmpty: 'Zeichne ein paar Einheiten auf — Stärken, Schwächen und Coach erscheinen dann hier.',
+    statsEvenMark: 'gleichmäßig',
+    thousandSep: '.',
     buddy: 'Trainingspartner', buddySub: 'Öffnet das Teilen auf beiden Handys, wählt einander aus, vergleicht den Code — dann trainiert ihr dieselbe Session zusammen.',
     invite: 'Session teilen', inviteShort: 'Einladen', nearby: 'Teilen in der Nähe', searching: 'Suche…',
     shareHint: 'Nur wer das Teilen auch geöffnet hat, taucht hier auf.',
