@@ -135,6 +135,7 @@ export function ReorderRows({
               // under, and a deleted one strands them — the opposite of the
               // recoverable taps the app hands out freely.
               <HoldBtn
+                destructive
                 label="×"
                 accessibilityLabel={L.remove}
                 hitSlop={slop}

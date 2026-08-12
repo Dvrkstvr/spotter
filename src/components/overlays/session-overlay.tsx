@@ -405,10 +405,18 @@ export function SessionOverlay() {
                 <SealSweep sealed={sealed} />
               </View>
 
+              {/* `always`, not `handled`: with the keyboard up, `handled` has
+                  the list grab any touch that isn't already a responder so it
+                  can dismiss — and grabbing it means `setJSResponder` with the
+                  native responder blocked, which gesture-handler answers by
+                  cancelling every handler it owns. That would leave the number
+                  cells' hold-and-drag working only while the keyboard is
+                  down, which is precisely when you don't need it. Nothing is
+                  lost: Enter on reps still blurs and closes it. */}
               <ScrollView
                 style={styles.scroll}
                 contentContainerStyle={styles.body}
-                keyboardShouldPersistTaps="handled"
+                keyboardShouldPersistTaps="always"
                 showsVerticalScrollIndicator={false}
                 scrollEnabled={!scrubbing}
               >
@@ -745,6 +753,7 @@ function Overview({ onClose, onJump }: { onClose: () => void; onJump: (to: numbe
                   numbers are still a plan, but they were still typed. */}
               {done === 0 && (
                 <HoldBtn
+                  destructive
                   label="×"
                   accessibilityLabel={L.removeExercise}
                   hitSlop={slop}
@@ -924,17 +933,28 @@ function ExerciseSlide({ index, children }: { index: number; children: ReactNode
  * vertical drag steps the value instead — 0.5 kg or one rep per 12px, up to
  * add — which is how most sets get entered without the keyboard ever opening.
  *
- * The hold is what makes both possible, and it has to come from
- * react-native-gesture-handler rather than a `PanResponder`: Android's
- * `ReactEditText` calls `requestDisallowInterceptTouchEvent(true)` the moment
- * a finger lands on it, which stops the root view from feeding those moves
- * into JS's responder negotiation — so a capture-phase responder wrapped
- * around a `TextInput` never reliably gets the gesture. `activateAfterLongPress`
- * is the same idea one layer down, where it works: the pan only claims the
- * touch once the finger has been down for `HOLD_MS` and still, so a quick tap
- * reaches the input underneath and a straight drag still scrolls the list.
- * Activation cancels the native touch, which also means the long-press text
- * selection menu never gets to fire.
+ * **The finger must never land on the `TextInput`, or there is no gesture at
+ * all.** Android's `ReactEditText.onTouchEvent` answers every ACTION_DOWN with
+ * `parent.requestDisallowInterceptTouchEvent(true)`, which walks up to
+ * `GestureHandlerRootView` — and gesture-handler reads that as a native view
+ * claiming the touch, so its root helper cancels *every* handler in the
+ * orchestrator on the spot. A pan waiting out `HOLD_MS` is already dead before
+ * the hold ever elapses. This is why the drag never worked: not a negotiation
+ * this lost, one it was never entered into. (It is also why a `PanResponder`
+ * can't do the job either — same disallow, one layer up.)
+ *
+ * So the cell is `box-only` until it is focused: `ReactViewGroup` intercepts
+ * the touch natively, the editor below never sees a DOWN, and nothing cancels
+ * anything. What the input loses that way is the tap, so the tap is given back
+ * as a gesture — `Gesture.Tap` racing the pan, focusing the field itself.
+ * Once focused the cell goes back to `auto`, so placing the caret inside a
+ * figure still works normally; the drag is the unfocused cell's gesture, which
+ * is the state it is in every time you reach for it.
+ *
+ * `activateAfterLongPress` is what still separates the two from the list's own
+ * scroll: the pan claims the touch only after the finger has been down and
+ * still, so a straight drag scrolls. Activation cancels the native touch,
+ * which also means the long-press text selection menu never gets to fire.
  */
 function NumCell({
   value,
@@ -958,10 +978,19 @@ function NumCell({
   inputRef?: RefObject<TextInput | null>;
 } & TextInputProps) {
   const styles = useThemed(sheet);
+  const { s } = useStore();
   const [dragging, setDragging] = useState(false);
-  // Where the drag started from. Touched only from gesture callbacks, never
-  // while rendering.
+  // Whether the editor is focused, which is the whole of whether this cell is
+  // open to touches — see the note above.
+  const [editing, setEditing] = useState(false);
+  // Where the drag started from, and the last figure it put in the cell. Both
+  // touched only from gesture callbacks, never while rendering.
   const base = useRef(0);
+  const last = useRef('');
+  // The row walks Enter from weight to reps through `inputRef`; a cell nobody
+  // walks to still needs a handle of its own to focus on a tap.
+  const own = useRef<TextInput>(null);
+  const ref = inputRef ?? own;
 
   // `runOnJS` because every callback here talks to React state and the store —
   // none of them are worklets, and babel-preset-expo would otherwise hand them
@@ -973,12 +1002,22 @@ function NumCell({
       // An empty cell starts from last time's figure, which is what it's
       // showing as its placeholder.
       base.current = num(value, num(ghost, 0));
+      last.current = fmt(base.current);
       setDragging(true);
       onScrub(true);
+      if (s.haptics) buzz.grab();
     })
     .onUpdate((g) => {
       const steps = Math.round(-g.translationY / PX_PER_STEP);
-      onText(fmt(Math.max(0, base.current + steps * step)));
+      const next = fmt(Math.max(0, base.current + steps * step));
+      // Only when the figure actually changes — which is once per `PX_PER_STEP`
+      // rather than once per frame, and never while the clamp at zero is
+      // holding it still. That is what keeps a buzz meaning "the number moved",
+      // and it also stops a drag writing to the store sixty times a second.
+      if (next === last.current) return;
+      last.current = next;
+      onText(next);
+      if (s.haptics) buzz.step();
     })
     // Fires on release and on cancellation alike, so the list can never be
     // left unscrollable.
@@ -987,11 +1026,18 @@ function NumCell({
       onScrub(false);
     });
 
+  // Racing rather than waiting on the pan: a tap is over in about a tenth of
+  // the hold, so whichever the finger meant has already been decided by the
+  // time either could fire.
+  const tap = Gesture.Tap()
+    .runOnJS(true)
+    .onEnd(() => ref.current?.focus());
+
   return (
-    <GestureDetector gesture={drag}>
-      <View style={style}>
+    <GestureDetector gesture={Gesture.Race(drag, tap)}>
+      <View style={style} pointerEvents={editing ? 'auto' : 'box-only'}>
         <Input
-          ref={inputRef}
+          ref={ref}
           style={[
             styles.setInput,
             live && styles.setInputLive,
@@ -1001,6 +1047,14 @@ function NumCell({
           value={value}
           onChangeText={onText}
           {...input}
+          onFocus={(e) => {
+            setEditing(true);
+            input.onFocus?.(e);
+          }}
+          onBlur={(e) => {
+            setEditing(false);
+            input.onBlur?.(e);
+          }}
         />
       </View>
     </GestureDetector>

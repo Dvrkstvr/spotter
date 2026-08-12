@@ -301,7 +301,7 @@ export const DICT = {
     restBetween: 'Rest between sets', restOff: 'Off',
     restHint: 'Runs after every set you tick off. Off hides the countdown entirely.',
     hapticsLabel: 'Vibration',
-    hapticsHint: 'A short buzz when a set is ticked, and when a rest runs out.',
+    hapticsHint: 'A short buzz when a set is ticked, when a rest runs out, and a heavier one when something is deleted.',
     restAlertLabel: 'Notify when a rest ends',
     restAlertHint: 'Reaches you with the phone locked or in a pocket. It clears itself when you come back to the app.',
     // The alarm itself. The body is the exercise you are resting inside; this
@@ -637,7 +637,7 @@ export const DICT = {
     restBetween: 'Pause zwischen Sätzen', restOff: 'Aus',
     restHint: 'Läuft nach jedem Satz, den du abhakst. „Aus“ blendet den Countdown ganz aus.',
     hapticsLabel: 'Vibration',
-    hapticsHint: 'Vibriert kurz, wenn ein Satz abgehakt ist und wenn die Pause um ist.',
+    hapticsHint: 'Vibriert kurz, wenn ein Satz abgehakt ist und wenn die Pause um ist — und schwerer, wenn du etwas löschst.',
     restAlertLabel: 'Benachrichtigen, wenn die Pause endet',
     restAlertHint: 'Erreicht dich auch bei gesperrtem Bildschirm oder in der Tasche. Die Benachrichtigung verschwindet von selbst, sobald du die App wieder öffnest.',
     restOverTitle: 'Pause vorbei', restOverBody: 'Dein nächster Satz steht an.',

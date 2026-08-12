@@ -211,6 +211,7 @@ export function RoutineOverlay() {
                   {/* Held, not tapped: the × sits a thumb-width from the kg
                       cell and takes the row's planned numbers with it. */}
                   <HoldBtn
+                    destructive
                     label="×"
                     accessibilityLabel={L.removeExercise}
                     hitSlop={slop}
@@ -270,6 +271,7 @@ export function RoutineOverlay() {
                 grammar. Hidden mid-co-draft: deleting what the buddy is
                 still editing is a conversation, not a button. */}
             <HoldBtn
+              destructive
               label={L.holdDeleteRoutine}
               onConfirm={() => deleteRoutine(r.id)}
               style={styles.deleteBtn}
@@ -406,6 +408,7 @@ function DraftRows({ r, draft, buddy }: { r: Routine; draft: CoDraft; buddy: str
               }
             />
             <HoldBtn
+              destructive
               label="×"
               accessibilityLabel={L.removeExercise}
               hitSlop={slop}

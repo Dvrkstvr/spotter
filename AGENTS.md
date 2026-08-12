@@ -614,12 +614,47 @@ Keep these; they're decisions, not drift. Each is commented at its site.
   list; while a drag runs, the list's `scrollEnabled` goes off. Most sets never
   need the keyboard. This one gesture is the reason
   `react-native-gesture-handler` is mounted at all (`GestureHandlerRootView` in
-  `src/app/_layout.tsx`): it sits on top of a `TextInput`, and Android's
-  `ReactEditText` disallows touch interception the moment a finger lands, so a
-  `PanResponder` watching the capture phase never reliably sees the drag.
-  `Gesture.Pan().activateAfterLongPress()` does the same negotiation a layer
-  down, where it works. Everything else on this screen — the swipe between
-  exercises included — is still a plain `PanResponder`, and should stay one.
+  `src/app/_layout.tsx`), and `Gesture.Pan().activateAfterLongPress()` is what
+  keeps it apart from the list's own scroll. Everything else on this screen —
+  the swipe between exercises included — is still a plain `PanResponder`, and
+  should stay one.
+  - **The cell is `box-only` until it is focused, and that is load-bearing.**
+    A number cell is a `TextInput`, and Android's `ReactEditText` answers every
+    ACTION_DOWN with `requestDisallowInterceptTouchEvent(true)`. That walks up
+    to `GestureHandlerRootView`, which reads it as a native view claiming the
+    touch and **cancels every handler in the orchestrator** — so a pan waiting
+    out `HOLD_MS` is already dead before the hold elapses. Moving to
+    gesture-handler did not fix that; it is the same disallow one layer down,
+    and for a year the drag simply never fired. What fixes it is never letting
+    the finger reach the editor: `box-only` has `ReactViewGroup` intercept the
+    touch natively, so no DOWN reaches the editor and nothing is cancelled.
+    The tap that focusing needs is handed back as a `Gesture.Tap` racing the
+    pan, and the cell returns to `auto` once focused, so placing the caret
+    inside a figure still works.
+  - **It is the one gesture performed under your own thumb, so it is felt
+    rather than watched** — and the two moments get different weights, on the
+    haptics ladder in `src/data/haptics.ts`. `buzz.grab` is the hold landing,
+    at the same weight as a ticked set: it is what tells you when to start
+    moving, and without it you either move too early and never take the cell
+    or wait longer than you had to. `buzz.step` is the quietest thing in the
+    app, because it fires ten or twenty times inside one drag — and it is the
+    one call in this module that leaves the cross-platform API, because
+    `selectionAsync` is a 50 ms buzz on Android and `Segment_Frequent_Tick` is
+    the constant Android defines for a value scrubbing under a finger. Both
+    are gated on the `haptics` setting, like every other buzz.
+  - **A step buzzes when the figure changes, not when the finger moves.**
+    `onUpdate` runs per frame; the cell only changes every `PX_PER_STEP`, and
+    stops changing entirely once the clamp at zero is holding it. So the
+    handler compares against the last figure it emitted and returns early —
+    which is what makes a buzz mean "the number moved" without exception, and
+    incidentally stops a drag writing to the store sixty times a second.
+  - **The list is `keyboardShouldPersistTaps="always"` for the same reason.**
+    Under `handled` the ScrollView grabs any touch that isn't already a
+    responder so it can dismiss the keyboard, and grabbing it means
+    `setJSResponder` with the native responder blocked — which gesture-handler
+    also answers by cancelling everything it owns. That would leave the drag
+    working only while the keyboard is down, which is exactly when it isn't
+    wanted. Nothing is lost: Enter on reps still blurs and closes it.
 - Add set is hold-to-confirm — it sits under the last row, right where a thumb
   reaching for the tick lands.
 - **There is no Discard.** Finish is the only way out of a session, so it

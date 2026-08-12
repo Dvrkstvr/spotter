@@ -10,6 +10,14 @@
  * `dashed` borrows the set row's grammar — a dashed outline is something that
  * isn't yours yet — so the bottom CTA can say "there's still work here" before
  * you touch it, rather than only revealing the guard once you press.
+ *
+ * `destructive` is the buzz, and nothing else — no colour, no label, no second
+ * confirm. Every deletion in the app already leaves through a hold, so this is
+ * the one place that knows a hold destroyed something rather than committing
+ * something, and firing `buzz.gone` from the six call sites instead would be
+ * six chances for them to drift apart. The buzz is deliberately exclusive to
+ * deletion (Calvin's call): a hold that completes is silent everywhere else,
+ * which is what makes a phone that buzzes mean exactly one thing.
  */
 import { useState } from 'react';
 import {
@@ -21,8 +29,10 @@ import {
   ViewStyle,
 } from 'react-native';
 
+import { buzz } from '@/data/haptics';
 import { themed, useColors, useThemed } from '@/design/theme';
 import { fill, font, linger, motion, Palette, radius, space } from '@/design/tokens';
+import { useStore } from '@/store/workout-store';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -39,6 +49,7 @@ export function HoldBtn({
   variant = 'secondary',
   hold = true,
   dashed = false,
+  destructive = false,
   style,
   labelStyle,
   accessibilityLabel,
@@ -49,6 +60,8 @@ export function HoldBtn({
   variant?: 'primary' | 'secondary';
   hold?: boolean;
   dashed?: boolean;
+  /** This hold deletes something — it commits with `buzz.gone`. */
+  destructive?: boolean;
   style?: StyleProp<ViewStyle>;
   labelStyle?: StyleProp<TextStyle>;
   /** For glyph labels ("×") that a screen reader shouldn't read literally. */
@@ -57,11 +70,24 @@ export function HoldBtn({
 }) {
   const styles = useThemed(sheet);
   const v = holdVariant(variant, useColors());
+  // The gate lives here rather than in `buzz`, which is the vocabulary and not
+  // the switch. It costs this component the store subscription it did without,
+  // which is the price of the six call sites not each carrying one.
+  const { s } = useStore();
   const [fillV] = useState(() => new Animated.Value(0));
   const [scale] = useState(() => new Animated.Value(1));
 
   const press = (to: number) =>
     Animated.timing(scale, { toValue: to, ...motion.tap, useNativeDriver: true }).start();
+
+  // Shared by both routes out — the fill landing and, under `hold={false}`, a
+  // plain tap — so a button can never be destructive down one and silent down
+  // the other. The buzz goes first: it should land with the row leaving rather
+  // than a frame behind it.
+  const commit = () => {
+    if (destructive && s.haptics) buzz.gone();
+    onConfirm();
+  };
 
   const start = () => {
     press(0.965);
@@ -72,7 +98,7 @@ export function HoldBtn({
         // released hold can never commit.
         if (finished) {
           fillV.setValue(0);
-          onConfirm();
+          commit();
         }
       }
     );
@@ -97,7 +123,7 @@ export function HoldBtn({
       hitSlop={hitSlop}
       onPressIn={start}
       onPressOut={release}
-      onPress={hold ? undefined : onConfirm}
+      onPress={hold ? undefined : commit}
       style={[
         styles.btn,
         { borderColor: v.border },

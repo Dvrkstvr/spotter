@@ -227,6 +227,7 @@ export function PlanSheet() {
       {held && (
         <HoldBtn
           dashed
+          destructive
           // A one-off has one occurrence, so "every repeat" would be a
           // distinction about nothing — it says plainly what it does instead.
           label={!asks ? L.planHoldRemove : perDay ? L.planHoldRemoveDay : L.planHoldRemoveRule}
