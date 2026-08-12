@@ -11,7 +11,7 @@
  * deliberate departures from it.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createContext, ReactNode, useCallback, useContext, useEffect, useState } from 'react';
+import { createContext, ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 
 import type {
@@ -27,8 +27,18 @@ import type {
 } from '@/data/buddy-sync';
 import type { BuddySnapshot } from '@/data/buddy-transport';
 import { mergeFirstUp, mergeTurns, routineClosure } from '@/data/buddy-sync';
-import { todayDom, todayISO } from '@/data/date';
+import { mondayISO, todayISO } from '@/data/date';
 import { deviceInstallId, randomInstallId } from '@/data/identity';
+import {
+  anchorFor,
+  asPlan,
+  dropEntries,
+  planFromSchedule,
+  skip,
+  unskip,
+  type Plan,
+  type Repeat,
+} from '@/data/plan';
 import {
   DEFAULT_GROUPS,
   DEFAULT_KINDS,
@@ -120,6 +130,10 @@ export type CoDraft = {
 };
 export type Profile = { name: string; age: string; weight: string; height: string };
 export type PickerMode = 'routine' | 'session' | null;
+/** How the Routines tab orders your list. */
+export type RoutineSort = 'week' | 'recent' | 'az';
+/** What it is narrowed to: a family (see `routineFamily`) or your own makes. */
+export type RoutineFilter = 'all' | 'strength' | 'calisthenics' | 'cardio' | 'yours';
 /** One exercise as it was actually logged: the ticked sets, in order. */
 export type LoggedExercise = { ex: string; sets: string[] };
 /**
@@ -160,8 +174,12 @@ export type LastLog = { date: string; sets: string[] };
  */
 export type State = {
   routines: Routine[];
-  /** day-of-week index → routine id */
-  schedule: Record<number, string>;
+  /**
+   * The schedule: dated rules plus cancelled occurrences — see `data/plan.ts`,
+   * which owns the whole model and every question anyone asks of it. Replaces
+   * v3's seven weekday slots, which is the shape change v4 migrates.
+   */
+  plan: Plan;
   routineOpen: string | null;
   exOpen: string | null;
   picker: PickerMode;
@@ -191,7 +209,13 @@ export type State = {
    * `STORAGE_VERSION` bump and a migration over real training data.
    */
   lastMarks: Record<string, (MarkNote | null)[]>;
-  daySel: number;
+  /**
+   * Which day the Plan screen has open, as an ISO date rather than a day of
+   * the month: the plan is dated now, and a bare number needed the viewed
+   * month beside it to mean anything (which is what the old clamp on month
+   * paging was for).
+   */
+  daySel: string;
   custom: Exercise[];
   /**
    * Edits to the *seeded* library, by exercise id — the user's name, muscle
@@ -299,6 +323,16 @@ export type State = {
    * real name-keyed rosters.
    */
   buddyIds: Record<string, string>;
+  /**
+   * Roster name → the per-pairing shared secret (`randomToken`), minted once
+   * during the code-gated first pairing and persisted on both phones. It is
+   * what a reconnecting peer proves before this phone trusts it: the name and
+   * install id it advertises are both forgeable, so on their own they let a
+   * nearby attacker who knows a buddy's name impersonate them. Its own
+   * additive `PERSIST` key, like `buddyIds`. A buddy paired before this
+   * existed has no entry and re-pairs once (through the code) to get one.
+   */
+  buddySecrets: Record<string, string>;
   /** whether the buddy-sync overlay is open */
   buddySync: boolean;
   /** pairing confirmed, snapshot not here yet — it decides if the sync screen opens */
@@ -317,6 +351,14 @@ export type State = {
   } | null;
   /** the connected peer's shareable data, from either transport */
   buddySnapshot: BuddySnapshot | null;
+  /**
+   * Sync rows settled over the air rather than by a tap on this phone: the
+   * `syncItemId`s of items the buddy pushed here, and of sent items whose
+   * merge they have acknowledged. The sync screen unions these into its own
+   * marks; the radio is the only writer. Reset with each snapshot — the set
+   * baselines the diff, and a stale id could dress an un-transferred row.
+   */
+  buddySynced: string[];
   /* — shared workout (all transient; see IMPROVEMENTS.md #8) — */
   /** incoming "train together?" invite awaiting a decision */
   buddyInvite: SessionInvite | null;
@@ -379,9 +421,28 @@ export type State = {
    * into view once and clears it. Transient, one-shot.
    */
   buddyFocus: boolean;
-  pickWorkout: boolean;
-  /** day-of-week index whose scheduled routine is being picked, or null */
-  dayPick: number | null;
+  /**
+   * The Routines tab's lens — what the list is searched for, how it is
+   * ordered, which family it is narrowed to. UI state like `query`/`filter`,
+   * outside `PERSIST` on purpose: a fresh launch opens on Week · All, empty
+   * search.
+   */
+  routineQuery: string;
+  routineSort: RoutineSort;
+  routineFilter: RoutineFilter;
+  /**
+   * One-shot handoff to the Plan screen: an ISO date it should land on
+   * (Today's "Recently" rows tap through). Plan consumes and clears it —
+   * its month shift stays local state, so reopening Plan cold still lands
+   * on the present.
+   */
+  planFocus: string | null;
+  /**
+   * The plan sheet's subject, or null: the date being planned, and which
+   * existing rule is being edited if any. A date rather than the old weekday
+   * index — a rule needs an anchor, and a weekday has none.
+   */
+  dayPlan: { iso: string; entry: string | null } | null;
   groups: Labelled[];
   kinds: Labelled[];
   /** image-slot fills, keyed by slot id. The design persists these to a sidecar. */
@@ -390,7 +451,10 @@ export type State = {
 
 const initialState: State = {
   routines: DEFAULT_ROUTINES.map((r) => ({ ...r, items: r.items.map((i) => ({ ...i })) })),
-  schedule: { 0: 'chest', 2: 'back', 4: 'both' },
+  // The design's Mon/Wed/Fri, as rules: anchored on this week's Monday so the
+  // seed is live the day it lands and claims nothing behind it. Same lift the
+  // v3 migration performs, from the same function.
+  plan: planFromSchedule({ 0: 'chest', 2: 'back', 4: 'both' }, mondayISO()),
   routineOpen: null,
   exOpen: null,
   picker: null,
@@ -403,7 +467,7 @@ const initialState: State = {
   history: [],
   lastLog: {},
   lastMarks: {},
-  daySel: todayDom(),
+  daySel: todayISO(),
   custom: [],
   exEdits: {},
   cueEdits: {},
@@ -442,12 +506,14 @@ const initialState: State = {
   buddy: null,
   knownBuddies: [],
   buddyIds: {},
+  buddySecrets: {},
   buddySync: false,
   buddySyncPending: false,
   nearbyPeers: [],
   buddyEndpoint: null,
   pendingAuth: null,
   buddySnapshot: null,
+  buddySynced: [],
   buddyInvite: null,
   joinAsk: null,
   joinSent: null,
@@ -463,12 +529,23 @@ const initialState: State = {
   coDraft: null,
   sessionMin: false,
   buddyFocus: false,
-  pickWorkout: false,
-  dayPick: null,
+  routineQuery: '',
+  routineSort: 'week',
+  routineFilter: 'all',
+  planFocus: null,
+  dayPlan: null,
   groups: DEFAULT_GROUPS.map((g) => ({ ...g })),
   kinds: DEFAULT_KINDS.map((k) => ({ ...k })),
   images: {},
 };
+
+/**
+ * A plan entry's id. A skip names one, so it has to be unique for the life of
+ * the blob — the clock alone isn't (two rules can be written in one
+ * millisecond by a tap that swaps a day), so a few random characters ride
+ * along. Minted in a mutator, never during render.
+ */
+const newEntryId = () => `e${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
 
 /**
  * A session's first-up register, fresh from the setting. The seed is minted
@@ -518,20 +595,26 @@ type Patch = Partial<State> | ((s: State) => Partial<State> | null);
 // a phone lives. Renaming it to match the app would read as a first run and
 // silently strand every session behind the old key.
 /** The number a backup is stamped with, so an old one can be lifted forward. */
-export const STORAGE_VERSION = 3;
+export const STORAGE_VERSION = 4;
 
-const STORAGE_KEY = 'workout-diary/v3';
-/** v3 widened the seeded muscle groups; v2 added per-language names. */
+const STORAGE_KEY = 'workout-diary/v4';
+/**
+ * v4 turned the seven weekday slots into dated rules; v3 widened the seeded
+ * muscle groups; v2 added per-language names.
+ */
+const STORAGE_KEY_V3 = 'workout-diary/v3';
 const STORAGE_KEY_V2 = 'workout-diary/v2';
 const STORAGE_KEY_V1 = 'workout-diary/v1';
+/** Where an unparseable blob is copied before the saver is allowed back on. */
+const RECOVERY_KEY = 'workout-diary/recovered';
 
 // Additive only: `filterPersisted` skips keys a stored blob doesn't have, so a
 // phone that has been logging since v2 keeps its data and starts the new maps
 // empty. Anything that changes the *shape* of an existing key needs a version.
 const PERSIST = [
-  'routines', 'schedule', 'history', 'lastLog', 'lastMarks', 'custom', 'profile',
+  'routines', 'plan', 'history', 'lastLog', 'lastMarks', 'custom', 'profile',
   'setups', 'videos', 'lang', 'groups', 'kinds', 'images', 'exEdits', 'cueEdits',
-  'knownBuddies', 'buddyIds', 'selfId', 'themeMode', 'theme', 'restSeconds', 'firstUpDefault',
+  'knownBuddies', 'buddyIds', 'buddySecrets', 'selfId', 'themeMode', 'theme', 'restSeconds', 'firstUpDefault',
   'haptics', 'restAlert', 'privateMode', 'onboarded', 'style', 'level', 'coach',
 ] as const satisfies readonly (keyof State)[];
 
@@ -543,14 +626,50 @@ const pickPersisted = (s: State): Persisted => {
   return out;
 };
 
+/**
+ * The container each durable key must arrive as. A blob that was hand-edited
+ * or mangled in transit (backups round-trip through chat apps) can carry the
+ * right key with the wrong shape — `history: "..."` — and one such key throws
+ * in every screen that maps over it, after which the debounced save writes the
+ * corruption over the good blob. A mistyped key is dropped here and its seeded
+ * default stands; the row-level shapes inside are the mutators' business.
+ */
+const PERSIST_SHAPE: Record<
+  (typeof PERSIST)[number],
+  'array' | 'object' | 'string' | 'number' | 'boolean'
+> = {
+  routines: 'array', plan: 'object', history: 'array', lastLog: 'object',
+  lastMarks: 'object', custom: 'array', profile: 'object', setups: 'object',
+  videos: 'object', lang: 'string', groups: 'array', kinds: 'array',
+  images: 'object', exEdits: 'object', cueEdits: 'object', knownBuddies: 'array',
+  buddyIds: 'object', buddySecrets: 'object', selfId: 'string',
+  themeMode: 'string', theme: 'string', restSeconds: 'number',
+  firstUpDefault: 'string', haptics: 'boolean', restAlert: 'boolean',
+  privateMode: 'boolean', onboarded: 'boolean', style: 'string',
+  level: 'string', coach: 'object',
+};
+
+const fitsShape = (v: unknown, shape: (typeof PERSIST_SHAPE)[keyof typeof PERSIST_SHAPE]) =>
+  shape === 'array'
+    ? Array.isArray(v)
+    : shape === 'object'
+      ? typeof v === 'object' && v !== null && !Array.isArray(v)
+      : typeof v === shape;
+
 /** Keep only known durable keys, so stale blobs can't resurrect UI state. */
 const filterPersisted = (raw: unknown): Partial<State> => {
   if (typeof raw !== 'object' || raw === null) return {};
   const out: Record<string, unknown> = {};
-  for (const k of PERSIST) if (k in raw) out[k] = (raw as Record<string, unknown>)[k];
+  for (const k of PERSIST) {
+    const v = (raw as Record<string, unknown>)[k];
+    if (k in raw && fitsShape(v, PERSIST_SHAPE[k])) out[k] = v;
+  }
   // A theme that no longer exists would leave the palette wherever it was;
   // drop the name and let the seeded default win instead.
   if ('theme' in out && !isThemeName(out.theme)) delete out.theme;
+  // The plan's two sub-keys are load-bearing where every other durable key's
+  // rows are the mutators' business — see `asPlan`.
+  if ('plan' in out) out.plan = asPlan(out.plan);
   return out as Partial<State>;
 };
 
@@ -581,11 +700,33 @@ const migrateV2 = (data: Partial<State>): Partial<State> => {
 };
 
 /**
+ * v3 → v4: the seven weekday slots become dated weekly rules.
+ *
+ * Takes the **raw** blob alongside the filtered data, and that is the trap
+ * worth naming: `schedule` has left `PERSIST`, so `filterPersisted` drops it —
+ * read the filtered object here and every phone silently wakes up with an
+ * empty plan. A blob with no usable `schedule` keeps whatever it has, which on
+ * this path means the seeded plan stands.
+ */
+const migrateV3 = (raw: unknown, data: Partial<State>): Partial<State> => {
+  const sched = (raw as Record<string, unknown> | null)?.schedule;
+  // An *empty* schedule is an answer — someone cleared every day — so the lift
+  // is written either way and the seeded plan does not come back. Only a blob
+  // missing the key entirely is left alone, since it has nothing to say.
+  if (typeof sched !== 'object' || sched === null || Array.isArray(sched)) return data;
+  return { ...data, plan: planFromSchedule(sched, mondayISO()) };
+};
+
+/**
  * Lift a v1 blob (single `label` / `name` strings) to v2 per-language names.
  * An untouched default regains its seeded translations; anything the user
  * named is filed under the blob's language, since that is what they typed in.
+ *
+ * Returns the lifted blob **unfiltered** — the caller filters. Filtering here
+ * would drop `schedule` before `migrateV3` could read it, and a v1 phone's
+ * whole schedule would go with it.
  */
-const migrateV1 = (raw: unknown): Partial<State> => {
+const migrateV1 = (raw: unknown): Record<string, unknown> => {
   if (typeof raw !== 'object' || raw === null) return {};
   const blob = raw as Record<string, any>;
   const lang: Lang = blob.lang === 'de' ? 'de' : 'en';
@@ -619,7 +760,22 @@ const migrateV1 = (raw: unknown): Partial<State> => {
       e?.names || typeof e?.name !== 'string' ? e : { ...e, names: { [lang]: e.name } }
     );
 
-  return filterPersisted(blob);
+  return blob;
+};
+
+/**
+ * A stored blob at version `v`, lifted to the current shape.
+ *
+ * The one place the chain is written down, so the load path and a backup
+ * restore cannot disagree about the order — which matters because
+ * `migrateV3` reads the raw blob and the other two read the filtered one.
+ */
+const migrateBlob = (raw: unknown, v: number): Partial<State> => {
+  const lifted = v < 2 ? migrateV1(raw) : raw;
+  let data = filterPersisted(lifted);
+  if (v < 3) data = migrateV2(data);
+  if (v < 4) data = migrateV3(lifted, data);
+  return data;
 };
 
 /* ── pure helpers (shared with screens) ────────────────────────────────── */
@@ -845,6 +1001,11 @@ function useWorkoutState() {
   // False until the stored blob has been merged in; saving waits for it so a
   // fresh launch can never overwrite real data with the seed.
   const [hydrated, setHydrated] = useState(false);
+  // Armed separately from `hydrated`: hydrated lifts the splash, canSave says
+  // the read actually *succeeded*. A transient read failure used to arm the
+  // saver anyway, and 400ms later the debounce wrote the seed over the real
+  // blob — the one data loss this store could cause entirely by itself.
+  const [canSave, setCanSave] = useState(false);
 
   // Everything below closes over `state` directly. The hook re-runs on every
   // change anyway, so there is nothing for a latest-value ref to buy — and
@@ -861,40 +1022,94 @@ function useWorkoutState() {
 
   useEffect(() => {
     let alive = true;
-    AsyncStorage.getItem(STORAGE_KEY)
-      .then(async (raw) => {
-        if (raw) return filterPersisted(JSON.parse(raw));
-        // No v3 blob yet — walk back through the older keys, lifting whatever
-        // is there through every migration since. Each key is left where it
-        // is; the next save writes v3 alongside it.
-        const v2 = await AsyncStorage.getItem(STORAGE_KEY_V2);
-        if (v2) return migrateV2(filterPersisted(JSON.parse(v2)));
-        const v1 = await AsyncStorage.getItem(STORAGE_KEY_V1);
-        return v1 ? migrateV2(migrateV1(JSON.parse(v1))) : null;
-      })
-      .then((data) => {
-        // `null` here is the one thing `initialState` cannot know: the read
-        // succeeded and there was nothing at any version, so this phone has
-        // never run the app. That — and only that — is when the OS gets to
-        // pick the language and the light/dark mode.
-        if (alive) patch(data ?? firstRunDefaults());
-      })
-      .catch(() => {}) // unreadable blob → run on the seed rather than crash
-      .finally(() => {
-        if (alive) setHydrated(true);
-      });
+    (async () => {
+      let data: Partial<State> | null = null;
+      let ok = false;
+      // Whatever raw string was in hand when a parse failed — the thing worth
+      // copying aside before the saver is ever allowed near its key again.
+      let held: string | null = null;
+      try {
+        held = await AsyncStorage.getItem(STORAGE_KEY);
+        if (held) data = filterPersisted(JSON.parse(held));
+        else {
+          // No v4 blob yet — walk back through the older keys, lifting
+          // whatever is there through every migration since. Each key is left
+          // where it is; the next save writes v4 alongside it.
+          for (const [key, v] of [
+            [STORAGE_KEY_V3, 3],
+            [STORAGE_KEY_V2, 2],
+            [STORAGE_KEY_V1, 1],
+          ] as const) {
+            held = await AsyncStorage.getItem(key);
+            if (held) {
+              data = migrateBlob(JSON.parse(held), v);
+              break;
+            }
+          }
+        }
+        ok = true;
+      } catch {
+        // Unreadable store: run on the seed rather than crash — but never
+        // save over it. An unparseable blob is copied aside first, and only a
+        // successful copy re-arms the saver; a failed *read* keeps this
+        // launch read-only, because the blob may be intact and merely
+        // unreachable, and either way it holds real training.
+        if (held !== null)
+          ok = await AsyncStorage.setItem(RECOVERY_KEY, held).then(
+            () => true,
+            () => false
+          );
+      }
+      if (!alive) return;
+      if (data) patch(data);
+      // `held === null` is the one thing `initialState` cannot know: every
+      // read succeeded and there was nothing at any version, so this phone
+      // has never run the app. That — and only that — is when the OS gets to
+      // pick the language and the light/dark mode.
+      else if (ok && held === null) patch(firstRunDefaults());
+      setCanSave(ok);
+      setHydrated(true);
+    })();
     return () => {
       alive = false;
     };
   }, [patch]);
 
+  // The slice waiting on the debounce and the last one written. Refs, not
+  // state: bookkeeping for the effects below, never rendered.
+  const pendingRef = useRef<Persisted | null>(null);
+  const savedRef = useRef<Persisted | null>(null);
+
+  const flush = useCallback(() => {
+    const slice = pendingRef.current;
+    if (!slice) return;
+    pendingRef.current = null;
+    savedRef.current = slice;
+    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(slice)).catch(() => {});
+  }, []);
+
   useEffect(() => {
-    if (!hydrated) return;
-    const id = setTimeout(() => {
-      AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(pickPersisted(state))).catch(() => {});
-    }, 400);
+    if (!canSave) return;
+    const slice = pickPersisted(state);
+    const last = pendingRef.current ?? savedRef.current;
+    // Every mutator is copy-on-write, so per-key reference equality is exact.
+    // Without it the session clock — durable in nothing — cost a full-blob
+    // serialize and disk write every second of every workout.
+    if (!last || PERSIST.some((k) => slice[k] !== last[k])) pendingRef.current = slice;
+    if (!pendingRef.current) return;
+    const id = setTimeout(flush, 400);
     return () => clearTimeout(id);
-  }, [state, hydrated]);
+  }, [state, canSave, flush]);
+
+  // Android suspends the JS thread on a screen lock: Finish followed by
+  // pocketing the phone leaves the workout in an unfired 400ms timeout, and a
+  // process death while locked would lose it. Backgrounding flushes at once.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (st) => {
+      if (st !== 'active') flush();
+    });
+    return () => sub.remove();
+  }, [flush]);
 
   /* — lookups — */
 
@@ -1041,30 +1256,48 @@ function useWorkoutState() {
     });
 
   /**
-   * Delete a routine. The schedule slots pointing at it clear, a co-draft of
-   * it ends, and the editor closes with it. `history` is untouched on
-   * purpose: entries carry the name frozen at log time, and a deleted rid
-   * there is already the "routine deleted since" case the plan screen and
-   * save-as-routine both handle.
+   * A fresh copy of a seed routine at an experience level — what onboarding
+   * installs for a pick and what the collection's + installs for one, so the
+   * two can never write different shapes. Scaled numbers are marked `planned`
+   * (below `regular` only): a first session opens with them in the fields,
+   * where an unplanned row defers to "last time" — and a brand-new user's
+   * "last time" is the seed data's, which is exactly the number the level
+   * exists to shrink. `regular` stays unmarked, because those figures are the
+   * design's, not this user's.
    */
+  const scaledSeed = (r: Routine, level: Level): Routine => ({
+    ...r,
+    names: { ...r.names },
+    items: r.items.map((it) => {
+      const scaled = scaleItem(it, measureOf(ex(it.ex)), level);
+      return level === 'regular' ? scaled : { ...scaled, planned: true as const };
+    }),
+  });
+
+  /**
+   * Put one seed on the list — the collection row's +. A same-id copy already
+   * here is replaced with the fresh scaled one, exactly as re-running setup
+   * would replace a pick; everything else on the list keeps its place.
+   */
+  const addSeedRoutine = (rid: string) =>
+    patch((s) => {
+      const seed = DEFAULT_ROUTINES.find((r) => r.id === rid);
+      if (!seed) return null;
+      return { routines: [...s.routines.filter((r) => r.id !== rid), scaledSeed(seed, s.level)] };
+    });
+
   /**
    * Write everything the first-run flow decided, in one patch.
    *
    * The routine list is the delicate part, because this can run twice — the
    * flow is reachable again from Settings. `picked` names *seed* routines:
-   * each one lands as a fresh copy of its `DEFAULT_ROUTINES` original with
-   * the level scaling applied, replacing any same-id copy already here (that
-   * is what "run setup again" means). Everything the user made themselves —
-   * saved-as-routine, built with a buddy, id not in the seed set — survives
-   * untouched, in place. An *unpicked* seed that exists on the phone is
-   * dropped, exactly as `deleteRoutine` would: unticking it is the same
-   * decision made in a different room. `history`, `lastLog` and `custom` are
-   * never in the patch — a tour must not be able to eat a diary.
-   *
-   * Scaled numbers are written `planned` (below `regular` only), so the first
-   * session opens with them in the fields — an unplanned row defers to "last
-   * time", and a brand-new user's "last time" is the seed data's, which is
-   * exactly the number the level exists to shrink.
+   * each one lands as a fresh `scaledSeed` copy, replacing any same-id copy
+   * already here (that is what "run setup again" means). Everything the user
+   * made themselves — saved-as-routine, built with a buddy, id not in the
+   * seed set — survives untouched, in place. An *unpicked* seed that exists
+   * on the phone is dropped, exactly as `deleteRoutine` would: unticking it
+   * is the same decision made in a different room. `history`, `lastLog` and
+   * `custom` are never in the patch — a tour must not be able to eat a diary.
    */
   const applyOnboarding = (o: {
     profile: Profile;
@@ -1077,14 +1310,7 @@ function useWorkoutState() {
       const seeds = o.picked
         .map((id) => DEFAULT_ROUTINES.find((r) => r.id === id))
         .filter((r): r is Routine => !!r)
-        .map((r) => ({
-          ...r,
-          names: { ...r.names },
-          items: r.items.map((it) => {
-            const scaled = scaleItem(it, measureOf(ex(it.ex)), o.level);
-            return o.level === 'regular' ? scaled : { ...scaled, planned: true as const };
-          }),
-        }));
+        .map((r) => scaledSeed(r, o.level));
       const seedIds = new Set(DEFAULT_ROUTINES.map((r) => r.id));
       const kept = s.routines.filter((r) => !seedIds.has(r.id));
       const routines = [...seeds, ...kept];
@@ -1092,7 +1318,7 @@ function useWorkoutState() {
       // re-checked anyway: a slot pointing at a routine this patch just
       // dropped would be the plan screen's deleted-rid case, created here.
       const ids = new Set(routines.map((r) => r.id));
-      const schedule = Object.fromEntries(
+      const week = Object.fromEntries(
         Object.entries(o.week).filter(([, rid]) => ids.has(rid))
       );
       return {
@@ -1100,19 +1326,101 @@ function useWorkoutState() {
         style: o.style,
         level: o.level,
         routines,
-        schedule,
+        // The tour's seven slots become weekly rules, anchored on this week's
+        // Monday — the same lift the v3 migration performs, from the same
+        // function, so a fresh setup and a migrated phone hold one shape.
+        plan: planFromSchedule(week, mondayISO()),
         onboarded: true,
         onboardingOpen: false,
       };
     });
 
+  /**
+   * Delete a routine. The rules pointing at it go, a co-draft of it ends, and
+   * the editor closes with it. `history` is untouched on purpose: entries carry
+   * the name frozen at log time, and a deleted rid there is already the
+   * "routine deleted since" case the plan screen and save-as-routine handle.
+   *
+   * Two things to clear now rather than one: a skip names an entry id, so the
+   * skips of a rule that just left would otherwise sit in the blob forever
+   * cancelling nothing.
+   */
   const deleteRoutine = (rid: string) =>
     patch((s) => ({
       routines: s.routines.filter((r) => r.id !== rid),
-      schedule: Object.fromEntries(Object.entries(s.schedule).filter(([, v]) => v !== rid)),
+      plan: dropEntries(s.plan, (e) => e.rid === rid),
       ...(s.coDraft?.rid === rid ? { coDraft: null } : {}),
       routineOpen: s.routineOpen === rid ? null : s.routineOpen,
     }));
+
+  /* — the plan: five writes, one per thing the sheet and the day panel can do —
+   *
+   * Every one of them goes through `data/plan.ts`'s two primitives: a rule in
+   * `entries`, or a cancelled occurrence in `skips`. Nothing here reaches for a
+   * third concept, which is what keeps "what is planned on this day" a single
+   * function the whole app reads.
+   */
+
+  /** Plan a routine on a date, from that date on. */
+  const addPlan = (iso: string, rid: string, repeat: Repeat) =>
+    patch((s) => ({
+      plan: {
+        ...s.plan,
+        entries: [
+          ...s.plan.entries,
+          { id: newEntryId(), rid, from: anchorFor(iso, repeat), repeat },
+        ],
+      },
+      dayPlan: null,
+    }));
+
+  /** Change a rule itself — every occurrence, past bars included. */
+  const editPlan = (id: string, rid: string, repeat: Repeat) =>
+    patch((s) => ({
+      plan: {
+        ...s.plan,
+        entries: s.plan.entries.map((e) =>
+          e.id === id ? { ...e, rid, from: anchorFor(e.from, repeat), repeat } : e
+        ),
+      },
+      dayPlan: null,
+    }));
+
+  /**
+   * Swap one occurrence for a different routine, leaving the rule alone: the
+   * occurrence is cancelled and a one-off takes its place. Picking the routine
+   * the rule already names just un-cancels it — writing a `once` that duplicates
+   * the rule would leave two identical rows on the day.
+   */
+  const swapPlanDay = (iso: string, id: string, rid: string) =>
+    patch((s) => {
+      const held = s.plan.entries.find((e) => e.id === id);
+      if (!held) return { dayPlan: null };
+      if (held.rid === rid) return { plan: unskip(s.plan, iso, id), dayPlan: null };
+      const skipped = skip(s.plan, iso, id);
+      return {
+        plan: {
+          ...skipped,
+          entries: [
+            ...skipped.entries,
+            { id: newEntryId(), rid, from: iso, repeat: { unit: 'once' } },
+          ],
+        },
+        dayPlan: null,
+      };
+    });
+
+  /** Cancel one occurrence. With nothing left standing the day reads as rest. */
+  const skipPlanDay = (iso: string, id: string) =>
+    patch((s) => ({ plan: skip(s.plan, iso, id), dayPlan: null }));
+
+  /** Put a cancelled occurrence back — the undo for the row above. */
+  const restorePlanDay = (iso: string, id: string) =>
+    patch((s) => ({ plan: unskip(s.plan, iso, id), dayPlan: null }));
+
+  /** Drop a rule outright, and every skip that only existed to cancel it. */
+  const dropPlan = (id: string) =>
+    patch((s) => ({ plan: dropEntries(s.plan, (e) => e.id === id), dayPlan: null }));
 
   const mutRoutine = (rid: string, fn: (r: Routine) => void) => {
     patch((s) => ({
@@ -1228,10 +1536,25 @@ function useWorkoutState() {
     });
   };
 
+  /** Record a sync row as settled over the air — pushed here, or acked there. */
+  const markBuddySynced = (id: string) =>
+    patch((s) => (s.buddySynced.includes(id) ? null : { buddySynced: [...s.buddySynced, id] }));
+
   /* — session lifecycle — */
 
   const start = (rid: string | null | undefined, withBuddy?: 'host' | 'guest') => {
     patch((s) => {
+      // One workout at a time: a Start tap while a session is running
+      // resurfaces it instead of replacing it. Back now tucks a session
+      // behind the tabs rather than swallowing the press, so every Start in
+      // the app is reachable mid-workout — and a second one would throw away
+      // sets that were actually lifted. This is the single choke point, so
+      // "impossible to start another" holds wherever the button lives.
+      // Shared starts (`withBuddy`) pass through: both phones already agreed,
+      // and a one-sided refusal would strand the buddy in a shared session
+      // this phone never joined.
+      if (withBuddy === undefined && s.session)
+        return { sessionMin: false, routineOpen: null, picker: null };
       const r = rid ? s.routines.find((x) => x.id === rid) : null;
       return {
         session: r
@@ -1242,7 +1565,6 @@ function useWorkoutState() {
         routineOpen: null,
         summary: null,
         picker: null,
-        pickWorkout: false,
         // Solo by default — <BuddyRadio> flips this to a hosted shared
         // session right after, if a buddy is connected. `withBuddy` is the
         // co-draft path, where both sides already agreed: it starts shared
@@ -1289,7 +1611,6 @@ function useWorkoutState() {
         routineOpen: null,
         summary: null,
         picker: null,
-        pickWorkout: false,
         sessionShared: true,
         sessionRole: 'guest',
         buddyJoin: null,
@@ -1387,10 +1708,13 @@ function useWorkoutState() {
    * Returns how many sessions came back, which is the only number worth
    * showing: it is what the user is really checking for.
    */
-  const importState = (env: { v: number; data: Record<string, unknown> }): number => {
-    let data = filterPersisted(env.data);
-    if (env.v < 3) data = migrateV2(env.v < 2 ? migrateV1(env.data) : data);
-    const restored = { ...pickPersisted(initialState), ...data };
+  const importState = (env: { v: number; data: Record<string, unknown> }): number | null => {
+    // A backup stamped by a newer build is the one case where a key's shape
+    // may have legitimately changed — that is what the stamp is for — and
+    // "migrate forward" has no backward direction. Refused rather than loaded
+    // raw; the app updates, the file doesn't. The screen says so.
+    if (env.v > STORAGE_VERSION) return null;
+    const restored = { ...pickPersisted(initialState), ...migrateBlob(env.data, env.v) };
     patch(restored);
     // The envelope proves the file is ours, not that every key inside it
     // survived whatever edited it since.
@@ -1411,9 +1735,15 @@ function useWorkoutState() {
         : undefined;
       if (oldName) {
         const { [oldName]: _dropped, ...rest } = s.buddyIds;
+        // The pairing secret follows the rename — it belongs to the buddy, not
+        // to the name they happened to advertise it under.
+        const { [oldName]: movedSecret, ...restSecrets } = s.buddySecrets;
         return {
           knownBuddies: [...s.knownBuddies.filter((n) => n !== oldName && n !== name), name],
           buddyIds: { ...rest, [name]: id! },
+          ...(movedSecret !== undefined
+            ? { buddySecrets: { ...restSecrets, [name]: movedSecret } }
+            : {}),
           ...(s.buddy === oldName ? { buddy: name } : {}),
         };
       }
@@ -1425,6 +1755,19 @@ function useWorkoutState() {
         ...(newId ? { buddyIds: { ...s.buddyIds, [name]: id! } } : {}),
       };
     });
+
+  /**
+   * Record the shared secret for a buddy — minted here on a first pairing, or
+   * adopted from the minting side's hello. Keyed by roster name like
+   * `buddyIds`; a no-op when it already holds this value, so it never churns
+   * persistence on a reconnect.
+   */
+  const recordBuddySecret = (name: string, token: string) =>
+    patch((s) =>
+      s.buddySecrets[name] === token
+        ? null
+        : { buddySecrets: { ...s.buddySecrets, [name]: token } }
+    );
 
   /**
    * Tear the pairing down — both when this phone taps Disconnect and when the
@@ -1442,6 +1785,7 @@ function useWorkoutState() {
       buddy: null,
       buddyEndpoint: null,
       buddySnapshot: null,
+      buddySynced: [],
       buddySync: false,
       buddySyncPending: false,
       pendingAuth: null,
@@ -1468,7 +1812,11 @@ function useWorkoutState() {
     if (state.buddy === name) endPairing();
     patch((s) => {
       const { [name]: _dropped, ...buddyIds } = s.buddyIds;
-      return { knownBuddies: s.knownBuddies.filter((n) => n !== name), buddyIds };
+      // Forgetting a buddy drops the secret too — re-pairing later mints a
+      // fresh one, and a stale secret for a name you no longer trust is exactly
+      // what should not linger.
+      const { [name]: _secret, ...buddySecrets } = s.buddySecrets;
+      return { knownBuddies: s.knownBuddies.filter((n) => n !== name), buddyIds, buddySecrets };
     });
   };
 
@@ -1490,7 +1838,6 @@ function useWorkoutState() {
       return {
         routines: [...s.routines, { id, names: { [s.lang]: L.newRoutine }, items: [] }],
         routineOpen: id,
-        pickWorkout: false,
         coDraft: {
           rid: id,
           role: 'starter' as const,
@@ -1560,7 +1907,7 @@ function useWorkoutState() {
           ),
           buddyPicking: d.picking,
         },
-        ...(open ? { routineOpen: merged.id, pickWorkout: false } : {}),
+        ...(open ? { routineOpen: merged.id } : {}),
       };
     });
   };
@@ -1596,7 +1943,6 @@ function useWorkoutState() {
         routineOpen: null,
         summary: null,
         picker: null,
-        pickWorkout: false,
         sessionShared: true,
         sessionRole: 'guest' as const,
         buddyJoin: 'joined' as const,
@@ -1683,6 +2029,11 @@ function useWorkoutState() {
 
       return {
         session: null,
+        // The rest earned by the final set must not outlive the session:
+        // <RestAlarm> stays mounted after finish and would re-arm a fresh
+        // full-length alarm off the stale stamp — "Rest over", minutes after
+        // the workout ended.
+        rest: null,
         // Finish is the only way out of a session now that Discard is gone, so
         // it has to carry what Discard did: a session where nothing was ticked
         // never happened, and must not land on the calendar as a training day.
@@ -1952,6 +2303,7 @@ function useWorkoutState() {
     moveRoutineItem,
     reorder,
     importFromPeer,
+    markBuddySynced,
     exportState,
     importState,
     start,
@@ -1964,10 +2316,18 @@ function useWorkoutState() {
     mergeFirstUpFrom,
     bidFirst,
     rememberBuddy,
+    recordBuddySecret,
     endPairing,
     forgetBuddy,
     requestSession,
     applyOnboarding,
+    addPlan,
+    editPlan,
+    swapPlanDay,
+    skipPlanDay,
+    restorePlanDay,
+    dropPlan,
+    addSeedRoutine,
     startCoDraft,
     draftPayload,
     applyDraft,

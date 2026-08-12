@@ -8,7 +8,7 @@
  */
 import { useFocusEffect } from 'expo-router';
 import { ReactNode, RefObject, useCallback, useState } from 'react';
-import { ScrollView, StyleProp, ViewStyle } from 'react-native';
+import { KeyboardAvoidingView, ScrollView, StyleProp, ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { RiseIn } from '@/components/motion';
@@ -36,17 +36,23 @@ export function Screen({
   );
 
   return (
-    <ScrollView
-      ref={scrollRef}
-      style={{ flex: 1 }}
-      contentContainerStyle={[
-        { paddingTop: 14 + insets.top, paddingHorizontal: 16, paddingBottom: 8 },
-        contentStyle,
-      ]}
-      keyboardShouldPersistTaps="handled"
-      showsVerticalScrollIndicator={false}
-    >
-      <RiseIn key={focusCount}>{children}</RiseIn>
-    </ScrollView>
+    // The same rule the overlay shells follow (see sheet.tsx): edge-to-edge
+    // made Android's `resize` a no-op, so the shell shrinks itself under the
+    // keyboard — here so a list filtered from the search field can still be
+    // scrolled all the way to its last row while the keyboard is up.
+    <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
+      <ScrollView
+        ref={scrollRef}
+        style={{ flex: 1 }}
+        contentContainerStyle={[
+          { paddingTop: 14 + insets.top, paddingHorizontal: 16, paddingBottom: 8 },
+          contentStyle,
+        ]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <RiseIn key={focusCount}>{children}</RiseIn>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }

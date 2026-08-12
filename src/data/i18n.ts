@@ -6,6 +6,9 @@
  * that is the one kept here.
  */
 
+import { fromISO } from '@/data/date';
+import type { Repeat } from '@/data/plan';
+
 export type Lang = 'en' | 'de';
 
 /**
@@ -41,8 +44,8 @@ export const DICT = {
     // `start` composes with a routine name after it ('Start Chest A'); `startBare`
     // stands alone on a button. Identical in English — German needs the split.
     plannedToday: 'Planned for today', lastDone: 'last done', start: 'Start', startBare: 'Start',
-    orStart: 'Free session ›',
-    doneWord: 'done', plannedWord: 'planned', weeklyPlan: 'Weekly plan · tap to change', new: '+ New', search: 'Search',
+    doneWord: 'done', plannedWord: 'planned', weeklyPlan: 'Weekly plan',
+    new: '+ New', search: 'Search',
     aboutYou: 'About you', training: 'Training', age: 'Age', bodyWeight: 'Body weight', height: 'Height',
     yourName: 'Your name', photo: 'Photo', yrs: 'yrs', machineSetup: 'Machine setup', seatBarHeight: 'Seat / bar height',
     addSetting: '+ Add setting', lastSession: 'Last session', usedIn: 'Used in', howTo: 'How to', close: 'Close',
@@ -84,12 +87,33 @@ export const DICT = {
     restNote: 'Enjoy your day to the fullest.',
     // One term for the freeform session everywhere — it is also what `dayFree`
     // says and the name a logged one is filed under (`freeSession`).
-    emptySession: 'Free session', addAsYouGo: 'add as you go', freeSession: 'Free session', newRoutine: 'New routine',
+    addAsYouGo: 'add as you go', freeSession: 'Free session', newRoutine: 'New routine',
     exCount: 'exercises', exCountOne: 'exercise', setCount: 'sets', setCountOne: 'set',
     ofSets: 'of', setsWord: 'sets', thisMonth: 'This month', volume: 'Volume',
     time: 'Time', loggedMonth: 'logged this month', unscheduled: 'unscheduled', bodyweight: 'bodyweight',
-    dayDone: 'Done — logged this session.', dayPlannedPast: 'Planned, not logged.', dayPlanned: 'Planned.',
+    dayDone: 'Done — logged this session.', dayPlannedPast: 'Planned, not logged.',
     dayFree: 'Nothing planned. Start a free session any time.', addDetails: 'Add your details below',
+    /* — the plan, as dated rules —
+       `repOnce` … `repEveryWeeks` are the generated repeat forms, and the split
+       is where German stops being a translation: English composes uniformly
+       ("every {n} days") where German switches on the count — jeden Tag / alle
+       3 Tage. Two forms per unit, picked by n === 1, because a repeat of one is
+       the common case. `repUnitDay` … are the stepper's own unit word, which
+       follows the same number. */
+    nothingPlanned: 'Nothing planned', planWorkout: '+ Plan a workout', planTitle: 'Plan a workout',
+    planRestore: 'Restore', planLogged: 'logged', planWorkoutField: 'Workout', planRepeats: 'Repeats',
+    repOnce: 'Once', repDays: 'Days', repWeeks: 'Weeks',
+    repUnitDay: 'day', repUnitDays: 'days', repUnitWeek: 'week', repUnitWeeks: 'weeks',
+    repEveryDay: 'Every day', repEveryDays: 'Every {n} days',
+    repEveryWeek: 'Every week', repEveryWeeks: 'Every {n} weeks',
+    repFrom: 'from {date}',
+    planScope: 'Applies to', planScopeDay: 'Just this day', planScopeRule: 'Every repeat',
+    planScopeDayNote: 'Only {date} changes — the repeat stays as it is.',
+    planScopeRuleNote: 'Every repeat changes, from {date} on.',
+    planHoldRemove: 'Hold to remove',
+    planHoldRemoveDay: 'Hold to remove — just this day',
+    planHoldRemoveRule: 'Hold to remove — every repeat',
+    planPickFirst: 'Pick a workout', alsoToday: 'Also today:',
     savedNote: 'Saved to {date}. Next time these numbers show up as “last time”.',
     savedEmpty: 'Nothing was ticked off — nothing logged.', ok: 'Done',
     daysAgo: '{n} days ago', oneDayAgo: 'yesterday',
@@ -205,18 +229,33 @@ export const DICT = {
     authEnterHint: "Enter the code shown on {name}'s phone.",
     authWrong: 'Wrong code — check again.', linkLost: 'Reconnecting…',
     connected: 'Connected', disconnect: 'Disconnect', dividerHint: 'leave empty for a divider', trainingWith: 'training with you',
-    chooseWorkout: 'Choose a workout', thisWeek: 'This week', seePlan: 'See plan', routinesWord: 'routines',
-    chooseRoutine: 'Choose routine',
+    thisWeek: 'This week', seePlan: 'See plan',
     saveAsRoutine: 'Save as new routine', routineSaved: 'Saved to your routines.',
     loggedSessions: 'Logged', withBuddy: 'with {name}',
     noDetail: 'Logged before this phone kept the set-by-set detail.',
     nameRoutine: 'Name this routine',
-    noRoutines: 'No routines yet — build one with “+ New”, or keep a logged session as one from its day on the Plan tab.',
+    noRoutines: 'Nothing of yours yet — take one from the collection, or build your own with + New.',
     noResults: 'Nothing matches that search.',
+    // — the routines tab's controls and the seed collection —
+    searchRoutines: 'Search — name, exercise, muscle',
+    sortWeek: 'Week', sortRecent: 'Recent', sortAZ: 'A–Z',
+    famStrength: 'Strength', famCal: 'Calisthenics', famCardio: 'Cardio', famYours: 'Yours',
+    // The count line under a narrowed list — a short list must read as
+    // narrowed, not as loss.
+    hiddenBySearch: '{n} of {m} — the search hides the rest.',
+    hiddenByFilter: '{n} of {m} — the filter hides the rest.',
+    fullCollection: 'Full collection',
+    collectionSub: 'The built-in routines — add one and it’s yours to change.',
+    // Composes with the onboarding style names ('Recommended · Strength training').
+    recommendedFor: 'Recommended · {style}',
+    onYourList: 'on your list',
+    recently: 'Recently',
     buddySync: 'Buddy sync', sync: 'Sync', connectingTo: 'Connecting to {name}…',
     syncDemoNote: 'Demo transport — nothing leaves this phone yet.',
     missingHere: 'Missing on your phone', missingThere: 'Missing on {name}’s phone',
     transferAll: 'Transfer all', transferOne: 'Transfer', addedMark: 'Added', sentMark: 'Sent',
+    // Sent = the radio delivered it; Received = their phone confirmed the merge.
+    receivedMark: 'Received',
     inSync: 'Everything in sync.',
     typeGroup: 'Group', typeKind: 'Equipment', typeExercise: 'Exercise', typeRoutine: 'Routine',
     nearbyDevice: 'Nearby device',
@@ -242,7 +281,8 @@ export const DICT = {
     jumpTo: 'Go to {ex}',
     planSynced: 'In sync with {name}', planDiffers: "Differs on {name}'s phone",
     planMissing: "Not on {name}'s phone yet",
-    backToWorkout: 'Back to workout', liveSession: 'Live session', me: 'You',
+    backToWorkout: 'Back to workout', workoutRunning: 'Workout running',
+    liveSession: 'Live session', me: 'You',
     about: 'About', version: 'Version', buildKind: 'Build',
     buildStandalone: 'Standalone · real buddy radio', buildSim: 'Expo Go · sim radio',
     buildDemo: 'Expo Go · demo transport', expoSdk: 'Expo SDK',
@@ -279,6 +319,7 @@ export const DICT = {
     importHint: 'Replaces what is on this phone with the contents of a backup file.',
     backupFailed: 'Could not write the backup.',
     restoreFailed: 'That file is not a Spotter backup.',
+    restoreNewer: 'That backup is from a newer Spotter than this one — update the app, then restore.',
     restoreDone: 'Restored — {n} sessions logged.',
     restoreTitle: 'Replace everything?',
     restoreBody:
@@ -362,8 +403,8 @@ export const DICT = {
     // `start` prefixes a routine name ('Starte Brust A'), so it is the one
     // du-imperative on a button; alone that reads wrong, hence `startBare`.
     plannedToday: 'Für heute geplant', lastDone: 'zuletzt', start: 'Starte', startBare: 'Starten',
-    orStart: 'Oder einfach loslegen',
-    doneWord: 'erledigt', plannedWord: 'geplant', weeklyPlan: 'Wochenplan · zum Ändern tippen', new: '+ Neu', search: 'Suchen',
+    doneWord: 'erledigt', plannedWord: 'geplant', weeklyPlan: 'Wochenplan',
+    new: '+ Neu', search: 'Suchen',
     aboutYou: 'Über dich', training: 'Training', age: 'Alter', bodyWeight: 'Körpergewicht', height: 'Größe',
     yourName: 'Dein Name', photo: 'Foto', yrs: 'J.', machineSetup: 'Geräte-Einstellung', seatBarHeight: 'Sitz-/Stangenhöhe',
     addSetting: '+ Einstellung', lastSession: 'Letzte Einheit', usedIn: 'Verwendet in', howTo: 'Anleitung', close: 'Schließen',
@@ -397,12 +438,27 @@ export const DICT = {
     finish: 'Fertig', saved: 'Gespeichert', edit: 'Bearbeiten', editDone: 'Fertig', language: 'Sprache', muscleGroups: 'Muskelgruppen',
     addGroup: '+ Gruppe hinzufügen', addEquipment: '+ Gerät hinzufügen', all: 'Alle', rest: 'Frei', restDay: 'Ruhetag',
     restNote: 'Genieß deinen Tag in vollen Zügen.',
-    emptySession: 'Freies Training', addAsYouGo: 'unterwegs ergänzen', freeSession: 'Freies Training', newRoutine: 'Neue Routine',
+    addAsYouGo: 'unterwegs ergänzen', freeSession: 'Freies Training', newRoutine: 'Neue Routine',
     exCount: 'Übungen', exCountOne: 'Übung', setCount: 'Sätze', setCountOne: 'Satz',
     ofSets: 'von', setsWord: 'Sätze', thisMonth: 'Diesen Monat', volume: 'Volumen',
     time: 'Dauer', loggedMonth: 'diesen Monat erledigt', unscheduled: 'nicht geplant', bodyweight: 'Körpergewicht',
-    dayDone: 'Erledigt — Einheit aufgezeichnet.', dayPlannedPast: 'Geplant, nicht aufgezeichnet.', dayPlanned: 'Geplant.',
+    dayDone: 'Erledigt — Einheit aufgezeichnet.', dayPlannedPast: 'Geplant, nicht aufgezeichnet.',
     dayFree: 'Nichts geplant. Du kannst jederzeit frei trainieren.', addDetails: 'Trag deine Daten unten ein',
+    // Wiederholung, nicht „Repeat“; die Zahl entscheidet zwischen jeden/alle.
+    nothingPlanned: 'Nichts geplant', planWorkout: '+ Training planen', planTitle: 'Training planen',
+    planRestore: 'Zurückholen', planLogged: 'erledigt', planWorkoutField: 'Training', planRepeats: 'Wiederholung',
+    repOnce: 'Einmal', repDays: 'Tage', repWeeks: 'Wochen',
+    repUnitDay: 'Tag', repUnitDays: 'Tage', repUnitWeek: 'Woche', repUnitWeeks: 'Wochen',
+    repEveryDay: 'Jeden Tag', repEveryDays: 'Alle {n} Tage',
+    repEveryWeek: 'Jede Woche', repEveryWeeks: 'Alle {n} Wochen',
+    repFrom: 'ab {date}',
+    planScope: 'Gilt für', planScopeDay: 'Nur diesen Tag', planScopeRule: 'Jede Wiederholung',
+    planScopeDayNote: 'Nur {date} ändert sich — die Wiederholung bleibt.',
+    planScopeRuleNote: 'Jede Wiederholung ändert sich, ab {date}.',
+    planHoldRemove: 'Halten zum Entfernen',
+    planHoldRemoveDay: 'Halten zum Entfernen — nur dieser Tag',
+    planHoldRemoveRule: 'Halten zum Entfernen — jede Wiederholung',
+    planPickFirst: 'Wähl ein Training', alsoToday: 'Heute außerdem:',
     savedNote: 'Für {date} gespeichert. Beim nächsten Mal stehen diese Zahlen unter „letztes Mal“.',
     savedEmpty: 'Nichts abgehakt — nichts gespeichert.', ok: 'Fertig',
     // composed after lastDone ('zuletzt …'), so each carries its own 'vor'
@@ -508,20 +564,33 @@ export const DICT = {
     authEnterHint: 'Gib den Code ein, der auf {name}s Handy steht.',
     authWrong: 'Falscher Code — schau nochmal.', linkLost: 'Verbinde neu…',
     connected: 'Verbunden', disconnect: 'Trennen', dividerHint: 'leer lassen für eine Trennlinie', trainingWith: 'trainiert mit dir',
-    chooseWorkout: 'Training wählen', thisWeek: 'Diese Woche', seePlan: 'Plan ansehen', routinesWord: 'Routinen',
-    chooseRoutine: 'Routine wählen',
+    thisWeek: 'Diese Woche', seePlan: 'Plan ansehen',
     saveAsRoutine: 'Als neue Routine speichern', routineSaved: 'In deinen Routinen gespeichert.',
     loggedSessions: 'Aufgezeichnet', withBuddy: 'mit {name}',
     noDetail: 'Aufgezeichnet, bevor dieses Handy die einzelnen Sätze behalten hat.',
     nameRoutine: 'Name der Routine',
-    noRoutines: 'Noch keine Routinen — erstell eine mit „+ Neu“ oder speichere eine aufgezeichnete Einheit über ihren Tag im Plan-Tab.',
+    noRoutines: 'Noch nichts Eigenes — nimm eine aus der Sammlung oder erstell deine eigene mit + Neu.',
     noResults: 'Nichts passt zu dieser Suche.',
+    // — Routinen-Tab: Steuerung und die mitgelieferte Sammlung —
+    searchRoutines: 'Suche — Name, Übung, Muskel',
+    sortWeek: 'Woche', sortRecent: 'Zuletzt', sortAZ: 'A–Z',
+    famStrength: 'Kraft', famCal: 'Calisthenics', famCardio: 'Cardio', famYours: 'Deine',
+    hiddenBySearch: '{n} von {m} — die Suche blendet den Rest aus.',
+    hiddenByFilter: '{n} von {m} — der Filter blendet den Rest aus.',
+    fullCollection: 'Ganze Sammlung',
+    collectionSub: 'Die mitgelieferten Routinen — füg eine hinzu und sie gehört dir.',
+    recommendedFor: 'Empfohlen · {style}',
+    onYourList: 'auf deiner Liste',
+    recently: 'Zuletzt',
     buddySync: 'Partner-Sync', sync: 'Sync', connectingTo: 'Verbinde mit {name}…',
     syncDemoNote: 'Demo-Übertragung — noch verlässt nichts dieses Handy.',
     // 'Handy', never 'Gerät', for the phone — 'Gerät' is this app's word for
     // equipment, and the sync sheet shows both meanings on one screen.
     missingHere: 'Fehlt auf deinem Handy', missingThere: 'Fehlt bei {name}',
     transferAll: 'Alle übertragen', transferOne: 'Übertragen', addedMark: 'Hinzugefügt', sentMark: 'Gesendet',
+    // „Angekommen“, nicht „Erhalten“ — the mark answers "did it land?", and
+    // arriving is what a thing sent across the room does.
+    receivedMark: 'Angekommen',
     inSync: 'Alles synchron.',
     typeGroup: 'Gruppe', typeKind: 'Gerät', typeExercise: 'Übung', typeRoutine: 'Routine',
     nearbyDevice: 'Handy in der Nähe',
@@ -548,7 +617,8 @@ export const DICT = {
     jumpTo: 'Zu {ex}',
     planSynced: 'Synchron mit {name}', planDiffers: 'Auf {name}s Handy anders',
     planMissing: 'Noch nicht auf {name}s Handy',
-    backToWorkout: 'Zurück zum Training', liveSession: 'Live-Session', me: 'Du',
+    backToWorkout: 'Zurück zum Training', workoutRunning: 'Training läuft',
+    liveSession: 'Live-Session', me: 'Du',
     about: 'Über die App', version: 'Version', buildKind: 'Variante',
     buildStandalone: 'Standalone · echtes Partner-Radio', buildSim: 'Expo Go · Sim-Radio',
     buildDemo: 'Expo Go · Demo-Übertragung', expoSdk: 'Expo SDK',
@@ -582,6 +652,7 @@ export const DICT = {
     importHint: 'Ersetzt alles auf diesem Handy durch den Inhalt einer Backup-Datei.',
     backupFailed: 'Das Backup konnte nicht geschrieben werden.',
     restoreFailed: 'Diese Datei ist kein Spotter-Backup.',
+    restoreNewer: 'Dieses Backup stammt aus einem neueren Spotter — aktualisier erst die App, dann stell es wieder her.',
     restoreDone: 'Wiederhergestellt — {n} Einheiten aufgezeichnet.',
     restoreTitle: 'Alles ersetzen?',
     restoreBody:
@@ -719,3 +790,43 @@ export const fmtLastDone = (L: Strings, days: number) =>
 
 /** '1 exercise' / '3 exercises' — the dictionaries carry both forms. */
 export const countN = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/** The stepper's unit word, which follows its number: 'week' / '2 weeks'. */
+export const repeatUnit = (L: Strings, unit: 'day' | 'week', n: number) =>
+  unit === 'day'
+    ? n === 1
+      ? L.repUnitDay
+      : L.repUnitDays
+    : n === 1
+      ? L.repUnitWeek
+      : L.repUnitWeeks;
+
+/**
+ * A rule in a phrase: 'Every week · Wed', 'Every 3 days', 'Once'.
+ *
+ * The one formatter every surface prints — the Plan row pills, the sheet's
+ * sentence, the Routines card's days line and the routine editor's. Three
+ * screens describing one rule in three phrasings is the bug this pre-empts.
+ */
+export const repeatLabel = (r: Repeat, L: Strings, lang: Lang): string => {
+  if (r.unit === 'once') return L.repOnce;
+  const n = Math.max(1, Math.round(r.n) || 1);
+  if (r.unit === 'day')
+    return n === 1 ? L.repEveryDay : L.repEveryDays.replace('{n}', String(n));
+  const every = n === 1 ? L.repEveryWeek : L.repEveryWeeks.replace('{n}', String(n));
+  const days = [...r.dows].sort((a, b) => a - b).map((d) => DAYS_SHORT[lang][d]);
+  return days.length ? `${every} · ${days.join(' · ')}` : every;
+};
+
+/**
+ * The same rule with its anchor: 'Every week · Thu — from Thu 20 August'.
+ *
+ * The anchor is what makes an every-third-day rule readable at all, which is
+ * why the sheet states it under the control rather than leaving it implied.
+ */
+export const repeatSentence = (r: Repeat, from: string, L: Strings, lang: Lang) => {
+  const date = fmtDayShort(lang, fromISO(from));
+  return r.unit === 'once'
+    ? `${L.repOnce} — ${date}`
+    : `${repeatLabel(r, L, lang)} — ${L.repFrom.replace('{date}', date)}`;
+};

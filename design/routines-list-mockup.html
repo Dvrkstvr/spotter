@@ -1,0 +1,813 @@
+<title>Spotter — Routines list, reworked (mockup)</title>
+<style>
+  /* ── Nocturne, verbatim from src/design/tokens.ts ─────────────────────
+     Single-theme on purpose: this mocks the app's default (blurple · dark),
+     which is byte-identical to the ported design palette. */
+  :root {
+    --bg: #161826;          /* app page */
+    --surface: #232532;
+    --text: #e9e9ed;
+    --accent: #9184d9;
+    --accent2: #a7a1db;
+    --a100: #f5f4ff; --a200: #e7e5fe; --a300: #d2cefd; --a400: #b5abfc;
+    --a700: #5d5294; --a800: #423a6a; --a900: #2b2741;
+    --n100: #f3f5fe; --n400: #b2b6ca; --n500: #9397ab; --n600: #75798c;
+    --n700: #595d6c; --n800: #3f424d; --n900: #292b31;
+    --scrim: #0b0c14;
+    --divider: rgba(233, 233, 237, 0.16);
+    --rule: rgba(233, 233, 237, 0.09);
+    --wash-a16: rgba(145, 132, 217, 0.16);
+    --wash-a10: rgba(145, 132, 217, 0.10);
+    --sans: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--scrim);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 1180px; margin: 0 auto; padding: 56px 28px 96px; }
+
+  .kicker {
+    font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--accent); font-weight: 400;
+  }
+  h1 {
+    font-weight: 500; font-size: 40px; line-height: 1.12;
+    letter-spacing: -0.015em; margin: 10px 0 14px; text-wrap: balance;
+  }
+  h2.sec { font-weight: 500; font-size: 24px; letter-spacing: -0.015em; margin: 0 0 6px; }
+  .lede { color: var(--n400); max-width: 62ch; }
+  .lede strong { color: var(--text); font-weight: 500; }
+
+  .flow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 30px 0 8px; }
+  .flow .step {
+    border: 1px solid var(--divider); border-radius: 8px;
+    padding: 5px 12px; font-size: 12.5px; color: var(--n400);
+    background: var(--bg); white-space: nowrap;
+  }
+  .flow .step em { font-style: normal; color: var(--text); }
+  .flow .arrow { color: var(--n600); font-size: 13px; }
+
+  hr.fade {
+    border: 0; height: 1px; margin: 52px 0;
+    background: linear-gradient(90deg, transparent, var(--divider) 48px, var(--divider) calc(100% - 48px), transparent);
+  }
+
+  .shot { display: grid; grid-template-columns: 348px 1fr; gap: 44px; align-items: start; }
+  .shot .notes { padding-top: 8px; max-width: 58ch; }
+  .notes ul { margin: 14px 0 0; padding-left: 18px; color: var(--n400); font-size: 14px; display: grid; gap: 9px; }
+  .notes li::marker { color: var(--n700); }
+  .notes strong { color: var(--text); font-weight: 500; }
+  .notes code {
+    font-family: var(--mono); font-size: 12.5px; color: var(--a300);
+    background: var(--n900); border-radius: 4px; padding: 1px 5px;
+  }
+  @media (max-width: 880px) { .shot { grid-template-columns: 1fr; } }
+
+  /* ── phone frame ── */
+  .phone {
+    width: 348px; height: 748px; background: var(--bg);
+    border: 1px solid var(--n800); border-radius: 30px;
+    overflow: hidden; display: flex; flex-direction: column;
+    box-shadow: 0 16px 40px rgba(0,0,0,0.55);
+  }
+  .status {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 20px 4px; font-size: 11.5px; color: var(--n500); flex: none;
+  }
+  .batt { display: inline-block; width: 18px; height: 9px; border: 1px solid var(--n600); border-radius: 2px; position: relative; }
+  .batt::after { content: ""; position: absolute; inset: 1.5px 30% 1.5px 1.5px; background: var(--n500); border-radius: 1px; }
+  .screen { flex: 1; padding: 8px 18px 0; overflow: hidden; position: relative; display: flex; flex-direction: column; }
+  .tabs {
+    flex: none; display: flex; border-top: 1px solid var(--rule);
+    padding: 9px 6px 14px; background: rgba(22, 24, 38, 0.92);
+  }
+  .tabs span { flex: 1; text-align: center; font-size: 9.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--n600); position: relative; padding-top: 7px; }
+  .tabs span.on { color: var(--a200); }
+  .tabs span.on::before { content: ""; position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 16px; height: 2px; background: var(--accent); border-radius: 1px; }
+
+  /* in-phone primitives */
+  .sc-h2 { font-weight: 500; font-size: 26px; letter-spacing: -0.015em; line-height: 1.12; }
+  .sc-sub { font-size: 12.5px; color: var(--n500); margin-top: 3px; }
+  .sc-h6 { font-size: 11px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--n500); }
+  .ghost { font-size: 13px; color: var(--accent); }
+  .seg { display: inline-flex; border: 1px solid var(--divider); border-radius: 8px; overflow: hidden; }
+  .seg span { padding: 5px 12px; font-size: 12px; color: var(--text); }
+  .seg span + span { border-left: 1px solid var(--divider); }
+  .seg span.on { color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip {
+    border: 1px solid var(--divider); border-radius: 6px;
+    padding: 4px 10px; font-size: 11.5px; color: var(--n400);
+  }
+  .chip.on { border-color: var(--accent); background: var(--wash-a16); color: var(--a200); }
+
+  /* routine card — today's card, condensed */
+  .r-card {
+    background: var(--surface); border-bottom: 1px solid var(--rule);
+    border-radius: 8px; padding: 9px 13px 7px; margin-top: 7px;
+  }
+  .r-card .top { display: flex; align-items: baseline; gap: 9px; }
+  .r-card .name { font-weight: 500; font-size: 16px; }
+  .r-card .days { margin-left: auto; font-size: 11px; color: var(--n600); white-space: nowrap; }
+  .r-card .days em { font-style: normal; color: var(--a300); }
+  .r-card .sum { font-size: 11.5px; color: var(--n500); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .r-card .act { display: flex; justify-content: flex-end; margin-top: 2px; }
+  .r-card .act span { font-size: 12.5px; color: var(--accent); padding: 3px 0; }
+
+  /* collection rows */
+  .grp-head { display: flex; align-items: baseline; gap: 8px; margin-top: 14px; padding-bottom: 5px; border-bottom: 1px solid var(--rule); }
+  .grp-head .n { margin-left: auto; font-size: 11px; color: var(--n600); font-variant-numeric: tabular-nums; }
+  .grp-head .chev { font-size: 12px; color: var(--n600); }
+  .coll-row { display: flex; align-items: center; gap: 10px; padding: 7.5px 2px; border-bottom: 1px solid var(--rule); }
+  .coll-row .txt { flex: 1; min-width: 0; }
+  .coll-row .nm { font-size: 13.5px; }
+  .coll-row .meta { font-size: 11px; color: var(--n600); margin-top: 1px; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .plus {
+    width: 26px; height: 26px; flex: none; border: 1px solid var(--divider); border-radius: 7px;
+    display: grid; place-items: center; font-size: 15px; color: var(--accent); line-height: 1;
+  }
+  .have { flex: none; display: flex; align-items: center; gap: 5px; font-size: 10.5px; color: var(--n600); }
+  .have .tick {
+    width: 15px; height: 15px; border: 1px solid var(--a700); border-radius: 4px;
+    background: var(--wash-a16); display: grid; place-items: center; font-size: 9px; color: var(--a200);
+  }
+  .dimline { font-size: 12px; color: var(--n500); line-height: 1.5; }
+
+  /* search field — the Library's .input grammar */
+  .search {
+    display: flex; align-items: center; gap: 8px;
+    border: 1px solid var(--divider); background: var(--surface); border-radius: 8px;
+    padding: 7px 11px; font-size: 12.5px; color: var(--n600); margin-top: 10px;
+  }
+  .search svg { flex: none; }
+  .search .q { color: var(--text); }
+  .search .caret { display: inline-block; width: 1px; height: 13px; background: var(--accent); vertical-align: -2px; }
+  .search .x { margin-left: auto; color: var(--n500); font-size: 13px; }
+  .why { color: var(--a300); }
+
+  /* free-session row — the quiet escape hatch */
+  .free-row {
+    display: flex; align-items: center; gap: 10px; margin-top: 7px;
+    padding: 8px 13px; border: 1px dashed var(--divider); border-radius: 8px;
+  }
+  .free-row .nm { font-size: 13.5px; }
+  .free-row .meta { margin-left: auto; font-size: 11px; color: var(--n600); }
+  .free-row .chev { color: var(--accent); font-size: 14px; }
+
+  /* Today's week strip */
+  .wk { display: flex; gap: 5px; margin-top: 8px; }
+  .wk .d {
+    flex: 1; text-align: center; padding: 7px 0 8px;
+    border: 1px solid transparent; border-radius: 8px;
+  }
+  .wk .d .lbl { font-size: 9.5px; letter-spacing: 0.06em; color: var(--n500); }
+  .wk .d .dot { width: 6px; height: 6px; border-radius: 3px; margin: 6px auto 0; }
+  .wk .d .dot.done { background: var(--accent); }
+  .wk .d .dot.plan { border: 1px solid var(--n500); }
+  .wk .d .dot.rest { width: 8px; height: 1px; border-radius: 0; background: var(--n700); margin-top: 8.5px; }
+  .wk .d.today { border-color: var(--a700); background: var(--wash-a10); }
+  .wk .d.today .lbl { color: var(--a200); }
+
+  .qs { margin: 16px 0 0; padding-left: 18px; color: var(--n400); font-size: 14px; display: grid; gap: 10px; max-width: 68ch; }
+  .qs li::marker { color: var(--n700); }
+  .qs strong { color: var(--text); font-weight: 500; }
+  .qs code { font-family: var(--mono); font-size: 12.5px; color: var(--a300); background: var(--n900); border-radius: 4px; padding: 1px 5px; }
+  figcaption, .cap { font-size: 10.5px; color: var(--n600); margin-top: 7px; }
+</style>
+
+<div class="page">
+
+  <header>
+    <div class="kicker">Spotter · design mockup · 12 Aug 2026</div>
+    <h1>The Routines tab, reworked</h1>
+    <p class="lede">
+      Today the tab is a flat list in the order things happened to arrive. The rework gives it
+      <strong>search, an order control and a filter row</strong> — and puts <strong>the full
+      seed collection on the same screen</strong>, grouped the way onboarding already thinks:
+      the routines recommended for how you train first, then the other families. Search reads
+      the library, not just the titles — <em>back</em> finds every routine that trains the
+      back. And with the tab now the one place that starts anything, <strong>Today's
+      "choose a workout" row retires</strong>, which pays for a lighter Today.
+    </p>
+    <div class="flow" aria-label="the screen, top to bottom">
+      <span class="step"><em>Search</em> · names, exercises, muscles</span><span class="arrow">→</span>
+      <span class="step"><em>Yours</em> · ordered &amp; filtered</span><span class="arrow">→</span>
+      <span class="step"><em>Full collection</em> · recommended first</span><span class="arrow">→</span>
+      <span class="step"><em>+</em> adds a copy to yours</span>
+    </div>
+  </header>
+
+  <hr class="fade">
+
+  <!-- ════════ 01 · YOUR LIST, ORDERED ════════ -->
+  <section class="shot" id="list">
+    <figure class="phone" aria-label="Routines tab with sort and filter controls">
+      <div class="status"><span>18:41</span><span class="batt"></span></div>
+      <div class="screen">
+        <div style="display:flex; align-items:center; justify-content:space-between;">
+          <div class="sc-h2">Routines</div>
+          <span class="ghost">+ New</span>
+        </div>
+
+        <div class="search">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#75798c" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          Search — name, exercise, muscle
+        </div>
+
+        <div style="margin-top:9px; display:flex; align-items:center; gap:8px;">
+          <span class="seg"><span class="on">Week</span><span>Recent</span><span>A–Z</span></span>
+        </div>
+        <div class="chips" style="margin-top:8px;">
+          <span class="chip on">All</span><span class="chip">Strength</span><span class="chip">Calisthenics</span><span class="chip">Cardio</span><span class="chip">Yours</span>
+        </div>
+
+        <div style="margin-top:6px;">
+          <div class="r-card">
+            <div class="top"><span class="name">Back A</span><span class="days"><em>Wed · today</em></span></div>
+            <div class="sum">Pull-up · Barbell Row · Lat Pulldown · Bicep Curl</div>
+            <div class="act"><span>Start ›</span></div>
+          </div>
+          <div class="r-card">
+            <div class="top"><span class="name">Legs A</span><span class="days">Fri</span></div>
+            <div class="sum">Back Squat · Romanian Deadlift · Leg Press · Standing Calf Raise</div>
+            <div class="act"><span>Start ›</span></div>
+          </div>
+          <div class="r-card">
+            <div class="top"><span class="name">Chest A</span><span class="days">Mon</span></div>
+            <div class="sum">Bench Press · Incline Dumbbell Press · Cable Fly · Triceps Pushdown</div>
+            <div class="act"><span>Start ›</span></div>
+          </div>
+          <div class="r-card">
+            <div class="top"><span class="name">Push day</span><span class="days">unscheduled</span></div>
+            <div class="sum">Bench Press · Pike Push-up · Dip · Lateral Raise</div>
+            <div class="act"><span>Start ›</span></div>
+          </div>
+          <div class="r-card">
+            <div class="top"><span class="name">Row 5k</span><span class="days">unscheduled</span></div>
+            <div class="sum">Rowing Machine</div>
+            <div class="act"><span>Start ›</span></div>
+          </div>
+        </div>
+
+        <!-- the escape hatch, moved here from Today's choose-a-workout sheet -->
+        <div class="free-row">
+          <span class="nm">Free session</span>
+          <span class="meta">add as you go</span>
+          <span class="chev">›</span>
+        </div>
+
+        <!-- the collection peeking in from below — one scroll, one screen -->
+        <div class="grp-head" style="margin-top:14px;">
+          <span class="sc-h6">Full collection</span>
+        </div>
+        <div class="dimline" style="margin-top:5px;">The built-in routines — add one and it's yours to change.</div>
+      </div>
+      <div class="tabs"><span>Today</span><span>Plan</span><span class="on">Routines</span><span>Library</span><span>You</span></div>
+    </figure>
+
+    <div class="notes">
+      <div class="kicker">01</div>
+      <h2 class="sec">Yours, in an order you chose</h2>
+      <ul>
+        <li><strong>Search sits above everything</strong> and reads more than titles — names,
+          the exercises inside, and their muscle groups, in both languages. Section 02 shows
+          it working; the field is the Library's <code>Input</code>, same placement, same
+          grammar.</li>
+        <li><strong>Week is the default order</strong>: scheduled routines from today forward
+          (it's Wednesday, so Back A leads and Monday's Chest A files last), unscheduled ones
+          after, in the order they were made. The list's job is "what am I starting?", and the
+          schedule already answers it.</li>
+        <li><strong>Free session moves in from Today's chooser</strong> — a dashed row under
+          yours, above the shelf: present wherever starting happens, quiet enough to never
+          compete with a card. Dashed is the app's "not yet a fact" grammar (the waiting set
+          row, the held CTA), which is exactly what an empty session is.</li>
+        <li><strong>Recent</strong> is last-trained first, read from <code>history</code> by
+          <code>rid</code> — never-trained sinks to the bottom. <strong>A–Z</strong> is the
+          name in the active language, resolved through <code>rInfo</code>.</li>
+        <li>The seg only <em>reads</em>; nothing is rearranged in the store. There is no manual
+          drag order to protect — today's "order" is an accident of insertion, which is the
+          thing being replaced.</li>
+        <li><strong>The filter chips are the three style families plus Yours.</strong> A
+          routine's family is derived, never tagged: the dominant <code>styleOf</code> across
+          its items — the same fact onboarding reads through
+          <code>routineStyleScore</code> — so saved-as-routine and buddy-built routines file
+          themselves. <em>Yours</em> is anything whose id isn't a seed's.</li>
+        <li>Sort and filter are <strong>session state, not persisted</strong> — the same
+          decision as the Library's filter and the settings folds (<code>Fold</code>).</li>
+        <li>The cards keep today's grammar — name, days, summary, <code>Start ›</code> — one
+          line tighter. Today's day marks itself; the rest of the row stays quiet.</li>
+      </ul>
+    </div>
+  </section>
+
+  <hr class="fade">
+
+  <!-- ════════ 02 · SEARCH ════════ -->
+  <section class="shot" id="search">
+    <figure class="phone" aria-label="Searching for back across both halves">
+      <div class="status"><span>18:42</span><span class="batt"></span></div>
+      <div class="screen">
+        <div style="display:flex; align-items:center; justify-content:space-between;">
+          <div class="sc-h2">Routines</div>
+          <span class="ghost">+ New</span>
+        </div>
+
+        <div class="search">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#75798c" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <span class="q">back<span class="caret"></span></span>
+          <span class="x">×</span>
+        </div>
+
+        <div class="chips" style="margin-top:9px;">
+          <span class="chip on">All</span><span class="chip">Strength</span><span class="chip">Calisthenics</span><span class="chip">Cardio</span><span class="chip">Yours</span>
+        </div>
+
+        <div style="margin-top:6px;">
+          <div class="r-card">
+            <div class="top"><span class="name">Back A</span><span class="days"><em>Wed · today</em></span></div>
+            <div class="sum">Pull-up · Barbell Row · Lat Pulldown · Bicep Curl</div>
+            <div class="act"><span>Start ›</span></div>
+          </div>
+        </div>
+        <div class="dimline" style="margin-top:8px;">1 of 5 — the search hides the rest.</div>
+
+        <div class="grp-head" style="margin-top:14px;">
+          <span class="sc-h6">Full collection</span>
+        </div>
+        <div class="grp-head">
+          <span class="sc-h6" style="color:var(--a200);">Recommended · Strength training</span>
+          <span class="n">4</span><span class="chev">▾</span>
+        </div>
+        <div class="coll-row">
+          <div class="txt"><div class="nm">Chest &amp; Back</div><div class="meta"><span class="why">Seated Row — Back</span> · 5 exercises</div></div>
+          <span class="plus">+</span>
+        </div>
+        <div class="coll-row">
+          <div class="txt"><div class="nm">Legs B</div><div class="meta"><span class="why">Deadlift — Lower back</span> · 4 exercises</div></div>
+          <span class="plus">+</span>
+        </div>
+        <div class="coll-row">
+          <div class="txt"><div class="nm">Full Body A</div><div class="meta"><span class="why">Barbell Row — Back</span> · 5 exercises</div></div>
+          <span class="plus">+</span>
+        </div>
+        <div class="coll-row">
+          <div class="txt"><div class="nm">Back A</div><div class="meta">4 exercises · 14 sets</div></div>
+          <span class="have"><span class="tick">✓</span>on your list</span>
+        </div>
+
+        <div class="grp-head">
+          <span class="sc-h6">Calisthenics</span>
+          <span class="n">2</span><span class="chev">▾</span>
+        </div>
+        <div class="coll-row">
+          <div class="txt"><div class="nm">Pull &amp; core</div><div class="meta"><span class="why">Pull-up · Inverted Row — Back</span></div></div>
+          <span class="plus">+</span>
+        </div>
+        <div class="coll-row">
+          <div class="txt"><div class="nm">Full body · no kit</div><div class="meta"><span class="why">Inverted Row — Back</span> · 5 exercises</div></div>
+          <span class="plus">+</span>
+        </div>
+      </div>
+      <div class="tabs"><span>Today</span><span>Plan</span><span class="on">Routines</span><span>Library</span><span>You</span></div>
+    </figure>
+
+    <div class="notes">
+      <div class="kicker">02</div>
+      <h2 class="sec">Search reads the library, not the titles</h2>
+      <ul>
+        <li><strong>A match is a name, an exercise inside, or a muscle group</strong> —
+          resolved through <code>rInfo</code> / <code>exInfo</code> / <code>gInfo</code>
+          across every language a thing is named in, the same way the Library's search
+          already matches group labels. <em>back</em> and <em>Rücken</em> find the same
+          rows.</li>
+        <li>That's why <strong>Legs B turns up</strong>: nothing in its title says back, but
+          the Deadlift files under Lower back. The point of searching by muscle is surfacing
+          exactly the routine whose name wouldn't have told you.</li>
+        <li><strong>A found row says why it was found.</strong> While a query is live, the
+          meta line leads with the matching exercise and its group — <em>Deadlift · Lower
+          back</em> — because a result that can't explain itself reads as a bug. A row
+          matched on its own name keeps its ordinary counts.</li>
+        <li>Search composes with the chips (intersection) and spans both halves, like the
+          filter. Groups with no matches drop out whole — the Library hides empty groups the
+          same way — and the free-session row sits out: it has no name to match.</li>
+        <li>The sort seg steps aside while a query is live; results order by where the match
+          is (name first, then exercise, then group), which is relevance without inventing a
+          score.</li>
+      </ul>
+    </div>
+  </section>
+
+  <hr class="fade">
+
+  <!-- ════════ 03 · FULL COLLECTION ════════ -->
+  <section class="shot" id="collection">
+    <figure class="phone" aria-label="Full collection grouped by recommendation">
+      <div class="status"><span>18:42</span><span class="batt"></span></div>
+      <div class="screen">
+        <div class="grp-head" style="margin-top:4px;">
+          <span class="sc-h6">Full collection</span>
+        </div>
+        <div class="dimline" style="margin-top:5px;">The built-in routines — add one and it's yours to change.</div>
+
+        <div class="grp-head">
+          <span class="sc-h6" style="color:var(--a200);">Recommended · Strength training</span>
+          <span class="n">6</span><span class="chev">▾</span>
+        </div>
+        <div class="coll-row">
+          <div class="txt"><div class="nm">Chest A</div><div class="meta">4 exercises · 13 sets</div></div>
+          <span class="have"><span class="tick">✓</span>on your list</span>
+        </div>
+        <div class="coll-row">
+          <div class="txt"><div class="nm">Chest &amp; Back</div><div class="meta">5 exercises · 17 sets</div></div>
+          <span class="plus">+</span>
+        </div>
+        <div class="coll-row">
+          <div class="txt"><div class="nm">Legs A</div><div class="meta">4 exercises · 13 sets</div></div>
+          <span class="have"><span class="tick">✓</span>on your list</span>
+        </div>
+        <div class="coll-row">
+          <div class="txt"><div class="nm">Legs B</div><div class="meta">4 exercises · 13 sets</div></div>
+          <span class="plus">+</span>
+        </div>
+        <div class="coll-row">
+          <div class="txt"><div class="nm">Full Body A</div><div class="meta">5 exercises · 17 sets</div></div>
+          <span class="plus">+</span>
+        </div>
+        <div class="coll-row">
+          <div class="txt"><div class="nm">Back A</div><div class="meta">4 exercises · 14 sets</div></div>
+          <span class="have"><span class="tick">✓</span>on your list</span>
+        </div>
+
+        <div class="grp-head">
+          <span class="sc-h6">Calisthenics</span>
+          <span class="n">5</span><span class="chev">▾</span>
+        </div>
+        <div class="coll-row">
+          <div class="txt"><div class="nm">Push · no kit</div><div class="meta">4 exercises · 13 sets</div></div>
+          <span class="plus">+</span>
+        </div>
+        <div class="coll-row">
+          <div class="txt"><div class="nm">Pull &amp; core</div><div class="meta">4 exercises · 13 sets</div></div>
+          <span class="plus">+</span>
+        </div>
+        <div class="coll-row">
+          <div class="txt"><div class="nm">Legs · no kit</div><div class="meta">4 exercises · 13 sets</div></div>
+          <span class="plus">+</span>
+        </div>
+        <div class="coll-row" style="opacity:0.75;">
+          <div class="txt"><div class="nm">Full body · no kit</div><div class="meta">5 exercises · 15 sets</div></div>
+          <span class="plus">+</span>
+        </div>
+
+        <div class="grp-head">
+          <span class="sc-h6">Cardio</span>
+          <span class="n">4</span><span class="chev">›</span>
+        </div>
+      </div>
+      <div class="tabs"><span>Today</span><span>Plan</span><span class="on">Routines</span><span>Library</span><span>You</span></div>
+    </figure>
+
+    <div class="notes">
+      <div class="kicker">03</div>
+      <h2 class="sec">The collection, grouped the way onboarding thinks</h2>
+      <ul>
+        <li><strong>The recommended group is onboarding's pick list, verbatim</strong>:
+          <code>routineInStyle</code> filters, <code>routineStyleScore</code> orders — so
+          Back A appears here (its pull-up makes it a little calisthenics) but ranks under the
+          all-strength days, exactly as it does in the tour. One ordering, computed in one
+          place, shown in two rooms.</li>
+        <li>The heading names the style — <em>Recommended · Strength training</em> — so the
+          group explains itself, and re-running setup with a new answer visibly regroups the
+          shelf. Under <code>mixed</code> there is no recommended group at all: "don't sort
+          it" is the option's whole promise, so the three families stand in catalogue order.</li>
+        <li><strong>The other groups are the remaining seeds by their own family</strong> —
+          whatever the recommended group claimed doesn't repeat below. Groups fold like the
+          settings lists, recommended open by default, the rest closed
+          (<code>Fold</code>, session-local).</li>
+        <li><strong>+ installs what onboarding would have installed</strong>: a fresh copy of
+          the seed, level-scaled, non-<code>regular</code> numbers marked
+          <code>planned</code> — the same literal <code>applyOnboarding</code> writes, so an
+          added routine is indistinguishable from a picked one.</li>
+        <li>A seed already on your list shows <strong>on your list</strong> instead of +, and
+          tapping the row jumps to its card above. Removing stays where it is — the editor's
+          held delete — and the row here simply returns to +. Re-adding hands back a fresh
+          scaled copy, which is what "run setup again" already means for an unticked seed.</li>
+        <li>The collection can never shrink or grow: it renders <code>DEFAULT_ROUTINES</code>
+          straight from code, names resolved per language like every seed. Nothing here is
+          persisted.</li>
+      </ul>
+    </div>
+  </section>
+
+  <hr class="fade">
+
+  <!-- ════════ 04 · FILTER SPANS BOTH ════════ -->
+  <section class="shot" id="filter">
+    <figure class="phone" aria-label="Cardio filter narrowing both halves">
+      <div class="status"><span>18:43</span><span class="batt"></span></div>
+      <div class="screen">
+        <div style="display:flex; align-items:center; justify-content:space-between;">
+          <div class="sc-h2">Routines</div>
+          <span class="ghost">+ New</span>
+        </div>
+
+        <div style="margin-top:10px;"><span class="seg"><span class="on">Week</span><span>Recent</span><span>A–Z</span></span></div>
+        <div class="chips" style="margin-top:8px;">
+          <span class="chip">All</span><span class="chip">Strength</span><span class="chip">Calisthenics</span><span class="chip on">Cardio</span><span class="chip">Yours</span>
+        </div>
+
+        <div style="margin-top:6px;">
+          <div class="r-card">
+            <div class="top"><span class="name">Row 5k</span><span class="days">unscheduled</span></div>
+            <div class="sum">Rowing Machine</div>
+            <div class="act"><span>Start ›</span></div>
+          </div>
+        </div>
+        <div class="dimline" style="margin-top:8px;">1 of 5 — the filter hides the rest.</div>
+
+        <div class="grp-head" style="margin-top:16px;">
+          <span class="sc-h6">Full collection</span>
+        </div>
+        <div class="grp-head">
+          <span class="sc-h6">Cardio</span>
+          <span class="n">4</span><span class="chev">▾</span>
+        </div>
+        <div class="coll-row">
+          <div class="txt"><div class="nm">Easy run</div><div class="meta">1 exercise · 1 set</div></div>
+          <span class="plus">+</span>
+        </div>
+        <div class="coll-row">
+          <div class="txt"><div class="nm">Intervals</div><div class="meta">2 exercises · 9 sets</div></div>
+          <span class="plus">+</span>
+        </div>
+        <div class="coll-row">
+          <div class="txt"><div class="nm">Row 5k</div><div class="meta">1 exercise · 1 set</div></div>
+          <span class="have"><span class="tick">✓</span>on your list</span>
+        </div>
+        <div class="coll-row">
+          <div class="txt"><div class="nm">Ride · steady</div><div class="meta">1 exercise · 1 set</div></div>
+          <span class="plus">+</span>
+        </div>
+      </div>
+      <div class="tabs"><span>Today</span><span>Plan</span><span class="on">Routines</span><span>Library</span><span>You</span></div>
+    </figure>
+
+    <div class="notes">
+      <div class="kicker">04</div>
+      <h2 class="sec">One filter, both halves</h2>
+      <ul>
+        <li><strong>The chip narrows yours and the collection in the same stroke.</strong> A
+          filter that only thinned the top half would leave the shelf below contradicting it;
+          filtering to Cardio and being shown three strength days to add is the screen
+          arguing with itself.</li>
+        <li>Under a family chip the <strong>recommended group steps aside</strong> — the
+          question changed from "what suits how I train?" to "what cardio is there?", and the
+          honest answer is the family, whole, in catalogue order.</li>
+        <li>The count line says what the filter is doing — <em>1 of 5</em> — so a
+          short list reads as filtered, not as loss. Same reason the Insights footer discloses
+          <code>looseSets</code>: a narrowed view says so, or it lies.</li>
+        <li><em>Yours</em> filters to non-seed ids and hides the collection entirely — every
+          row down there is by definition not yours.</li>
+        <li>The filter never touches what a chip can't see: scheduling, history and the
+          session are indifferent to it. It is a lens on this screen and nothing else.</li>
+      </ul>
+    </div>
+  </section>
+
+  <hr class="fade">
+
+  <!-- ════════ 05 · EMPTY STATE ════════ -->
+  <section class="shot" id="empty">
+    <figure class="phone" aria-label="Empty list with the collection as the screen">
+      <div class="status"><span>18:44</span><span class="batt"></span></div>
+      <div class="screen">
+        <div style="display:flex; align-items:center; justify-content:space-between;">
+          <div class="sc-h2">Routines</div>
+          <span class="ghost">+ New</span>
+        </div>
+        <div class="dimline" style="margin-top:10px;">Nothing of yours yet — take one from the collection, or build your own with + New.</div>
+
+        <div class="grp-head" style="margin-top:14px;">
+          <span class="sc-h6">Full collection</span>
+        </div>
+        <div class="grp-head">
+          <span class="sc-h6" style="color:var(--a200);">Recommended · Calisthenics</span>
+          <span class="n">7</span><span class="chev">▾</span>
+        </div>
+        <div class="coll-row">
+          <div class="txt"><div class="nm">Push · no kit</div><div class="meta">4 exercises · 13 sets</div></div>
+          <span class="plus">+</span>
+        </div>
+        <div class="coll-row">
+          <div class="txt"><div class="nm">Pull &amp; core</div><div class="meta">4 exercises · 13 sets</div></div>
+          <span class="plus">+</span>
+        </div>
+        <div class="coll-row">
+          <div class="txt"><div class="nm">Legs · no kit</div><div class="meta">4 exercises · 13 sets</div></div>
+          <span class="plus">+</span>
+        </div>
+        <div class="coll-row">
+          <div class="txt"><div class="nm">Full body · no kit</div><div class="meta">5 exercises · 15 sets</div></div>
+          <span class="plus">+</span>
+        </div>
+        <div class="coll-row">
+          <div class="txt"><div class="nm">Skill work</div><div class="meta">3 exercises · 12 sets</div></div>
+          <span class="plus">+</span>
+        </div>
+        <div class="coll-row" style="opacity:0.8;">
+          <div class="txt"><div class="nm">Full Body A</div><div class="meta">5 exercises · 17 sets</div></div>
+          <span class="plus">+</span>
+        </div>
+        <div class="coll-row" style="opacity:0.8;">
+          <div class="txt"><div class="nm">Back A</div><div class="meta">4 exercises · 14 sets</div></div>
+          <span class="plus">+</span>
+        </div>
+
+        <div class="grp-head">
+          <span class="sc-h6">Strength</span>
+          <span class="n">4</span><span class="chev">›</span>
+        </div>
+        <div class="grp-head">
+          <span class="sc-h6">Cardio</span>
+          <span class="n">4</span><span class="chev">›</span>
+        </div>
+      </div>
+      <div class="tabs"><span>Today</span><span>Plan</span><span class="on">Routines</span><span>Library</span><span>You</span></div>
+    </figure>
+
+    <div class="notes">
+      <div class="kicker">05</div>
+      <h2 class="sec">Empty means the shelf, not a sentence</h2>
+      <ul>
+        <li>With no routines of yours, <strong>the collection is the screen</strong>. The
+          current <code>noRoutines</code> paragraph — build one, or rescue a logged day from
+          the Plan tab — retires; a shelf of things to take beats an explanation of
+          where things could come from.</li>
+        <li>This phone answered <em>calisthenics</em> at onboarding and skipped the pick step —
+          the recommended group carries the fringe cases the score keeps honest: Full Body A
+          (one plank in five lines) and Back A (one pull-up in four) appear, but rank under
+          the all-bodyweight days. The strength family below holds only what recommendation
+          didn't claim, so its count reads 4, not 6.</li>
+        <li>Sort and filter controls don't render on an empty list — a seg ordering nothing
+          is furniture.</li>
+        <li>One line of copy does the pointing, in the register the app already speaks:
+          mechanism first, no exclamation mark, <code>+ New</code> named exactly as the
+          button is.</li>
+      </ul>
+    </div>
+  </section>
+
+  <hr class="fade">
+
+  <!-- ════════ 06 · TODAY, LIGHTER ════════ -->
+  <section class="shot" id="today">
+    <figure class="phone" aria-label="Today tab, redesigned">
+      <div class="status"><span>18:45</span><span class="batt"></span></div>
+      <div class="screen">
+        <div style="display:flex; align-items:baseline; justify-content:space-between;">
+          <div class="sc-h2">Today</div>
+          <span style="font-size:12px; color:var(--n500);">Wed, 12 Aug</span>
+        </div>
+
+        <div style="margin-top:12px; border-radius:12px; padding:13px 15px 14px; background:linear-gradient(150deg, var(--a900), var(--surface) 62%);">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span class="kicker">Planned today</span>
+            <span style="margin-left:auto; font-size:11px; color:var(--n500);">last · 7 days ago</span>
+          </div>
+          <div style="display:flex; align-items:flex-end; gap:10px; margin-top:5px;">
+            <span style="font-weight:500; font-size:21px; letter-spacing:-0.015em;">Back A</span>
+            <span style="font-size:12px; color:var(--n500); padding-bottom:2px;">4 exercises · 14 sets</span>
+          </div>
+          <div style="margin-top:10px; display:grid; gap:3px; font-size:12.5px;">
+            <div style="display:flex; gap:10px;"><span style="flex:1; color:var(--n400);">Pull-up</span><span style="color:var(--n500); font-variant-numeric:tabular-nums;">4 × BW × 8</span></div>
+            <div style="display:flex; gap:10px;"><span style="flex:1; color:var(--n400);">Barbell Row</span><span style="color:var(--n500); font-variant-numeric:tabular-nums;">4 × 60 kg × 8</span></div>
+            <div style="display:flex; gap:10px;"><span style="flex:1; color:var(--n400);">Lat Pulldown</span><span style="color:var(--n500); font-variant-numeric:tabular-nums;">3 × 52.5 kg × 10</span></div>
+            <div style="display:flex; gap:10px;"><span style="flex:1; color:var(--n400);">Bicep Curl</span><span style="color:var(--n500); font-variant-numeric:tabular-nums;">3 × 14 kg × 12</span></div>
+          </div>
+          <div style="margin-top:13px; border:1px solid var(--accent); border-radius:8px; padding:10px 0; text-align:center; font-size:14.5px; font-weight:500; color:var(--accent);">Start Back A</div>
+        </div>
+
+        <div style="display:flex; align-items:baseline; justify-content:space-between; margin-top:18px;">
+          <span class="sc-h6">This week</span>
+          <span class="ghost" style="font-size:12.5px;">See plan ›</span>
+        </div>
+        <div class="wk">
+          <div class="d"><div class="lbl">MON</div><div class="dot done"></div></div>
+          <div class="d"><div class="lbl">TUE</div><div class="dot rest"></div></div>
+          <div class="d today"><div class="lbl">WED</div><div class="dot plan"></div></div>
+          <div class="d"><div class="lbl">THU</div><div class="dot rest"></div></div>
+          <div class="d"><div class="lbl">FRI</div><div class="dot plan"></div></div>
+          <div class="d"><div class="lbl">SAT</div><div class="dot rest"></div></div>
+          <div class="d"><div class="lbl">SUN</div><div class="dot rest"></div></div>
+        </div>
+
+        <div class="sc-h6" style="margin-top:18px;">Recently</div>
+        <div class="coll-row">
+          <div class="txt"><div class="nm">Chest A</div><div class="meta">Mon · 13 sets · 4,490 kg · 52 min</div></div>
+          <span style="color:var(--accent); font-size:14px;">›</span>
+        </div>
+        <div class="coll-row" style="border-bottom:none;">
+          <div class="txt"><div class="nm">Free session</div><div class="meta">Sat · 8 sets · 1,860 kg · 39 min</div></div>
+          <span style="color:var(--accent); font-size:14px;">›</span>
+        </div>
+
+        <div style="flex:1;"></div>
+      </div>
+      <div class="tabs"><span class="on">Today</span><span>Plan</span><span>Routines</span><span>Library</span><span>You</span></div>
+    </figure>
+
+    <div class="notes">
+      <div class="kicker">06</div>
+      <h2 class="sec">Today, with the chooser gone</h2>
+      <ul>
+        <li><strong>The "or start ›" row and its sheet retire together.</strong>
+          <code>PickWorkoutSheet</code> listed every routine plus Free session — the reworked
+          Routines tab, one tab-tap away, does the same job with search, order and the
+          collection behind it. <code>pickWorkout</code> was never persisted, so the key and
+          the sheet simply go.</li>
+        <li>The sheet's <strong>build-together row moves to the Routines tab</strong>, beside
+          Free session, gated on the live buddy link exactly as before — building a routine
+          together starts where routines live.</li>
+        <li><strong>The hero is untouched in essence</strong>: done-today badge, last-done
+          line, plan-sync with the buddy, the back-to-session guard on Start. It was already
+          the screen's point; now it's more alone in being it.</li>
+        <li><strong>Seven week rows become one strip.</strong> The rows duplicated Plan's
+          list one screen away from Plan. The strip keeps the glance — full dot trained, ring
+          planned, dash rest, today framed — in the calendar's own dot grammar, and keeps the
+          tap (the same day-picker sheet). What it gives back is most of the screen.</li>
+        <li><strong>Recently is new</strong>: the last two <code>history</code> entries — name
+          frozen at log time, volume as <code>totals()</code> wrote it — each tapping through
+          to its day on Plan. The diary tab finally shows a little diary.</li>
+        <li>On a rest day the hero's Start gives way to a ghost <strong>Free session ›</strong>
+          — the current rest-day note points at the chooser row this redesign removes, so the
+          way out moves into the card that names the rest.</li>
+      </ul>
+    </div>
+  </section>
+
+  <hr class="fade">
+
+  <!-- ════════ DECISIONS ════════ -->
+  <section id="decisions">
+    <div class="kicker">The rules that hold it together</div>
+    <h2 class="sec" style="margin-top:10px;">Decisions</h2>
+    <ul class="qs">
+      <li><strong>One ordering, computed in one place.</strong> The recommended group is
+        onboarding's list — <code>routineInStyle</code> + <code>routineStyleScore</code> over
+        <code>DEFAULT_ROUTINES</code> — factored out of the overlay so the tour and the tab can
+        never disagree about what "recommended" means.</li>
+      <li><strong>Family is derived, never stored.</strong> Dominant <code>styleOf</code> over a
+        routine's items, computed for seeds and user routines alike. No new field on
+        <code>Routine</code>, nothing to migrate, and a routine edited toward cardio drifts into
+        the cardio chip by itself.</li>
+      <li><strong>Adding is <code>applyOnboarding</code>'s move for one routine</strong> — fresh
+        copy, level-scaled, <code>planned</code> marks, same-id replace. An added seed must be
+        indistinguishable from a picked one, or it reaches a buddy as a different shape.</li>
+      <li><strong>Sort, filter and the query are UI state.</strong> In the store beside
+        <code>filter</code>, outside <code>PERSIST</code> — a fresh launch opens on Week · All,
+        empty search. No <code>STORAGE_VERSION</code> bump anywhere in this feature.</li>
+      <li><strong>Search matches what the screen can explain.</strong> Routine names, exercise
+        names and group labels, all languages, through the store's resolvers — never raw
+        <code>.names</code>/<code>.labels</code>. The why-line quotes the match, so nothing
+        turns up that the row can't account for.</li>
+      <li><strong>Retiring the chooser deletes, it doesn't strand.</strong>
+        <code>pickWorkout</code> and <code>PickWorkoutSheet</code> go; Free session and
+        build-together land on the Routines tab; the rest-day pointer moves into the hero.
+        Every job the sheet had is reassigned before the sheet goes.</li>
+      <li><strong>The collection reads, the editor writes.</strong> No delete, no rename, no
+        reorder down on the shelf; a seed's row flips between + and <em>on your list</em> and
+        that is its entire state space.</li>
+      <li><strong>Strings to add</strong>: the three sort labels, the family chips,
+        <em>Full collection</em>, its one-line sub, <em>Recommended · {style}</em> (reusing the
+        onboarding style names), <em>on your list</em>, and the empty-state line — German
+        written, not translated, per the copy audit.</li>
+    </ul>
+
+    <h2 class="sec" style="margin-top:36px;">Settled while building</h2>
+    <ul class="qs">
+      <li><strong>The week strip's tap edits</strong> — <code>dayPick</code>, the same schedule
+        sheet the seven rows opened. Calvin's call, and the heading already promises it:
+        "Weekly plan · tap to change".</li>
+      <li><strong>Today's day label keeps its accent</strong> on the Routines card, and Recently
+        keeps its rows — both earn their place once there is history to draw.</li>
+      <li><strong>"Yours" stayed a chip.</strong> A tag on the card would say which routines are
+        custom; only a chip lets you ask to see just those.</li>
+      <li><strong>The recommended group re-ranks live</strong> — it is computed at render from
+        <code>s.style</code>, so re-running setup regroups the shelf with no event to fire.</li>
+      <li><strong>The why-line names the group only when the group matched.</strong> Found while
+        testing: "Back Squat" answers <em>back</em> by its own name, and the first draft still
+        printed "— Quads" beside it, which reads as though Quads had matched.</li>
+      <li><strong>The first shelf group opens, the rest stay folded.</strong> Unfolding all of
+        them on an empty list was a screen and a half of rows; a live search or filter holds
+        every surviving group open, because results hidden behind a fold read as no results.</li>
+    </ul>
+  </section>
+
+</div>

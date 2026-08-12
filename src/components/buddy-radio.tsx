@@ -22,15 +22,20 @@ import { useEffect, useRef } from 'react';
 
 import { ensureRadioPermissions, radio } from '@/data/buddy-radio';
 import {
+  authProof,
   decodePeerName,
   diffBuddy,
   encodePeerName,
-  isKnownPeer,
   matchesBuddy,
   parseBuddyMessage,
+  type PeerIdentity,
   progressOf,
+  proofOk,
+  randomToken,
+  rosterNameFor,
   routineClosure,
   shareableSlice,
+  syncItemId,
 } from '@/data/buddy-sync';
 import { myName, Session, State, Store, useStore } from '@/store/workout-store';
 
@@ -44,6 +49,18 @@ export function BuddyRadio() {
   useEffect(() => {
     ref.current = store;
   });
+
+  // Per-connection handshake state, all transient (a link never outlives the
+  // app). `meta` remembers what the connection-initiated event told us — the
+  // shared auth digits the proof binds to, which side requested (the requester
+  // mints the secret), and the peer's advertised identity — until `onConnected`
+  // can act on it. `authed` is the set of endpoints that have proved the
+  // pairing secret: nothing sensitive is sent to, or accepted from, an
+  // endpoint that isn't in it.
+  const meta = useRef<
+    Map<string, { digits: string; incoming: boolean; peer: PeerIdentity; first?: boolean }>
+  >(new Map());
+  const authed = useRef<Set<string>>(new Set());
 
   /* — advertising + discovery, driven by what the user is doing — */
 
@@ -222,6 +239,30 @@ export function BuddyRadio() {
     const r = radio;
     if (!r) return;
 
+    // Trust an endpoint: mark it authenticated, make it the buddy link, and
+    // send the two things that used to go out unconditionally on connect — our
+    // snapshot and any pending join-ask. Called on a code-gated first pairing
+    // and after a reconnecting peer's proof checks out, never before.
+    const trust = (endpointId: string) => {
+      const st = ref.current;
+      authed.current.add(endpointId);
+      if (st.s.buddyEndpoint !== endpointId) st.patch({ buddyEndpoint: endpointId });
+      r.sendPayload(
+        endpointId,
+        JSON.stringify({
+          v: 1,
+          t: 'snapshot',
+          name: myName(st.s),
+          id: st.s.selfId,
+          data: shareableSlice(st.s),
+        })
+      ).catch(() => {});
+      // This phone opened the link to ask something — the ask follows the
+      // snapshot, so the other side knows who is asking by the time it lands.
+      if (st.s.joinSent?.state === 'waiting')
+        r.sendPayload(endpointId, JSON.stringify({ v: 1, t: 'joinAsk' })).catch(() => {});
+    };
+
     const subs = [
       r.addListener('onEndpointFound', (e) => {
         const st = ref.current;
@@ -257,24 +298,33 @@ export function BuddyRadio() {
 
       // First pairing is code-gated: both phones show Nearby's auth digits
       // and both users confirm (the scan sheet renders the code; accept /
-      // reject happen there). Re-pairing with the already-trusted buddy is
-      // silent — that's the standing-pairing reconnect.
+      // reject happen there). A silent reconnect is allowed only for a buddy
+      // we already share a secret with — which they then have to *prove* after
+      // connect (see the `hello` handler) before this phone trusts them.
       r.addListener('onConnectionInitiated', (e) => {
         const st = ref.current;
         const peer = decodePeerName(e.name);
-        // Already trusted — this run or a previous one, by recorded install
-        // id or by name. No code, no sheet.
-        if (
-          (st.s.buddy !== null && matchesBuddy(st.s.buddy, st.s.buddyIds[st.s.buddy], peer)) ||
-          isKnownPeer(st.s, peer)
-        ) {
+        meta.current.set(e.endpointId, {
+          digits: e.authDigits,
+          incoming: e.isIncoming,
+          peer,
+        });
+
+        // A buddy we hold a pairing secret for reconnects with no code and no
+        // sheet — accepting the raw (encrypted) link is safe because the
+        // secret, proved over it, is the real gate now.
+        const roster = rosterNameFor(st.s, peer);
+        if (roster !== null && st.s.buddySecrets[roster] !== undefined) {
           r.acceptConnection(e.endpointId).catch(() => {});
           return;
         }
-        // Strangers only pair through the code check, and the code only
-        // shows in the share sheet — anyone knocking while we're not in
-        // share mode (e.g. an ex-buddy's phone auto-reconnecting after a
-        // one-sided disconnect) is turned away.
+
+        // Everyone else pairs only through the code check, and the code only
+        // shows in the share sheet: a stranger, an ex-buddy's phone
+        // auto-reconnecting after a one-sided disconnect, an impersonator
+        // advertising a known buddy's name, *and* a genuine buddy paired
+        // before secrets existed — all re-pair by code, which is what mints
+        // the secret. Anyone knocking while we're not sharing is turned away.
         if (!st.s.scanning) {
           r.rejectConnection(e.endpointId).catch(() => {});
           return;
@@ -303,33 +353,63 @@ export function BuddyRadio() {
       r.addListener('onConnected', (e) => {
         const st = ref.current;
         const pa = st.s.pendingAuth;
-        st.patch({
-          buddyEndpoint: e.endpointId,
-          scanning: false,
-          // A confirmed first pairing waits for the peer's snapshot — the
-          // sync screen only opens if the two sides differ. A silent
-          // reconnect changes nothing on screen.
-          ...(pa && pa.endpointId === e.endpointId
-            ? { buddy: pa.name, pendingAuth: null, buddySyncPending: true }
-            : {}),
-        });
+        const first = !!(pa && pa.endpointId === e.endpointId);
+        const info = meta.current.get(e.endpointId);
+        if (info) info.first = first;
+
+        if (first) {
+          // Code-authenticated by the users just now, so trust is already
+          // established: mark the link, set the buddy, and let the snapshot
+          // flow as before (the sync screen opens only if the sides differ).
+          // The added job is seeding the pairing secret for every future
+          // reconnect — the requester (non-incoming side) mints it and ships
+          // it in its hello; the other side adopts it. Exactly one minter.
+          st.patch({ scanning: false, buddy: pa!.name, pendingAuth: null, buddySyncPending: true });
+          const cur = ref.current;
+          const hello: Record<string, unknown> = {
+            v: 1,
+            t: 'hello',
+            name: myName(cur.s),
+            id: cur.s.selfId,
+          };
+          if (info && !info.incoming) {
+            const token = cur.s.buddySecrets[pa!.name] ?? randomToken();
+            cur.recordBuddySecret(pa!.name, token);
+            hello.newToken = token;
+          }
+          r.sendPayload(e.endpointId, JSON.stringify(hello)).catch(() => {});
+          trust(e.endpointId);
+          return;
+        }
+
+        // A reconnect proves the secret before anything sensitive crosses, so
+        // buddyEndpoint is NOT set yet — `trust` does that once their proof
+        // checks out. `onConnectionInitiated` only accepted this link because
+        // we hold a secret for them, so it is there; send our proof and wait.
+        const roster = info ? rosterNameFor(st.s, info.peer) : null;
+        const secret = roster ? st.s.buddySecrets[roster] : undefined;
+        if (!secret) {
+          r.disconnectFrom(e.endpointId).catch(() => {});
+          return;
+        }
+        const digits = info?.digits ?? '';
         r.sendPayload(
           e.endpointId,
           JSON.stringify({
             v: 1,
-            t: 'snapshot',
+            t: 'hello',
             name: myName(st.s),
             id: st.s.selfId,
-            data: shareableSlice(st.s),
+            proof: authProof(secret, digits),
           })
         ).catch(() => {});
-        // This phone opened the link to ask something — the ask follows the
-        // snapshot, so the other side knows who is asking by the time it lands.
-        if (st.s.joinSent?.state === 'waiting')
-          r.sendPayload(e.endpointId, JSON.stringify({ v: 1, t: 'joinAsk' })).catch(() => {});
       }),
 
-      r.addListener('onDisconnected', (e) =>
+      r.addListener('onDisconnected', (e) => {
+        // The handshake state for this link dies with it — a fresh connection
+        // re-derives digits and must re-prove the secret.
+        meta.current.delete(e.endpointId);
+        authed.current.delete(e.endpointId);
         ref.current.patch((s) =>
           s.buddyEndpoint === e.endpointId
             ? {
@@ -342,14 +422,45 @@ export function BuddyRadio() {
                 ...(s.sessionShared ? {} : { buddySnapshot: null }),
               }
             : null
-        )
-      ),
+        );
+      }),
 
       r.addListener('onPayload', (e) => {
         const msg = parseBuddyMessage(e.data);
         if (!msg) return;
         const st = ref.current;
+        // Nothing but a hello is honoured from an endpoint that hasn't proved
+        // the pairing secret — a reconnecting peer's snapshot, item merge,
+        // session invite and draft all wait behind `trust`. This is the line
+        // that stops a name-only impersonator: it connects, but every
+        // sensitive message it sends lands here and is dropped.
+        if (msg.t !== 'hello' && !authed.current.has(e.endpointId)) return;
         switch (msg.t) {
+          case 'hello': {
+            const info = meta.current.get(e.endpointId);
+            const digits = info?.digits ?? '';
+            if (info?.first) {
+              // Code-gated first pairing — the code was the gate, and the
+              // snapshot has already been exchanged. Adopt the minted secret
+              // (present only in the minting side's hello) and mark trusted.
+              if (typeof msg.newToken === 'string' && msg.newToken)
+                st.recordBuddySecret(st.s.buddy ?? msg.name, msg.newToken);
+              authed.current.add(e.endpointId);
+              break;
+            }
+            // Reconnect: their proof must match the secret we hold for them,
+            // bound to this connection's digits. If it doesn't — an
+            // impersonator, or a peer that lost its secret — drop the link
+            // rather than trust it.
+            const roster = info ? rosterNameFor(st.s, info.peer) : (st.s.buddy ?? null);
+            const secret = roster ? st.s.buddySecrets[roster] : undefined;
+            if (!proofOk(secret, msg.proof, digits)) {
+              r.disconnectFrom(e.endpointId).catch(() => {});
+              break;
+            }
+            trust(e.endpointId);
+            break;
+          }
           case 'snapshot':
             // A snapshot only ever arrives from a peer we accepted, so this
             // is the moment a pairing becomes a pairing — and the moment a
@@ -371,6 +482,10 @@ export function BuddyRadio() {
               return {
                 buddy: msg.name,
                 buddySnapshot: snapshot,
+                // A fresh snapshot re-baselines the diff, so the settled set
+                // starts over with it — a stale id from an earlier round
+                // could dress a row this diff still owes a transfer.
+                buddySynced: [],
                 // Somebody is here again — the "they left" line has had its say.
                 buddyLeft: null,
                 ...(diff
@@ -384,7 +499,20 @@ export function BuddyRadio() {
             break;
           case 'item':
             // The buddy pushed an item — same merge as tapping Transfer here.
-            if (st.s.buddySnapshot) st.importFromPeer(st.s.buddySnapshot, msg.item);
+            // Recording the id flips the row on this phone's sync screen, and
+            // the ack is what turns their Sent into Received: delivery said
+            // the bytes arrived, this says the merge ran.
+            if (st.s.buddySnapshot) {
+              st.importFromPeer(st.s.buddySnapshot, msg.item);
+              const id = syncItemId(msg.item);
+              st.markBuddySynced(id);
+              r.sendPayload(e.endpointId, JSON.stringify({ v: 1, t: 'itemAck', id })).catch(
+                () => {}
+              );
+            }
+            break;
+          case 'itemAck':
+            st.markBuddySynced(msg.id);
             break;
           case 'sessionInvite':
             st.patch({ buddyInvite: msg.invite });

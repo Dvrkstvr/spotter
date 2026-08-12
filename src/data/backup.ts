@@ -32,6 +32,10 @@ const isEnvelope = (raw: unknown): raw is Envelope =>
   typeof raw === 'object' &&
   raw !== null &&
   (raw as Envelope).app === 'spotter' &&
+  // The version is load-bearing — it decides which migrations run and whether
+  // the file is from a newer build — so a file that lost it is not provably a
+  // backup any more, and must not take the loaded-raw path by default.
+  Number.isFinite((raw as Envelope).v) &&
   typeof (raw as Envelope).data === 'object' &&
   (raw as Envelope).data !== null;
 

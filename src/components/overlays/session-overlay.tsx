@@ -11,9 +11,10 @@
  * are once-a-session actions that were costing permanent screen space.
  *
  * One primary button sits at the bottom and always names what it will do:
- * Log set → Next exercise → Finish workout. Android's keyboard resizes the
- * screen (`softwareKeyboardLayoutMode: resize`), so it lands directly above
- * the keys while you're typing.
+ * Log set → Next exercise → Finish workout. While you type it lands directly
+ * above the keys — the shell's KeyboardAvoidingView shrinks the overlay by
+ * the keyboard's height (`softwareKeyboardLayoutMode: resize` used to do
+ * this, until SDK 54's enforced edge-to-edge made it a no-op; see sheet.tsx).
  *
  * In a shared session the turn hint moves into the exercise itself, between
  * the name and its sets, with the take-turns/parallel chip beside it — the
@@ -119,10 +120,16 @@ export function SessionOverlay() {
   // screen on while a session is open. Also just right for a logging screen.
   useKeepAwake();
 
-  // No back route in the design — only Discard and Finish. Swallow it so a
-  // stray press cannot throw away a workout in progress. The overview sheet
+  // Back tucks the workout behind the tabs and lands on Today — the same move
+  // the buddy tap already makes, with a different destination. It is not an
+  // exit: nothing is discarded, the clock keeps running, and Today's hero card
+  // says so with the way back on it. Finish (held) is still the only way to
+  // end a session, which is what makes a stray press cheap. The overview sheet
   // mounts later and so wins back first; that's the useBackClose contract.
-  useBackClose(() => {}, { swallow: true });
+  useBackClose(() => {
+    patch({ sessionMin: true });
+    router.navigate('/');
+  });
 
   const session = s.session;
 

@@ -8,7 +8,12 @@
  * Missing translations from the #4 alias model ride along in both lists.
  *
  * The diff is computed once per connect so rows don't vanish as they're
- * transferred — each just flips to its Added/Sent mark.
+ * transferred — each just flips to its Added/Sent mark. Rows also settle from
+ * the far side (`buddySynced` — the radio writes it, this screen only reads):
+ * an item the buddy pushes flips its own row here the moment it merges, and
+ * their ack upgrades a Sent to Received — delivery says the bytes arrived,
+ * the ack says the merge ran. A pulled item acks too, so a Transfer tap on
+ * either phone settles the matching row on the other.
  */
 import { useEffect, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
@@ -83,7 +88,12 @@ export function BuddySyncOverlay() {
   const receive = (item: SyncItem) => {
     if (!snapshot) return;
     importFromPeer(snapshot, item);
-    mark(syncItemId(item));
+    const id = syncItemId(item);
+    mark(id);
+    // Tell the peer the item landed — their "Missing on {name}" row flips to
+    // Received without anyone over there touching anything.
+    if (radio && endpoint)
+      radio.sendPayload(endpoint, JSON.stringify({ v: 1, t: 'itemAck', id })).catch(() => {});
   };
 
   const send = (item: SyncItem) => {
@@ -100,7 +110,13 @@ export function BuddySyncOverlay() {
     }
   };
 
-  const pending = (list: SyncItem[]) => list.filter((i) => !done.has(syncItemId(i)));
+  // Rows settled over the air count as done everywhere a tally is taken.
+  const synced = new Set(s.buddySynced);
+  const pending = (list: SyncItem[]) =>
+    list.filter((i) => {
+      const id = syncItemId(i);
+      return !done.has(id) && !synced.has(id);
+    });
 
   return (
     <FullScreen zIndex={79}>
@@ -128,7 +144,9 @@ export function BuddySyncOverlay() {
               title={L.missingHere}
               items={diff.receive}
               done={done}
+              synced={synced}
               doneMark={L.addedMark}
+              syncedMark={L.addedMark}
               onTransfer={receive}
               onTransferAll={() => pending(diff.receive).forEach(receive)}
               L={L}
@@ -138,7 +156,9 @@ export function BuddySyncOverlay() {
               title={L.missingThere.replace('{name}', snapshot.peer.name)}
               items={diff.send}
               done={done}
+              synced={synced}
               doneMark={L.sentMark}
+              syncedMark={L.receivedMark}
               onTransfer={send}
               onTransferAll={() => pending(diff.send).forEach(send)}
               L={L}
@@ -158,7 +178,9 @@ function Section({
   title,
   items,
   done,
+  synced,
   doneMark,
+  syncedMark,
   onTransfer,
   onTransferAll,
   L,
@@ -166,8 +188,12 @@ function Section({
 }: {
   title: string;
   items: SyncItem[];
+  /** settled by a tap on this phone */
   done: Set<string>;
+  /** settled over the air — pushed here, or acked from over there */
+  synced: Set<string>;
   doneMark: string;
+  syncedMark: string;
   onTransfer: (item: SyncItem) => void;
   onTransferAll: () => void;
   L: Strings;
@@ -184,7 +210,10 @@ function Section({
     routine: L.typeRoutine,
   };
 
-  const anyPending = items.some((i) => !done.has(syncItemId(i)));
+  const anyPending = items.some((i) => {
+    const id = syncItemId(i);
+    return !done.has(id) && !synced.has(id);
+  });
 
   return (
     <View>
@@ -202,7 +231,8 @@ function Section({
 
       {items.map((item) => {
         const id = syncItemId(item);
-        const isDone = done.has(id);
+        const isSynced = synced.has(id);
+        const isDone = isSynced || done.has(id);
         const name = resolveNames(item.names, lang, item.fallback);
         return (
           <View key={id} style={styles.row}>
@@ -220,7 +250,7 @@ function Section({
             {isDone ? (
               <View style={styles.doneMark}>
                 <Icon d={CHECK_D} size={12} strokeWidth={2.2} color={c.accent400} />
-                <Text style={styles.doneMarkText}>{doneMark}</Text>
+                <Text style={styles.doneMarkText}>{isSynced ? syncedMark : doneMark}</Text>
               </View>
             ) : (
               <Btn

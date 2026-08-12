@@ -1,0 +1,1170 @@
+<title>Spotter — The Plan screen, reworked (mockup)</title>
+<style>
+  /* ── Nocturne, verbatim from src/design/tokens.ts ─────────────────────
+     Single-theme on purpose: this mocks the app's default (blurple · dark),
+     which is byte-identical to the ported design palette. */
+  :root {
+    --bg: #161826;          /* app page */
+    --surface: #232532;
+    --text: #e9e9ed;
+    --accent: #9184d9;
+    --accent2: #a7a1db;
+    --a100: #f5f4ff; --a200: #e7e5fe; --a300: #d2cefd; --a400: #b5abfc;
+    --a700: #5d5294; --a800: #423a6a; --a900: #2b2741;
+    --n100: #f3f5fe; --n300: #cbcedd; --n400: #b2b6ca; --n500: #9397ab; --n600: #75798c;
+    --n700: #595d6c; --n800: #3f424d; --n900: #292b31;
+    --scrim: #0b0c14;
+    --divider: rgba(233, 233, 237, 0.16);
+    --rule: rgba(233, 233, 237, 0.09);
+    --wash-t8: rgba(233, 233, 237, 0.08);
+    --wash-a16: rgba(145, 132, 217, 0.16);
+    --wash-a10: rgba(145, 132, 217, 0.10);
+    --sans: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--scrim);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 1180px; margin: 0 auto; padding: 56px 28px 96px; }
+
+  .kicker {
+    font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--accent); font-weight: 400;
+  }
+  h1 {
+    font-weight: 500; font-size: 40px; line-height: 1.12;
+    letter-spacing: -0.015em; margin: 10px 0 14px; text-wrap: balance;
+  }
+  h2.sec { font-weight: 500; font-size: 24px; letter-spacing: -0.015em; margin: 0 0 6px; }
+  h3.sub { font-weight: 500; font-size: 15px; margin: 26px 0 0; }
+  .lede { color: var(--n400); max-width: 62ch; }
+  .lede strong { color: var(--text); font-weight: 500; }
+
+  .flow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 30px 0 8px; }
+  .flow .step {
+    border: 1px solid var(--divider); border-radius: 8px;
+    padding: 5px 12px; font-size: 12.5px; color: var(--n400);
+    background: var(--bg); white-space: nowrap;
+  }
+  .flow .step em { font-style: normal; color: var(--text); }
+  .flow .arrow { color: var(--n600); font-size: 13px; }
+
+  .settled {
+    margin: 26px 0 0; border: 1px solid var(--divider); border-left: 2px solid var(--accent);
+    border-radius: 8px; padding: 13px 16px; max-width: 78ch;
+  }
+  .settled .h { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); }
+  .settled ul { margin: 9px 0 0; padding-left: 18px; color: var(--n400); font-size: 13.5px; display: grid; gap: 6px; }
+  .settled li::marker { color: var(--n700); }
+  .settled strong { color: var(--text); font-weight: 500; }
+
+  hr.fade {
+    border: 0; height: 1px; margin: 52px 0;
+    background: linear-gradient(90deg, transparent, var(--divider) 48px, var(--divider) calc(100% - 48px), transparent);
+  }
+
+  .shot { display: grid; grid-template-columns: 348px 1fr; gap: 44px; align-items: start; }
+  .shot .notes { padding-top: 8px; max-width: 58ch; }
+  .notes ul { margin: 14px 0 0; padding-left: 18px; color: var(--n400); font-size: 14px; display: grid; gap: 9px; }
+  .notes li::marker { color: var(--n700); }
+  .notes strong { color: var(--text); font-weight: 500; }
+  .notes code, .qs code, td code {
+    font-family: var(--mono); font-size: 12.5px; color: var(--a300);
+    background: var(--n900); border-radius: 4px; padding: 1px 5px;
+  }
+  ul.qs { margin: 14px 0 0; padding-left: 18px; color: var(--n400); font-size: 14px; display: grid; gap: 11px; max-width: 78ch; }
+  ul.qs li::marker { color: var(--n700); }
+  ul.qs strong { color: var(--text); font-weight: 500; }
+  @media (max-width: 880px) { .shot { grid-template-columns: 1fr; } }
+
+  /* ── phone frame ── */
+  .phone {
+    width: 348px; height: 748px; background: var(--bg);
+    border: 1px solid var(--n800); border-radius: 30px;
+    overflow: hidden; display: flex; flex-direction: column;
+    box-shadow: 0 16px 40px rgba(0,0,0,0.55); position: relative;
+  }
+  .status {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 20px 4px; font-size: 11.5px; color: var(--n500); flex: none;
+  }
+  .batt { display: inline-block; width: 18px; height: 9px; border: 1px solid var(--n600); border-radius: 2px; position: relative; }
+  .batt::after { content: ""; position: absolute; inset: 1.5px 30% 1.5px 1.5px; background: var(--n500); border-radius: 1px; }
+  .screen { flex: 1; padding: 4px 18px 0; overflow: hidden; position: relative; display: flex; flex-direction: column; }
+  .tabs {
+    flex: none; display: flex; border-top: 1px solid var(--rule);
+    padding: 9px 6px 14px; background: rgba(22, 24, 38, 0.92);
+  }
+  .tabs span { flex: 1; text-align: center; font-size: 9.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--n600); position: relative; padding-top: 7px; }
+
+  /* in-phone primitives */
+  .sc-h2 { font-weight: 500; font-size: 26px; letter-spacing: -0.015em; line-height: 1.12; }
+  .sc-h4 { font-weight: 500; font-size: 17px; letter-spacing: -0.01em; }
+  .sc-h6 { font-size: 11px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--n500); }
+  .ghost { font-size: 13px; color: var(--accent); }
+  .back { font-size: 13px; color: var(--accent); padding: 4px 0; display: inline-block; }
+  .dim { color: var(--n500); }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    border: 1px solid var(--divider); border-radius: 8px;
+    padding: 7px 14px; font-size: 13px; font-weight: 500; color: var(--text);
+  }
+  .btn.pri { background: var(--accent); border-color: var(--accent); color: #14121f; }
+  .btn.block { display: flex; width: 100%; }
+  .btn.dash { border-style: dashed; color: var(--n400); }
+  .seg { display: inline-flex; border: 1px solid var(--divider); border-radius: 8px; overflow: hidden; }
+  .seg span { padding: 5px 13px; font-size: 12px; color: var(--text); }
+  .seg span + span { border-left: 1px solid var(--divider); }
+  .seg span.on { color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+
+  /* ── month header + calendar ── */
+  .month-row { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; }
+  .month-nav { display: flex; align-items: center; gap: 4px; }
+  .month-nav .chev { font-size: 18px; color: var(--accent); padding: 0 4px; }
+  .month-meta { font-size: 11px; color: var(--n500); font-variant-numeric: tabular-nums; }
+
+  .cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; margin-top: 9px; }
+  .cal .dw {
+    text-align: center; font-size: 9.5px; letter-spacing: 0.07em;
+    color: var(--n600); padding-bottom: 2px;
+  }
+  .cal .cell {
+    aspect-ratio: 1; border-radius: 7px; border: 1px solid transparent;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  }
+  .cal .cell .num { font-size: 12px; color: var(--n300); font-variant-numeric: tabular-nums; }
+  .cal .cell.past .num { color: var(--n600); }
+  .cal .cell .bar { width: 15px; height: 2.5px; border-radius: 2px; background: transparent; }
+  .cal .cell.done .bar { background: var(--accent); }
+  .cal .cell.plan .bar { background: var(--a800); }
+  .cal .cell.sel { background: var(--a900); border-color: var(--a700); }
+  .cal .cell.now .num { color: var(--a200); }
+
+  .legend { display: flex; gap: 14px; margin-top: 10px; }
+  .legend .it { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--n500); }
+  .legend .bar { width: 15px; height: 2.5px; border-radius: 2px; }
+
+  /* ── the day panel ── */
+  .day {
+    margin-top: 12px; background: var(--surface); border-radius: 10px;
+    padding: 11px 13px 9px;
+  }
+  .day .dh { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
+  .day .db { font-size: 12px; color: var(--n500); margin-top: 3px; }
+  .day .none { font-size: 15px; color: var(--n500); margin-top: 4px; }
+  .day .foot { display: flex; align-items: center; gap: 12px; margin-top: 9px; }
+
+  /* one planned workout inside the day panel */
+  .prow { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid var(--rule); }
+  .prow:first-of-type { border-top: 0; margin-top: 2px; }
+  .prow .txt { flex: 1; min-width: 0; }
+  .prow .nm { font-size: 14.5px; }
+  .prow .sub { font-size: 11px; color: var(--n600); margin-top: 1px; }
+  .prow .rep {
+    font-size: 10.5px; color: var(--a300); white-space: nowrap;
+    border: 1px solid var(--a800); border-radius: 5px; padding: 1px 6px;
+  }
+  .prow .rep.once { color: var(--n500); border-color: var(--divider); }
+  .prow .tick { font-size: 11px; color: var(--a400); white-space: nowrap; }
+  .prow .go { font-size: 12.5px; color: var(--accent); white-space: nowrap; }
+  .prow.off { border: 1px dashed var(--divider); border-radius: 8px; padding: 8px 10px; margin-top: 6px; }
+  .prow.off .nm { color: var(--n600); }
+  .prow.off .rep { color: var(--n600); border-color: var(--divider); }
+
+  /* ── logged sessions ── */
+  .log { background: var(--surface); border-radius: 10px; padding: 11px 13px; margin-top: 7px; }
+  .log .top { display: flex; align-items: baseline; gap: 8px; }
+  .log .nm { font-size: 14px; }
+  .log .bud { margin-left: auto; font-size: 10.5px; color: var(--a300); }
+  .log .stats { font-size: 11px; color: var(--n500); margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .log .ex { margin-top: 8px; }
+  .log .ex .et { display: flex; align-items: baseline; gap: 8px; }
+  .log .ex .en { font-size: 12.5px; color: var(--n300); }
+  .log .ex .ec { margin-left: auto; font-size: 10.5px; color: var(--n600); }
+  .log .sets { display: flex; flex-wrap: wrap; gap: 3px 10px; margin-top: 2px; }
+  .log .sets span { font-size: 11.5px; color: var(--n600); font-variant-numeric: tabular-nums; }
+  .log .save { font-size: 12.5px; color: var(--accent); margin-top: 9px; display: inline-block; }
+
+  /* ── bottom sheet ── */
+  .veil { position: absolute; inset: 0; background: rgba(11, 12, 20, 0.62); }
+  .sheet {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    background: var(--bg); border-top: 1px solid var(--divider);
+    border-radius: 16px 16px 0 0; padding: 10px 18px 18px;
+    box-shadow: 0 -18px 40px rgba(0,0,0,0.5);
+  }
+  .grip { width: 34px; height: 3px; border-radius: 2px; background: var(--n800); margin: 0 auto 12px; }
+  .opt { display: flex; align-items: center; gap: 11px; padding: 9px 2px; border-bottom: 1px solid var(--wash-t8); }
+  .opt .radio { width: 13px; height: 13px; border-radius: 7px; border: 1px solid var(--n700); flex: none; }
+  .opt.on .radio { border-color: var(--accent); background: radial-gradient(circle, var(--accent) 0 3.2px, transparent 3.6px); }
+  .opt .txt { flex: 1; min-width: 0; }
+  .opt .nm { font-size: 14px; }
+  .opt.on .nm { color: var(--accent); }
+  .opt .dt2 { font-size: 10.5px; color: var(--n600); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .opt .meta { font-size: 11px; color: var(--n600); }
+
+  .fieldhead { font-size: 11px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--n500); margin-top: 15px; }
+  .stepper { display: inline-flex; align-items: center; gap: 2px; border: 1px solid var(--divider); border-radius: 8px; overflow: hidden; }
+  .stepper .b { padding: 4px 11px; font-size: 15px; color: var(--accent); }
+  .stepper .v { padding: 4px 4px; min-width: 30px; text-align: center; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+  .unitword { font-size: 13px; color: var(--n400); }
+  .dowbar { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 9px; }
+  .dowbar span {
+    text-align: center; font-size: 11px; color: var(--n500);
+    border: 1px solid var(--divider); border-radius: 6px; padding: 5px 0;
+  }
+  .dowbar span.on { color: var(--a200); border-color: var(--accent); background: var(--wash-a16); }
+  .sentence {
+    margin-top: 10px; font-size: 12.5px; color: var(--a300);
+    background: var(--wash-a10); border-radius: 7px; padding: 7px 10px;
+  }
+  .sentence .m { color: var(--n500); }
+  .chips { display: flex; gap: 6px; margin-top: 9px; }
+  .chip { border: 1px solid var(--divider); border-radius: 6px; padding: 5px 11px; font-size: 12px; color: var(--n400); }
+  .chip.on { border-color: var(--accent); background: var(--wash-a16); color: var(--a200); }
+
+  table.reassign { width: 100%; border-collapse: collapse; margin-top: 18px; font-size: 13.5px; }
+  table.reassign th {
+    text-align: left; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--n600); font-weight: 400; padding: 0 12px 7px 0; border-bottom: 1px solid var(--divider);
+  }
+  table.reassign td { padding: 11px 12px 11px 0; border-bottom: 1px solid var(--rule); color: var(--n400); vertical-align: top; }
+  table.reassign td:first-child { color: var(--text); width: 30%; }
+  table.reassign td strong { color: var(--text); font-weight: 500; }
+
+  pre.model {
+    margin-top: 16px; background: var(--n900); border: 1px solid var(--divider);
+    border-radius: 10px; padding: 14px 16px; overflow-x: auto;
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.65; color: var(--n300);
+  }
+  pre.model .k { color: var(--a300); }
+  pre.model .c { color: var(--n600); }
+</style>
+
+<div class="page">
+
+  <header>
+    <div class="kicker">Spotter · design mockup · 12 Aug 2026 · rev 2</div>
+    <h1>The Plan screen, reworked</h1>
+    <p class="lede">
+      Plan is the one screen with no way out and two places that answer the same question. The
+      rework gives it <strong>a back button</strong>, <strong>retires the seven weekday rows</strong>,
+      and makes <strong>the calendar the only place a plan is organised</strong>: tap a day, read what
+      was planned and what was actually logged, and set it there — with a <strong>repeat
+      rule</strong> instead of a permanent weekday slot. Daily, every third day, weekly, every other
+      week. A day holds <strong>as many workouts as you plan on it</strong>, and the schedule stops
+      being seven timeless pigeonholes and becomes dated rules the calendar can draw.
+    </p>
+    <div class="flow" aria-label="the screen, top to bottom">
+      <span class="step"><em>‹ Back</em> · to Today</span><span class="arrow">→</span>
+      <span class="step"><em>Month</em> · pages, dots</span><span class="arrow">→</span>
+      <span class="step"><em>The day</em> · planned rows + logged</span><span class="arrow">→</span>
+      <span class="step"><em>+ Plan a workout</em> · routine + repeat</span>
+    </div>
+    <div class="settled">
+      <div class="h">Settled with Calvin · rev 2</div>
+      <ul>
+        <li><strong>The migration stands</strong> — one weekly rule per routine, anchored on the
+          Monday of the week it runs, nothing claimed retroactively.</li>
+        <li><strong>No end date, and no <code>until</code> field.</strong> A rule runs until it is
+          removed; wait for someone to ask for an end before building one. What that costs is
+          stated in the model section, and it is small.</li>
+        <li><strong>A day can hold several workouts.</strong> Which turns out to <em>simplify</em> the
+          model — the per-date override map is gone, replaced by a one-off rule and a skip list.</li>
+      </ul>
+    </div>
+  </header>
+
+  <hr class="fade">
+
+  <!-- ════════ 01 · THE SCREEN ════════ -->
+  <section class="shot" id="screen">
+    <figure class="phone" aria-label="Plan screen with back button, calendar and the day panel">
+      <div class="status"><span>19:12</span><span class="batt"></span></div>
+      <div class="screen">
+        <span class="back">‹ Back</span>
+        <div class="sc-h2" style="margin-top:2px;">Plan</div>
+
+        <div class="month-row">
+          <div class="month-nav">
+            <span class="chev">‹</span>
+            <span class="sc-h4">August 2026</span>
+            <span class="chev">›</span>
+          </div>
+          <span class="month-meta">5 logged this month</span>
+        </div>
+
+        <div class="cal">
+          <div class="dw">M</div><div class="dw">T</div><div class="dw">W</div><div class="dw">T</div>
+          <div class="dw">F</div><div class="dw">S</div><div class="dw">S</div>
+
+          <div></div><div></div><div></div><div></div><div></div>
+          <div class="cell past"><span class="num">1</span><span class="bar"></span></div>
+          <div class="cell past"><span class="num">2</span><span class="bar"></span></div>
+
+          <div class="cell past done"><span class="num">3</span><span class="bar"></span></div>
+          <div class="cell past"><span class="num">4</span><span class="bar"></span></div>
+          <div class="cell past done"><span class="num">5</span><span class="bar"></span></div>
+          <div class="cell past plan"><span class="num">6</span><span class="bar"></span></div>
+          <div class="cell past done"><span class="num">7</span><span class="bar"></span></div>
+          <div class="cell past done"><span class="num">8</span><span class="bar"></span></div>
+          <div class="cell past plan"><span class="num">9</span><span class="bar"></span></div>
+
+          <div class="cell past done"><span class="num">10</span><span class="bar"></span></div>
+          <div class="cell past"><span class="num">11</span><span class="bar"></span></div>
+          <div class="cell sel now plan"><span class="num">12</span><span class="bar"></span></div>
+          <div class="cell"><span class="num">13</span><span class="bar"></span></div>
+          <div class="cell"><span class="num">14</span><span class="bar"></span></div>
+          <div class="cell plan"><span class="num">15</span><span class="bar"></span></div>
+          <div class="cell"><span class="num">16</span><span class="bar"></span></div>
+
+          <div class="cell plan"><span class="num">17</span><span class="bar"></span></div>
+          <div class="cell plan"><span class="num">18</span><span class="bar"></span></div>
+          <div class="cell"><span class="num">19</span><span class="bar"></span></div>
+          <div class="cell"><span class="num">20</span><span class="bar"></span></div>
+          <div class="cell plan"><span class="num">21</span><span class="bar"></span></div>
+          <div class="cell"><span class="num">22</span><span class="bar"></span></div>
+          <div class="cell"><span class="num">23</span><span class="bar"></span></div>
+
+          <div class="cell plan"><span class="num">24</span><span class="bar"></span></div>
+          <div class="cell"><span class="num">25</span><span class="bar"></span></div>
+          <div class="cell plan"><span class="num">26</span><span class="bar"></span></div>
+          <div class="cell plan"><span class="num">27</span><span class="bar"></span></div>
+          <div class="cell"><span class="num">28</span><span class="bar"></span></div>
+          <div class="cell"><span class="num">29</span><span class="bar"></span></div>
+          <div class="cell plan"><span class="num">30</span><span class="bar"></span></div>
+
+          <div class="cell plan"><span class="num">31</span><span class="bar"></span></div>
+        </div>
+
+        <div class="legend">
+          <span class="it"><span class="bar" style="background:var(--accent)"></span>done</span>
+          <span class="it"><span class="bar" style="background:var(--a800)"></span>planned</span>
+        </div>
+
+        <div class="day">
+          <div class="dh">Wed 12 August · today</div>
+          <div class="prow">
+            <span class="txt">
+              <div class="nm">Back A</div>
+              <div class="sub">4 exercises · 14 sets</div>
+            </span>
+            <span class="rep">Every week · Wed</span>
+            <span class="btn pri">Start</span>
+          </div>
+          <div class="prow">
+            <span class="txt">
+              <div class="nm">Row 5k</div>
+              <div class="sub">1 exercise · 1 set</div>
+            </span>
+            <span class="rep">Every 3 days</span>
+            <span class="go">Start ›</span>
+          </div>
+          <div class="foot">
+            <span class="ghost">+ Plan a workout</span>
+          </div>
+        </div>
+      </div>
+      <div class="tabs"><span>Today</span><span>Routines</span><span>Library</span><span>You</span></div>
+    </figure>
+
+    <div class="notes">
+      <div class="kicker">01</div>
+      <h2 class="sec">One screen, one organiser</h2>
+      <ul>
+        <li><strong>‹ Back, alone in a header row above the H2.</strong> Exactly the shape
+          Settings, Insights, Buddy sync and the picker already use
+          (<code>Btn variant="ghost" label={L.back}</code>). Plan is registered in the tabs but has
+          no button in the bar — which until now made it the one screen you leave by guessing.
+          Android's back always worked; nothing on the glass said so.</li>
+        <li><strong>The seven weekday rows are gone.</strong> They were the second answer to a
+          question the grid above them already answers, one scroll apart, and they could only
+          express one thing: <em>this weekday, forever</em>. Everything they did is reassigned in
+          section 07 before they go.</li>
+        <li><strong>The day panel is a list now</strong> — one row per planned workout, in the order
+          the rules were made. Each row carries the rule it came from (<em>Every week · Wed</em>,
+          <em>Every 3 days</em>) in a quiet accent pill, and that pill is what makes the calendar
+          sufficient on its own: you can see a plan repeating without a second list stating it.</li>
+        <li><strong>One primary Start per day: the first row you haven't logged yet.</strong> The
+          others carry a ghost <em>Start ›</em>, so nothing is unreachable and the screen still has a
+          single obvious action. Same rule drives Today's hero (section 07), so the two screens
+          always agree about what "next" means.</li>
+        <li><strong>The dot grammar does not change.</strong> Full accent bar = trained, faint bar =
+          planned, nothing = nothing — same widths, same colours, same <code>doneOn</code>-first
+          order that put freeform Saturdays on the calendar. One planned workout and three look
+          identical on the grid; a day's <em>contents</em> are the panel's job, not a fourth dot
+          nobody can read at 15px.</li>
+        <li>August here carries four rules: Chest A every Monday, Back A every Wednesday, Legs A
+          every other Friday from the 7th, and Row 5k every three days from the 3rd — which is what
+          makes today, the 21st and the 24th two-workout days. The faint bars on the 6th and the 9th
+          are Row 5k days that came and went unlogged; that is the diary being honest, not a bug.</li>
+        <li><strong>Back goes to Today, with a floor.</strong> <code>router.back()</code> when there
+          is somewhere to go, <code>router.replace('/')</code> otherwise — a notification or deep
+          link can land on Plan cold, and a dead back button is worse than none.</li>
+      </ul>
+    </div>
+  </section>
+
+  <hr class="fade">
+
+  <!-- ════════ 02 · PLANNED AND LOGGED ════════ -->
+  <section class="shot" id="logged">
+    <figure class="phone" aria-label="A past day showing two planned workouts, one of them logged">
+      <div class="status"><span>19:12</span><span class="batt"></span></div>
+      <div class="screen">
+        <span class="back">‹ Back</span>
+        <div class="sc-h2" style="margin-top:2px;">Plan</div>
+
+        <div class="month-row">
+          <div class="month-nav">
+            <span class="chev">‹</span>
+            <span class="sc-h4">August 2026</span>
+            <span class="chev">›</span>
+          </div>
+          <span class="month-meta">5 logged this month</span>
+        </div>
+
+        <div class="cal">
+          <div class="dw">M</div><div class="dw">T</div><div class="dw">W</div><div class="dw">T</div>
+          <div class="dw">F</div><div class="dw">S</div><div class="dw">S</div>
+          <div></div><div></div><div></div><div></div><div></div>
+          <div class="cell past"><span class="num">1</span><span class="bar"></span></div>
+          <div class="cell past"><span class="num">2</span><span class="bar"></span></div>
+          <div class="cell past done sel"><span class="num">3</span><span class="bar"></span></div>
+          <div class="cell past"><span class="num">4</span><span class="bar"></span></div>
+          <div class="cell past done"><span class="num">5</span><span class="bar"></span></div>
+          <div class="cell past plan"><span class="num">6</span><span class="bar"></span></div>
+          <div class="cell past done"><span class="num">7</span><span class="bar"></span></div>
+          <div class="cell past done"><span class="num">8</span><span class="bar"></span></div>
+          <div class="cell past plan"><span class="num">9</span><span class="bar"></span></div>
+          <div class="cell past done"><span class="num">10</span><span class="bar"></span></div>
+          <div class="cell past"><span class="num">11</span><span class="bar"></span></div>
+          <div class="cell now plan"><span class="num">12</span><span class="bar"></span></div>
+          <div class="cell"><span class="num">13</span><span class="bar"></span></div>
+          <div class="cell"><span class="num">14</span><span class="bar"></span></div>
+          <div class="cell plan"><span class="num">15</span><span class="bar"></span></div>
+          <div class="cell"><span class="num">16</span><span class="bar"></span></div>
+        </div>
+
+        <div class="day">
+          <div class="dh">Mon 3 August</div>
+          <div class="prow">
+            <span class="txt">
+              <div class="nm">Chest A</div>
+              <div class="sub">4 exercises · 14 sets</div>
+            </span>
+            <span class="rep">Every week · Mon</span>
+            <span class="tick">✓ logged</span>
+          </div>
+          <div class="prow">
+            <span class="txt">
+              <div class="nm">Row 5k</div>
+              <div class="sub dim">Planned, not logged.</div>
+            </span>
+            <span class="rep">Every 3 days</span>
+          </div>
+        </div>
+
+        <div class="sc-h6" style="margin-top:14px;">Logged</div>
+        <div class="log">
+          <div class="top">
+            <span class="nm">Chest A</span>
+            <span class="bud">with Marcel</span>
+          </div>
+          <div class="stats">14 sets  ·  4,260 kg  ·  58:04</div>
+          <div class="ex">
+            <div class="et"><span class="en">Bench Press</span><span class="ec">4 sets</span></div>
+            <div class="sets"><span>70 × 8</span><span>72.5 × 8</span><span>75 × 6</span><span>75 × 5</span></div>
+          </div>
+          <div class="ex">
+            <div class="et"><span class="en">Incline Dumbbell Press</span><span class="ec">3 sets</span></div>
+            <div class="sets"><span>24 × 10</span><span>24 × 9</span><span>24 × 8</span></div>
+          </div>
+          <span class="save">+ Save as routine</span>
+        </div>
+      </div>
+      <div class="tabs"><span>Today</span><span>Routines</span><span>Library</span><span>You</span></div>
+    </figure>
+
+    <div class="notes">
+      <div class="kicker">02</div>
+      <h2 class="sec">Planned above, logged below</h2>
+      <ul>
+        <li><strong>Two facts, never merged.</strong> The rows say what the plan was; the cards under
+          <em>Logged</em> say what happened, read off <code>history</code> as written — the name
+          frozen at log time, <code>vol</code> as <code>totals()</code> counted it, every set in the
+          <code>"70 × 8"</code> format through <code>loggedLine</code>. This half is already built
+          and does not change.</li>
+        <li><strong>Per-row, not per-day.</strong> Monday the 3rd had two workouts on it; one got
+          done and one didn't, so one row carries <em>✓ logged</em> and the other says
+          <em>Planned, not logged.</em> Under the old one-per-day model this day could only have had
+          one verdict, which is precisely what made a rest-day line show up over a logged
+          session.</li>
+        <li><strong>A row is matched to a session by <code>rid</code>, not by position.</strong> A
+          logged free session belongs to no row and lands only in the <em>Logged</em> block — which
+          is how Saturday the 8th reads: no planned rows at all, one full card underneath.</li>
+        <li><strong>A past day is a record, so it has no editing.</strong> The <em>+ Plan a
+          workout</em> line and the row taps show on today and forward only. A rule anchored in the
+          past would re-ring weeks nobody planned, and the diary would grow workouts you never
+          intended to skip.</li>
+        <li><strong>Save as routine stays exactly where it is</strong>, on the logged card, with its
+          naming field and its <em>Saved to your routines</em> line. It is the one write this half of
+          the screen does. Two logged sessions still get two cards — that was always true, and it is
+          now matched by the plan above being a list too.</li>
+      </ul>
+    </div>
+  </section>
+
+  <hr class="fade">
+
+  <!-- ════════ 03 · EMPTY, AND SKIPPED ════════ -->
+  <section class="shot" id="empty">
+    <figure class="phone" aria-label="A day with nothing planned, and a day whose repeat was skipped">
+      <div class="status"><span>19:12</span><span class="batt"></span></div>
+      <div class="screen">
+        <span class="back">‹ Back</span>
+        <div class="sc-h2" style="margin-top:2px;">Plan</div>
+
+        <div class="month-row">
+          <div class="month-nav">
+            <span class="chev">‹</span>
+            <span class="sc-h4">August 2026</span>
+            <span class="chev">›</span>
+          </div>
+          <span class="month-meta">5 logged this month</span>
+        </div>
+
+        <div class="cal">
+          <div class="dw">M</div><div class="dw">T</div><div class="dw">W</div><div class="dw">T</div>
+          <div class="dw">F</div><div class="dw">S</div><div class="dw">S</div>
+          <div class="cell past done"><span class="num">10</span><span class="bar"></span></div>
+          <div class="cell past"><span class="num">11</span><span class="bar"></span></div>
+          <div class="cell now plan"><span class="num">12</span><span class="bar"></span></div>
+          <div class="cell"><span class="num">13</span><span class="bar"></span></div>
+          <div class="cell"><span class="num">14</span><span class="bar"></span></div>
+          <div class="cell plan"><span class="num">15</span><span class="bar"></span></div>
+          <div class="cell"><span class="num">16</span><span class="bar"></span></div>
+          <div class="cell plan"><span class="num">17</span><span class="bar"></span></div>
+          <div class="cell plan"><span class="num">18</span><span class="bar"></span></div>
+          <div class="cell"><span class="num">19</span><span class="bar"></span></div>
+          <div class="cell sel"><span class="num">20</span><span class="bar"></span></div>
+          <div class="cell plan"><span class="num">21</span><span class="bar"></span></div>
+          <div class="cell"><span class="num">22</span><span class="bar"></span></div>
+          <div class="cell"><span class="num">23</span><span class="bar"></span></div>
+        </div>
+
+        <div class="day">
+          <div class="dh">Thu 20 August</div>
+          <div class="none">Nothing planned</div>
+          <div class="db">Nothing planned. Start a free session any time.</div>
+          <div class="foot"><span class="ghost">+ Plan a workout</span></div>
+        </div>
+
+        <div class="sc-h6" style="margin-top:18px;">And the 19th, whose Back A was skipped</div>
+        <div class="day" style="margin-top:7px;">
+          <div class="dh">Wed 19 August</div>
+          <div class="none">Rest day</div>
+          <div class="db">Enjoy your day to the fullest.</div>
+          <div class="prow off">
+            <span class="txt"><div class="nm">Back A</div></span>
+            <span class="rep">Every week · Wed</span>
+            <span class="go">Restore ›</span>
+          </div>
+          <div class="foot"><span class="ghost">+ Plan a workout</span></div>
+        </div>
+      </div>
+      <div class="tabs"><span>Today</span><span>Routines</span><span>Library</span><span>You</span></div>
+    </figure>
+
+    <div class="notes">
+      <div class="kicker">03</div>
+      <h2 class="sec">Nothing planned is not a rest day</h2>
+      <ul>
+        <li><strong>Two empty states, and the app can finally tell them apart.</strong> Today every
+          day without a routine titles itself <em>Rest day</em>, because absence was the only way to
+          say rest. Now <em>choosing</em> rest is a real act — you skipped a repeat — so a blank day
+          reads <strong>Nothing planned</strong> and a day you cleared reads <strong>Rest
+          day</strong> with its own note. Both come free: a skip is stored, so
+          <code>skips[iso]</code> being non-empty with nothing left standing <em>is</em> the chosen
+          rest. No extra field.</li>
+        <li><strong>The skipped row stays on the screen, dashed, with Restore ›.</strong> Dashed is
+          the app's "not yet a fact" grammar — the waiting set row, the held CTA — and a cancelled
+          occurrence is exactly that. It also keeps the act reversible in one tap, which a
+          disappeared row would not.</li>
+        <li><strong>Rest is not an option in the sheet any more.</strong> With several workouts to a
+          day, "rest" stopped being a thing you pick and became what is left when you remove the
+          rows — so removal lives on the row (section 06) and the routine list is only
+          routines.</li>
+        <li><strong>The empty day keeps <code>L.dayFree</code></strong> — "Nothing planned. Start a
+          free session any time." The line was already right; it just needed a title that agreed
+          with it. The rest day keeps <code>L.restNote</code>, the line Today's hero already
+          shows.</li>
+        <li>Both cards are the same component; what differs is the title, the body line and whether
+          there are rows. No second layout for the empty case, the way the routine list's empty
+          state points at the shelf instead of inventing a screen.</li>
+      </ul>
+    </div>
+  </section>
+
+  <hr class="fade">
+
+  <!-- ════════ 04 · THE SHEET ════════ -->
+  <section class="shot" id="sheet">
+    <figure class="phone" aria-label="The plan sheet: pick a routine and a repeat">
+      <div class="status"><span>19:12</span><span class="batt"></span></div>
+      <div class="screen">
+        <span class="back" style="opacity:0.5">‹ Back</span>
+        <div class="sc-h2" style="margin-top:2px; opacity:0.5">Plan</div>
+        <div class="month-row" style="opacity:0.5">
+          <div class="month-nav"><span class="chev">‹</span><span class="sc-h4">August 2026</span><span class="chev">›</span></div>
+          <span class="month-meta">5 logged this month</span>
+        </div>
+        <div class="cal" style="opacity:0.5">
+          <div class="dw">M</div><div class="dw">T</div><div class="dw">W</div><div class="dw">T</div>
+          <div class="dw">F</div><div class="dw">S</div><div class="dw">S</div>
+          <div class="cell plan"><span class="num">17</span><span class="bar"></span></div>
+          <div class="cell plan"><span class="num">18</span><span class="bar"></span></div>
+          <div class="cell"><span class="num">19</span><span class="bar"></span></div>
+          <div class="cell sel"><span class="num">20</span><span class="bar"></span></div>
+          <div class="cell plan"><span class="num">21</span><span class="bar"></span></div>
+          <div class="cell"><span class="num">22</span><span class="bar"></span></div>
+          <div class="cell"><span class="num">23</span><span class="bar"></span></div>
+        </div>
+
+        <div class="veil"></div>
+        <div class="sheet">
+          <div class="grip"></div>
+          <div class="sc-h4">Plan a workout</div>
+          <div style="font-size:11px; letter-spacing:0.08em; text-transform:uppercase; color:var(--accent); margin-top:3px;">Thu 20 August</div>
+
+          <div class="fieldhead">Workout</div>
+          <div class="opt on">
+            <span class="radio"></span>
+            <span class="txt">
+              <div class="nm">Legs A</div>
+              <div class="dt2">Back Squat · Romanian Deadlift · Leg Press · Standing Calf Raise</div>
+            </span>
+            <span class="meta">4 ex</span>
+          </div>
+          <div class="opt">
+            <span class="radio"></span>
+            <span class="txt">
+              <div class="nm">Chest A</div>
+              <div class="dt2">Bench Press · Incline Dumbbell Press · Cable Fly · Triceps Pushdown</div>
+            </span>
+            <span class="meta">4 ex</span>
+          </div>
+          <div class="opt">
+            <span class="radio"></span>
+            <span class="txt">
+              <div class="nm">Back A</div>
+              <div class="dt2">Pull-up · Barbell Row · Lat Pulldown · Bicep Curl</div>
+            </span>
+            <span class="meta">4 ex</span>
+          </div>
+          <div class="opt">
+            <span class="radio"></span>
+            <span class="txt">
+              <div class="nm">Row 5k</div>
+              <div class="dt2">Rowing Machine</div>
+            </span>
+            <span class="meta">1 ex</span>
+          </div>
+
+          <div class="fieldhead">Repeats</div>
+          <div style="margin-top:8px;">
+            <span class="seg"><span>Once</span><span>Days</span><span class="on">Weeks</span></span>
+          </div>
+          <div style="display:flex; align-items:center; gap:10px; margin-top:9px;">
+            <span class="unitword">Every</span>
+            <span class="stepper"><span class="b">‹</span><span class="v">1</span><span class="b">›</span></span>
+            <span class="unitword">week</span>
+          </div>
+          <div class="dowbar">
+            <span>M</span><span>T</span><span>W</span><span class="on">T</span><span>F</span><span>S</span><span>S</span>
+          </div>
+          <div class="sentence">Every week · Thu <span class="m">— from Thu 20 August</span></div>
+
+          <span class="btn pri block" style="margin-top:13px;">Save</span>
+        </div>
+      </div>
+      <div class="tabs"><span>Today</span><span>Routines</span><span>Library</span><span>You</span></div>
+    </figure>
+
+    <div class="notes">
+      <div class="kicker">04</div>
+      <h2 class="sec">Which workout, and how often</h2>
+      <ul>
+        <li><strong>One sheet, two fields.</strong> The routine list is today's
+          <code>ScheduleSheet</code> almost verbatim — every routine, the exercises named
+          underneath, a check on the current pick. What is new is everything below
+          <em>Repeats</em>, and what is gone is the Rest row.</li>
+        <li><strong>It is opened on a date, not a weekday.</strong>
+          <code>dayPick: number | null</code> (a day-of-week index) becomes
+          <code>dayPlan: { iso: string, entry?: string } | null</code> — the date being planned, and
+          which existing row is being edited if any. A rule needs an anchor and a weekday has
+          none. Today's week strip hands over an ISO too, so its tap keeps working unchanged.</li>
+        <li><strong>Adding is the default, editing is the same sheet.</strong> <em>+ Plan a
+          workout</em> opens it empty; tapping a planned row opens it on that row, with the
+          scope question and Remove (section 06).</li>
+        <li><strong>The weekday strip is what the seven rows became.</strong> Under a weekly rule the
+          anchor's own day is pre-ticked, and you can tick more: <em>Chest A, every week, Mon and
+          Thu</em> is one rule set once, where the old screen needed two trips through two rows.
+          This is the one thing the retired rows did better, absorbed into the day you were already
+          editing.</li>
+        <li><strong>The sentence under the control is the contract.</strong> It states the rule in
+          full, including the anchor date, and it is the same string the row pills and the Routines
+          tab's days line read — <code>repeatLine(repeat, from, L)</code>, one formatter, so the
+          three surfaces can never describe a rule differently.</li>
+        <li><strong>Save is explicit here, unlike the old sheet</strong>, which committed on the tap
+          that picked a routine. Two fields now depend on each other; committing on the first would
+          write <em>Legs A, once</em> before you reached the part where you said weekly.</li>
+      </ul>
+    </div>
+  </section>
+
+  <hr class="fade">
+
+  <!-- ════════ 05 · THE REPEAT CONTROL ════════ -->
+  <section class="shot" id="repeat">
+    <figure class="phone" aria-label="The repeat control in its three modes">
+      <div class="status"><span>19:12</span><span class="batt"></span></div>
+      <div class="screen">
+        <div class="veil" style="background:rgba(11,12,20,0.35)"></div>
+        <div class="sheet" style="bottom:auto; top:14px; border-radius:16px;">
+          <div class="grip"></div>
+          <div class="sc-h4">Repeats</div>
+
+          <div style="margin-top:12px;">
+            <span class="seg"><span class="on">Once</span><span>Days</span><span>Weeks</span></span>
+          </div>
+          <div class="sentence">Once <span class="m">— Sat 15 August</span></div>
+
+          <div style="margin-top:22px;">
+            <span class="seg"><span>Once</span><span class="on">Days</span><span>Weeks</span></span>
+          </div>
+          <div style="display:flex; align-items:center; gap:10px; margin-top:9px;">
+            <span class="unitword">Every</span>
+            <span class="stepper"><span class="b">‹</span><span class="v">3</span><span class="b">›</span></span>
+            <span class="unitword">days</span>
+          </div>
+          <div class="sentence">Every 3 days <span class="m">— from Sat 15 August</span></div>
+
+          <div style="margin-top:22px;">
+            <span class="seg"><span>Once</span><span>Days</span><span class="on">Weeks</span></span>
+          </div>
+          <div style="display:flex; align-items:center; gap:10px; margin-top:9px;">
+            <span class="unitword">Every</span>
+            <span class="stepper"><span class="b">‹</span><span class="v">2</span><span class="b">›</span></span>
+            <span class="unitword">weeks</span>
+          </div>
+          <div class="dowbar">
+            <span class="on">M</span><span>T</span><span>W</span><span>T</span><span>F</span><span class="on">S</span><span>S</span>
+          </div>
+          <div class="sentence">Every 2 weeks · Mon · Sat <span class="m">— from Mon 17 August</span></div>
+        </div>
+      </div>
+      <div class="tabs"><span>Today</span><span>Routines</span><span>Library</span><span>You</span></div>
+    </figure>
+
+    <div class="notes">
+      <div class="kicker">05</div>
+      <h2 class="sec">Three modes, one sentence</h2>
+      <ul>
+        <li><strong>Only what applies is drawn.</strong> <em>Once</em> shows neither the stepper nor
+          the strip. <em>Days</em> shows the stepper only — an interval counted from the anchor has no
+          weekday to pick. <em>Weeks</em> shows both. Stacked here for comparison; in the sheet it is
+          one block that changes shape with the seg.</li>
+        <li><strong>Daily and bi-weekly are values, not options.</strong> <em>Every 1 day</em> is
+          daily, <em>every 2 weeks</em> is bi-weekly, <em>every 3 days</em> is the "and so on" — one
+          control instead of a preset list that always turns out to be missing somebody's interval.
+          The stepper clamps at 1 and stops at 12: past that nobody is planning a repeat, they are
+          planning a day, and <em>Once</em> is right there.</li>
+        <li><strong>The controls are the app's own</strong> — <code>seg</code> for the unit,
+          <code>Chip</code> for the weekdays. The stepper is the one new primitive, and it is the
+          set row's number gesture reduced to two buttons for a surface where a drag would fight the
+          sheet.</li>
+        <li><strong>The sentence is generated, never a fixed label</strong> — and this is where German
+          stops being a translation. English composes uniformly; German switches on the count:
+          <em>Jeden Tag</em> / <em>Alle 3 Tage</em>, <em>Jede Woche</em> / <em>Alle 2 Wochen</em>.
+          Two forms per unit, four strings, chosen by <code>n === 1</code> — the same problem the fun
+          facts sidestepped by always being plural, met head-on because a repeat of one is the
+          common case.</li>
+        <li><strong>The anchor is always shown.</strong> <em>from Mon 17 August</em> is what makes an
+          every-3-days rule readable at all, and it is the difference between a rule and a
+          superstition. It is the date the sheet was opened on; ticking weekdays that exclude it
+          moves the anchor forward to the first day that matches.</li>
+        <li><strong>Weeks are Monday-anchored</strong>, like <code>DOW</code> and the calendar grid.
+          <em>Every 2 weeks</em> counts calendar weeks between the anchor's week and the day being
+          tested, so a bi-weekly Mon-and-Sat rule keeps both days in the same week rather than
+          drifting nine days apart.</li>
+      </ul>
+    </div>
+  </section>
+
+  <hr class="fade">
+
+  <!-- ════════ 06 · SCOPE AND REMOVAL ════════ -->
+  <section class="shot" id="scope">
+    <figure class="phone" aria-label="Editing a planned row that repeats">
+      <div class="status"><span>19:12</span><span class="batt"></span></div>
+      <div class="screen">
+        <span class="back" style="opacity:0.5">‹ Back</span>
+        <div class="sc-h2" style="margin-top:2px; opacity:0.5">Plan</div>
+        <div class="month-row" style="opacity:0.5">
+          <div class="month-nav"><span class="chev">‹</span><span class="sc-h4">August 2026</span><span class="chev">›</span></div>
+          <span class="month-meta">5 logged this month</span>
+        </div>
+
+        <div class="veil"></div>
+        <div class="sheet">
+          <div class="grip"></div>
+          <div class="sc-h4">Back A</div>
+          <div style="font-size:11px; letter-spacing:0.08em; text-transform:uppercase; color:var(--accent); margin-top:3px;">Wed 26 August · every week · Wed</div>
+
+          <div class="fieldhead">Applies to</div>
+          <div class="chips">
+            <span class="chip on">Just this day</span>
+            <span class="chip">Every repeat</span>
+          </div>
+
+          <div class="fieldhead">Workout</div>
+          <div class="opt on">
+            <span class="radio"></span>
+            <span class="txt">
+              <div class="nm">Legs A</div>
+              <div class="dt2">Back Squat · Romanian Deadlift · Leg Press · Standing Calf Raise</div>
+            </span>
+            <span class="meta">4 ex</span>
+          </div>
+          <div class="opt">
+            <span class="radio"></span>
+            <span class="txt">
+              <div class="nm">Back A</div>
+              <div class="dt2">Pull-up · Barbell Row · Lat Pulldown · Bicep Curl</div>
+            </span>
+            <span class="meta">4 ex</span>
+          </div>
+          <div class="opt">
+            <span class="radio"></span>
+            <span class="txt">
+              <div class="nm">Chest A</div>
+              <div class="dt2">Bench Press · Incline Dumbbell Press · Cable Fly · Triceps Pushdown</div>
+            </span>
+            <span class="meta">4 ex</span>
+          </div>
+
+          <div class="sentence">
+            Wed 26 August runs Legs A.
+            <span class="m">Back A keeps every other Wednesday.</span>
+          </div>
+
+          <span class="btn pri block" style="margin-top:12px;">Save</span>
+          <span class="btn dash block" style="margin-top:7px;">Hold to remove — just this day</span>
+        </div>
+      </div>
+      <div class="tabs"><span>Today</span><span>Routines</span><span>Library</span><span>You</span></div>
+    </figure>
+
+    <div class="notes">
+      <div class="kicker">06</div>
+      <h2 class="sec">This Wednesday, or every Wednesday</h2>
+      <ul>
+        <li><strong>The scope chips come first, because they govern everything under them.</strong>
+          They only appear when there is something to ask — a repeating row. A one-off row has one
+          reading of any change, so it gets no chips and no question.</li>
+        <li><strong>Just this day never touches the rule.</strong> Changing the routine writes a skip
+          for that occurrence plus a new <code>once</code> rule for the replacement — two
+          primitives the model already has, composing into a one-day swap with no third concept.
+          Swapping one Wednesday must not rewrite the twelve after it.</li>
+        <li><strong>Every repeat edits the rule in place.</strong> Same anchor, same interval, new
+          routine, and every future Wednesday follows. Past occurrences are not rewritten: the faint
+          bars behind you were the plan you had at the time, and the logged dots over them are what
+          actually happened.</li>
+        <li><strong>Remove is held, and it says which one it means.</strong> Every destructive act in
+          this app is a hold — the routine delete, the session ×, Add set — and the label follows
+          the chips: <em>Hold to remove — just this day</em> skips one occurrence,
+          <em>— every repeat</em> deletes the rule. Dashed for the same reason the waiting set row
+          is: not a fact yet.</li>
+        <li><strong>Removing a rule takes its past bars with it</strong>, and that is the accepted
+          cost of having no <code>until</code>. The logged dots — what actually happened — are
+          untouched, and they are the part a diary owes you; the faint bars are only ever a record
+          of intent. If that turns out to matter, <code>until</code> is a one-field addition that
+          needs no migration.</li>
+        <li><strong>The sentence spells out both halves</strong> — what this day will do, and what
+          the rule still does. Two chips with only a label each is where calendar apps lose people;
+          the app's voice is mechanism first, consequence second, so it just says it.</li>
+      </ul>
+    </div>
+  </section>
+
+  <hr class="fade">
+
+  <!-- ════════ 07 · WHAT THE ROWS DID ════════ -->
+  <section id="reassign">
+    <div class="kicker">07</div>
+    <h2 class="sec" style="margin-top:10px;">Where the seven rows' jobs went</h2>
+    <p class="lede" style="margin-top:10px;">
+      The weekly rows are the second thing this rework deletes, after Today's chooser. Same rule as
+      that removal: <strong>every job the thing did is reassigned before it goes</strong>, or the
+      deletion is a regression with a tidier screen.
+    </p>
+    <table class="reassign">
+      <thead>
+        <tr><th>The rows did</th><th>Now</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Showed all seven days at once, with routine names</td>
+          <td>The <strong>calendar</strong>, five weeks at once, with a bar per planned day — and
+            Today's week strip for the glance. The names were the rows' one advantage and the day
+            panel gives them back one tap in, which is where you were heading anyway.</td>
+        </tr>
+        <tr>
+          <td>Assigned a routine to a weekday</td>
+          <td>The <strong>plan sheet</strong>, with <code>Weeks · every 1</code> and that weekday
+            ticked — the identical outcome, plus an anchor date.</td>
+        </tr>
+        <tr>
+          <td>Assigned one routine to several weekdays</td>
+          <td>The sheet's <strong>weekday strip</strong>: one rule, several days ticked. Fewer taps
+            than the rows needed, not more.</td>
+        </tr>
+        <tr>
+          <td>Cleared a day back to rest</td>
+          <td><strong>Hold to remove</strong> on the row — <em>just this day</em> as a skip, or
+            <em>every repeat</em> to drop the rule. A day with no rows left <em>is</em> rest.</td>
+        </tr>
+        <tr>
+          <td>Showed a routine's exercise count per day</td>
+          <td>The sheet's option rows carry it (<em>4 ex</em>, plus the exercises named), and every
+            planned row carries <strong>4 exercises · 14 sets</strong> for the day you picked.</td>
+        </tr>
+        <tr>
+          <td>Was the second copy of the calendar's answer</td>
+          <td><strong>Deleted.</strong> That was the job worth losing.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3 class="sub">And what reads the schedule elsewhere</h3>
+    <table class="reassign">
+      <thead>
+        <tr><th>Site</th><th>Change</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>index.tsx</code> — the hero</td>
+          <td><code>s.schedule[dow]</code> → <strong>the day's first unlogged planned row</strong>,
+            or the last one if they are all logged (which is what keeps <em>Completed today</em>
+            working). So a two-workout day promotes the second one the moment the first is filed —
+            one hero card, no stacking, and the same "next" the Plan panel's primary Start
+            picks.</td>
+        </tr>
+        <tr>
+          <td><code>index.tsx</code> — the week strip</td>
+          <td><code>plannedOn(iso).length > 0</code> per day, which the strip already shapes its dot
+            around. Its tap hands an ISO to <code>dayPlan</code> instead of a weekday to
+            <code>dayPick</code>.</td>
+        </tr>
+        <tr>
+          <td><code>index.tsx</code> — <code>doneToday</code></td>
+          <td>Was "a session today with today's rid". Becomes "every planned row for today has a
+            session" — and on a day with no rows it stays <code>doneOn(todayISO())</code>, exactly
+            as the rest-day case does now.</td>
+        </tr>
+        <tr>
+          <td><code>index.tsx</code> — the buddy plan-sync line</td>
+          <td>Follows the hero's routine, since that is the workout the line is about. Comparison is
+            still <code>routineEquals</code> against the buddy's copy — unchanged, and no protocol
+            change (the plan was never in a snapshot).</td>
+        </tr>
+        <tr>
+          <td><code>routines.tsx</code> — the days line</td>
+          <td><code>Mon · Thu</code> → <code>repeatLine</code> over that routine's rules:
+            <em>every Mon · Thu</em>, <em>every 3 days</em>, <em>unscheduled</em>. Same formatter as
+            the sheet and the row pills.</td>
+        </tr>
+        <tr>
+          <td><code>routines.tsx</code> — Week sort, today badge</td>
+          <td>Both become "next occurrence from today", walked forward over the rules — strictly
+            better than the weekday scan, which could not order two routines on the same
+            weekday.</td>
+        </tr>
+        <tr>
+          <td><code>onboarding-overlay.tsx</code></td>
+          <td>Its week picker writes weekly rules anchored on the current week's Monday instead of
+            filling seven slots. The picker itself is unchanged — it was always choosing
+            weekdays.</td>
+        </tr>
+        <tr>
+          <td><code>routine-overlay.tsx</code></td>
+          <td>Its days line reads <code>repeatLine</code> too.</td>
+        </tr>
+        <tr>
+          <td><code>deleteRoutine</code></td>
+          <td>Drops entries with that <code>rid</code>, then any skip naming one of those entry ids.
+            Today it filters one object; now it filters two.</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <hr class="fade">
+
+  <!-- ════════ THE MODEL ════════ -->
+  <section id="model">
+    <div class="kicker">The shape it all rests on</div>
+    <h2 class="sec" style="margin-top:10px;">The model</h2>
+    <p class="lede" style="margin-top:10px;">
+      <code>schedule: Record&lt;number, string&gt;</code> — seven timeless pigeonholes — becomes a
+      list of dated rules and a list of cancelled occurrences. <strong>Two primitives, and every
+      state on every screen above is one of them or both.</strong> Allowing several workouts a day
+      is what made it this small: the per-date override map from rev 1 existed only to
+      <em>replace</em> a day's single routine, and with a list there is nothing to replace.
+    </p>
+    <pre class="model"><span class="c">// src/data/plan.ts — pure, like data/stats.ts: dates and rules in, answers out.</span>
+<span class="k">export type</span> Repeat =
+  | { unit: <span class="k">'once'</span> }
+  | { unit: <span class="k">'day'</span>;  n: number }                      <span class="c">// n=1 daily, 3 = every third day</span>
+  | { unit: <span class="k">'week'</span>; n: number; dows: number[] }      <span class="c">// n=1 weekly, 2 = bi-weekly</span>
+
+<span class="k">export type</span> PlanEntry = {
+  id: string
+  rid: string          <span class="c">// a routine; rest is the absence of rows, never an entry</span>
+  from: string         <span class="c">// ISO anchor — the day the rule was set on</span>
+  repeat: Repeat       <span class="c">// `once` is how a single day is planned. No `until`.</span>
+}
+
+<span class="k">export type</span> Plan = {
+  entries: PlanEntry[]                <span class="c">// insertion order; a day lists them in it</span>
+  skips: Record&lt;string, string[]&gt;     <span class="c">// ISO → entry ids cancelled on that date</span>
+}
+
+<span class="c">// The whole resolver. Every screen reads the plan through this one function.</span>
+<span class="k">export const</span> plannedOn = (p: Plan, iso: string): PlanEntry[] =&gt;
+  p.entries.filter((e) =&gt; occurs(e, iso) &amp;&amp; !p.skips[iso]?.includes(e.id))
+
+<span class="c">// A rest day you chose: something was cancelled, nothing survived it.</span>
+<span class="k">export const</span> restChosen = (p: Plan, iso: string) =&gt;
+  !!p.skips[iso]?.length &amp;&amp; plannedOn(p, iso).length === 0</pre>
+
+    <ul class="qs">
+      <li><strong>A one-off is a rule, not an exception.</strong> <code>{ unit: 'once' }</code> —
+        which is why the override map could go: adding a workout to a single day is the same write
+        as adding a weekly one, and a one-day swap is a skip plus a <code>once</code>.</li>
+      <li><strong>Rest is the absence of rows.</strong> An entry always names a routine. Storing
+        "rest" as a thing would give it a precedence to reason about against every rule that
+        matched the same day.</li>
+      <li><strong>Nothing is deduped.</strong> Two rules can put the same routine on the same day, and
+        the panel shows both rows with their two different pills. Hiding one would mean an entry
+        you cannot see, cannot edit and cannot remove — worse than a day that visibly says you set
+        the same thing twice.</li>
+      <li><strong>Order is insertion order, everywhere.</strong> It is what makes "the first
+        unlogged row" a stable answer for both Today's hero and the Plan panel's primary Start.</li>
+      <li><strong>Nothing stores a row per planned day.</strong> A year of a weekly routine is one
+        entry; skips are written only when you cancel one. The whole plan stays a few hundred bytes
+        after a decade.</li>
+      <li><strong>The plan starts when you made it.</strong> An anchored rule claims no day before
+        its <code>from</code>, which is a real change: today's timeless slots ring every past Monday
+        in the calendar and accuse you of skipping workouts that were scheduled retroactively.
+        After the migration the past keeps its logged dots and loses only the fictional rings.</li>
+      <li><strong>No <code>until</code>, by decision.</strong> A rule runs until it is removed, and
+        removing it takes its past faint bars with it. That is the one thing an end date would have
+        bought, it costs no data (the logged dots are what happened), and it is a single optional
+        field to add later with no migration if anyone asks.</li>
+      <li><strong>The migration must read the raw blob.</strong> <code>filterPersisted</code> drops
+        every key not in <code>PERSIST</code>, and <code>schedule</code> leaves that list — so
+        <code>migrateV3</code> takes the raw parsed object the way <code>migrateV1</code> does, not
+        the filtered one <code>migrateV2</code> gets. Wire it the other way and every phone
+        silently wakes up with an empty plan.</li>
+      <li><strong>v3 → v4</strong>: group the seven slots by <code>rid</code> and write one weekly
+        entry per routine with every weekday it held — <code>{0:'chest', 3:'chest'}</code> becomes
+        one rule with <code>dows: [0, 3]</code>. <code>from</code> is the Monday of the week the
+        migration runs, so nothing is claimed retroactively and every rule is live the same day.
+        <code>skips</code> starts empty; there is nothing in v3 that could have made one.</li>
+      <li><strong>Backups ride the same path.</strong> <code>backup.ts</code> stamps
+        <code>STORAGE_VERSION</code> in its envelope and migrates forward on restore, so a file
+        written this week still loads next month — no new work, provided <code>migrateV3</code> is
+        added to the chain at the load site as well as the restore site.</li>
+      <li><strong>Buddy sync does not carry the plan and still doesn't.</strong>
+        <code>schedule</code> was never in a snapshot; what two phones compare is today's routine by
+        content (<code>routineEquals</code>), which reads through the hero and needs no protocol
+        change. No rebuild of both phones for this one.</li>
+    </ul>
+  </section>
+
+  <hr class="fade">
+
+  <!-- ════════ DECISIONS ════════ -->
+  <section id="decisions">
+    <div class="kicker">The rules that hold it together</div>
+    <h2 class="sec" style="margin-top:10px;">Decisions</h2>
+    <ul class="qs">
+      <li><strong>The calendar is the only organiser.</strong> One place a plan is read and written,
+        so the two can never disagree. That is the whole rework; the back button and the repeat
+        rules are what make it survivable.</li>
+      <li><strong>One resolver, read everywhere.</strong> <code>plannedOn(iso)</code> is the only way
+        any screen learns what a day holds — the hero, the strip, the grid, the panel, the Routines
+        card. A second reading of the rules is how a Wednesday ends up planned on one screen and
+        blank on another.</li>
+      <li><strong>One formatter, printed everywhere.</strong> <code>repeatLine</code> writes the row
+        pills, the sheet's sentence, the Routines days line and the routine editor's. Three surfaces
+        describing the same rule in three phrasings is the bug this pre-empts.</li>
+      <li><strong>Planned and logged never merge.</strong> Separate blocks, separate sources — the
+        plan from the rules, the session from <code>history</code> as written. A day can be one,
+        both or neither, per row, and all of those have to read correctly.</li>
+      <li><strong>A day is a list; "next" is the first unlogged row.</strong> One definition, used by
+        Today's hero and by which Plan row gets the primary Start. A second predicate is how the two
+        screens would start disagreeing about what to do next.</li>
+      <li><strong>Still exactly one live session.</strong> Several planned workouts on a day does not
+        touch the <code>start</code> guard — any Start tap while <code>s.session</code> is set
+        resurfaces that session. Planning two and running two means finishing the first.</li>
+      <li><strong>Daily and bi-weekly are values, not options.</strong> <em>Every 1 day</em> and
+        <em>every 2 weeks</em>, from a seg, a stepper clamped to 1–12, and a weekday strip that only
+        appears for weeks. A preset list always turns out to be missing somebody's interval.</li>
+      <li><strong>The repeat sentence is generated, and German is written not translated.</strong>
+        English composes uniformly (<em>every N days</em>); German switches on the count —
+        <em>Jeden Tag</em> / <em>Alle 3 Tage</em>, <em>Jede Woche</em> / <em>Alle 2 Wochen</em>. Two
+        forms per unit, chosen by <code>n === 1</code>, because a repeat of one is the common
+        case.</li>
+      <li><strong>Weeks are Monday-anchored</strong>, like <code>DOW</code> and the grid, so a
+        bi-weekly Mon-and-Sat rule keeps both days in the same week instead of drifting.</li>
+      <li><strong>The past is read-only.</strong> No adding, editing or removing behind today. A rule
+        anchored backwards would invent skipped workouts, and the diary records what happened.</li>
+      <li><strong>Removal is held, and scoped.</strong> Same grammar as every other destructive act
+        here, with the chips deciding whether it is one occurrence or the rule.</li>
+      <li><strong>UI state stays UI state.</strong> <code>daySel</code> becomes an ISO string (which
+        also retires the <code>Math.min(daySel, daysInMonth)</code> clamp on month change), and
+        <code>dayPick</code> becomes <code>dayPlan</code>, carrying the date and optionally the row
+        being edited. Neither is in <code>PERSIST</code>, so the version bump is <code>plan</code>
+        alone.</li>
+      <li><strong>Strings to add</strong>: <em>Nothing planned</em>, <em>Plan a workout</em>,
+        <em>Restore</em>, <em>Workout</em>, <em>Repeats</em>, <em>Once / Days / Weeks</em>,
+        <em>Every</em>, the four generated repeat forms per language, <em>Applies to</em>,
+        <em>Just this day</em>, <em>Every repeat</em>, the two hold-to-remove labels, <em>logged</em>
+        for the row tick, and the two-clause consequence sentence. German written rather than
+        translated, per the copy audit.</li>
+    </ul>
+
+    <h2 class="sec" style="margin-top:36px;">Open — worth a look on a real phone</h2>
+    <ul class="qs">
+      <li><strong>Every-N-days rules on Today's week strip.</strong> Seven dots read a weekly rule
+        perfectly and an every-third-day rule as a jumble. It is honest, and it is the one thing here
+        I would want to see on the phone before calling it done.</li>
+      <li><strong>How busy a two-workout day panel feels</strong> with a rule pill, a summary and a
+        Start on each row. If it is too dense, the pill is the first thing to move to a second line.</li>
+      <li><strong>The migration's anchor.</strong> Monday of the migration week means the current
+        month loses its faint bars on the days before it. Called neat and kept, noted here only so
+        the first launch after the update isn't a surprise.</li>
+    </ul>
+  </section>
+
+</div>

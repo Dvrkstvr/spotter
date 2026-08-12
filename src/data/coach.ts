@@ -217,7 +217,10 @@ export type ParseResult =
 const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
 const numOr = (v: unknown): number | undefined => {
   const n = typeof v === 'number' ? v : parseFloat(String(v).replace(',', '.'));
-  return isNaN(n) ? undefined : n;
+  // Finite, not just non-NaN: JSON.parse turns `1e999` into Infinity, which
+  // would sail through every downstream Math.max and land in a persisted
+  // routine — where `Array.from({ length: Infinity })` throws on session start.
+  return Number.isFinite(n) ? n : undefined;
 };
 
 /**
@@ -409,12 +412,18 @@ export function resolvePlan(
         return [];
       }
       const ref = indexOfName.get(key) ?? add({ name: it.exercise });
+      // Clamped both ways at the seam: these numbers come off the wire, get
+      // persisted into a routine, and `sessionFrom` sizes an array by `sets` —
+      // a pasted 1e9 must become a bounded plan here, not a crash that recurs
+      // on every start of the imported routine. The caps are generous for
+      // every measure (reps carries seconds for a hold, kg carries km for a
+      // run), just not absurd.
       return [
         {
           name: it.exercise,
-          sets: Math.max(1, Math.round(it.sets ?? 3)),
-          reps: Math.max(1, Math.round(it.reps ?? 8)),
-          kg: Math.max(0, it.kg ?? 0),
+          sets: Math.min(20, Math.max(1, Math.round(it.sets ?? 3))),
+          reps: Math.min(1000, Math.max(1, Math.round(it.reps ?? 8))),
+          kg: Math.min(2000, Math.max(0, it.kg ?? 0)),
           ref,
         },
       ];

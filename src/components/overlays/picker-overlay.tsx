@@ -73,12 +73,15 @@ export function PickerOverlay() {
             };
           }),
         };
-        // Adding from a screen with no session open starts one.
+        // Adding from a screen with no session open starts one. The clock
+        // restarts, so the rest goes with it — a stamp from the previous
+        // session against a zeroed clock reads as a half-hour countdown.
         if (!st.session) {
           return {
             session: { rid: null, name: L.freeSession, list: [fresh] },
             active: 0,
             elapsed: 0,
+            rest: null,
             summary: null,
           };
         }

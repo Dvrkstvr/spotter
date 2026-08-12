@@ -113,6 +113,17 @@ to the ported palette, and that is the property to preserve.
 - **Each overlay owns its own back handling** via `useBackClose`. There is no
   central back router — BackHandler runs listeners newest-first, which is what
   makes the layering work. Don't re-register on every render or it breaks.
+- **The keyboard is the shells' problem, never a screen's.** SDK 54 runs
+  Android edge-to-edge unconditionally, which makes
+  `softwareKeyboardLayoutMode: resize` a no-op — the keyboard draws over an
+  app that no longer shrinks. So `Sheet` / `FullScreen` (sheet.tsx) and
+  `Screen` (screen.tsx) each carry a `KeyboardAvoidingView`, and every input
+  inherits avoidance by rendering through them; a new surface with a text
+  field needs no keyboard code of its own. Deliberately pure JS —
+  react-native-keyboard-controller is a native module, which Expo Go doesn't
+  have and both phones would need rebuilt for. The cost is content moving a
+  beat after the keyboard (Android has no will-show event), accepted. The
+  mockup is `design/keyboard-mockup.html`.
 - **`android.package` and `STORAGE_KEY` still say `workout-diary`.** They are
   addresses, not labels: the package id is the app's identity to Android and
   the key is where a phone's logged sessions actually live. Renaming either to
@@ -163,6 +174,172 @@ with a dark hero card on it.
 
 Sheets are exempt: `themed()`'s thunk runs outside any component, and
 `useThemed(sheet)` passes the generation in, which is a reactive argument.
+
+## The Routines tab
+
+The design's routine list is flat and in insertion order. This one is
+searched, ordered and filtered, and carries the whole seed collection under
+your own list — the mockup is `design/routines-list-mockup.html`, which stands
+in the same relation to this screen that Workout Diary v2 does to the rest of
+the app. It is also now the only place a workout is started from, which is
+what paid for Today's redesign (see the deviations list).
+
+- **One ordering, computed in one place.** The recommended group *is*
+  onboarding's pick list — `routineInStyle` filters, `routineStyleScore`
+  orders, over `DEFAULT_ROUTINES` — so the tour and the tab can never disagree
+  about what "recommended" means. That is also why `Back A` shows up under a
+  calisthenics answer and ranks below the all-bodyweight days: one pull-up in
+  four lines is a little bit calisthenics, and the score already says so.
+- **Family is derived, never stored.** `routineFamily` is the dominant
+  `styleOf` across a routine's items, computed for seeds and user routines
+  alike. No new field on `Routine`, nothing to migrate, and a routine edited
+  toward cardio drifts into the cardio chip by itself. An empty routine files
+  under none.
+- **Adding a seed is `applyOnboarding`'s move for one routine.** Both go
+  through `scaledSeed`: fresh copy, level-scaled, `planned` below `regular`,
+  same-id replace. An added routine must be indistinguishable from a picked
+  one, or it reaches a buddy as a different shape.
+- **Search matches what the row can explain.** Routine names, exercise names
+  and group labels, every language, through the store's resolvers — so "back"
+  and "Rücken" find the same rows, and `Legs B` turns up for "back" because
+  the Deadlift files under Lower back, which is the entire point of searching
+  by muscle. A found row's meta line quotes the match, and **names the group
+  only when the group is what matched**: "Back Squat" answers "back" by its
+  own name, and crediting Quads there would read as though Quads had matched.
+- **The lens narrows both halves, or it argues with itself.** A Cardio chip
+  that thinned your list while still offering three strength days to add would
+  contradict itself; under a family chip the recommended group also steps
+  aside, because the question changed from "what suits how I train?" to "what
+  cardio is there?". `yours` hides the shelf outright — every row down there
+  is by definition not yours.
+- **A narrowed list says so** (`hiddenBySearch` / `hiddenByFilter`), the same
+  reason Insights discloses `looseSets`: a short list must read as narrowed
+  rather than as loss. While a query is live the sort seg steps aside and
+  results order by *where* the match is — relevance without inventing a score.
+- **Empty means the shelf, not a sentence.** With nothing of yours the
+  controls don't render (a seg ordering nothing is furniture) and the
+  collection is the screen; `noRoutines` is one line pointing at it.
+- **The lens is UI state.** `routineQuery` / `routineSort` / `routineFilter`
+  sit beside `query`/`filter` and outside `PERSIST` — a fresh launch opens on
+  Week · All, empty search. Which shelves were folded is local state for the
+  same reason the settings `Fold` is. Nothing in this feature touches
+  `STORAGE_VERSION`.
+- **The collection reads; the editor writes.** No delete, rename or reorder on
+  the shelf: a seed's row flips between + and *on your list*, and that is its
+  whole state space. Removing stays the editor's held delete.
+
+## The Plan tab
+
+The design's plan is seven weekday slots under a month grid — `schedule:
+Record<number, string>`, timeless, each able to say only *this weekday,
+forever*. This one is **dated rules**, and the calendar is the only place a plan
+is organised: the seven weekday rows under the grid are gone. The mockup is
+`design/plan-revamp-mockup.html`, which stands in the same relation to this
+screen that Workout Diary v2 does to the rest of the app.
+
+**Two primitives, and every state the screen can draw is one of them or both**
+(`src/data/plan.ts` — pure, like `data/stats.ts`: dates and rules in, answers
+out, no store, no hooks, no colours, no strings):
+
+```ts
+entries: PlanEntry[]              // rules; a one-off is `repeat.unit === 'once'`
+skips:   Record<string, string[]> // ISO date → entry ids cancelled on it
+```
+
+- **One resolver, read everywhere.** `plannedOn(plan, iso)` is the only way any
+  screen learns what a day holds — Today's hero, its week strip, the calendar
+  grid, the day panel, the Routines card. A second reading of the rules is how a
+  Wednesday ends up planned on Today and blank on Plan.
+- **One formatter, printed everywhere.** `repeatLabel` writes the day-panel
+  pills, the sheet's sentence, the Routines card's days line and the routine
+  editor's. Three surfaces phrasing one rule three ways is the bug this
+  pre-empts. `repeatSentence` is the same thing plus the anchor, which is what
+  makes an every-third-day rule readable at all.
+- **A one-off is a rule, not an exception.** That is why there is no per-date
+  override map: planning a single day is the same write as planning a weekly
+  one, and a **one-day swap is a skip plus a `once`** — two primitives composing,
+  no third concept.
+- **Rest is the absence of rows.** An entry always names a routine. And because
+  choosing rest is now a real act (a skip), the app can finally tell a chosen
+  **Rest day** from a blank **Nothing planned** — `restChosen` is "something was
+  cancelled and nothing survived it", stored for free by the skip that made it.
+  Before this, every dayless day called itself a rest day, which is what put
+  "Nothing planned" over a logged session.
+- **A day holds as many workouts as you plan on it, and nothing is deduped.**
+  Two rules may name the same routine on the same day, and the panel shows both
+  rows with their two different pills. Hiding one would mean an entry you can
+  neither see, edit nor remove.
+- **Order is insertion order, everywhere**, which is what makes *the first
+  unlogged row* a stable answer. That phrase is the whole of "next": it picks
+  the one workout Today's hero is about **and** which Plan row gets the primary
+  Start, so the two screens cannot disagree. A day whose rows are all logged
+  shows the last of them, which is what keeps `doneToday` and *Completed today*
+  working. The other rows are named under the hero (`alsoToday`) rather than
+  stacked into a second card — they become the hero themselves once this one is
+  filed.
+- **A skip names an entry id**, so nothing may remove an entry without sweeping
+  the skips that pointed at it. `dropEntries` is the only way an entry leaves,
+  and `deleteRoutine` goes through it.
+- **The past is read-only.** No adding, editing or removing behind today: a rule
+  anchored backwards would invent workouts you never planned and skips you never
+  chose, and this is a diary.
+- **The plan starts when you made it.** A rule claims no day before its `from`.
+  v3's timeless slots ringed every Monday there had ever been and the day card
+  called them "Planned, not logged" — an accusation about a workout scheduled
+  retroactively. After the migration the past keeps its logged dots and loses
+  only the fictional rings.
+- **There is no end date, by decision.** A rule runs until it is removed or
+  changed, and either takes its past faint bars with it: without an `until` there
+  is nowhere to record that the rule *used to* be something else. What survives
+  is the logged sessions — what actually happened, and the part a diary owes you.
+  Calvin's call: wait for someone to ask. `until` is an additive field needing no
+  migration if they do.
+- **Daily and bi-weekly are values, not options** — `{ unit: 'day', n: 1 }` and
+  `{ unit: 'week', n: 2 }`, from a seg, a stepper clamped to 1–12, and a weekday
+  strip drawn only for weeks (an interval counted from the anchor has no weekday
+  to pick). A preset list always turns out to be missing somebody's interval.
+  `span()` clamps on read too, so a hand-edited blob can't divide by zero.
+- **Weeks are Monday-anchored**, like `DOW` and the grid, so a bi-weekly
+  Mon-and-Sat rule keeps both days in one week instead of drifting nine days
+  apart. `anchorFor` moves a rule forward to its first real day when the
+  weekdays exclude the one the sheet was opened on — otherwise `occurs` would
+  never fire and the plan would silently be nothing.
+- **The sheet commits on Save**, unlike the v3 sheet which committed on the tap
+  that picked a routine. Two fields depend on each other now. Editing a
+  repeating rule adds the scope question, and the scope governs what is under
+  it: under *Just this day* the Repeats field steps aside, because no repeat is
+  being written. Removal is held, like every destructive act here, and its label
+  says which one it means.
+- **UI state stays UI state.** `daySel` is an ISO date (which retired the
+  `Math.min(daySel, daysInMonth)` clamp on month paging) and `dayPick` became
+  `dayPlan: { iso, entry }`. Neither is in `PERSIST`.
+
+### The one shape change since v3
+
+`plan` replaces `schedule` in `PERSIST`, so this is the first *shape* change to
+a durable key in a while: **`STORAGE_VERSION` 4**, `STORAGE_KEY`
+`workout-diary/v4`, `migrateV3`. Three things about it are load-bearing:
+
+- **`migrateV3` reads the raw blob**, not the filtered one. `schedule` has left
+  `PERSIST`, so `filterPersisted` drops it — read the filtered object and every
+  phone silently wakes up with an empty plan. `migrateV1` was changed to return
+  its lifted blob *unfiltered* for the same reason, and `migrateBlob` is the one
+  place the chain's order is written down so the load path and a backup restore
+  cannot disagree.
+- **The lift groups by routine**, not by slot: `{0:'chest', 3:'chest'}` was
+  always one intention, and becomes one rule with `dows: [0, 3]`. `from` is
+  `mondayISO()` — the start of the week the migration runs. `planFromSchedule`
+  is also what seeds `initialState` and what `applyOnboarding` writes, so a
+  fresh phone, a migrated one and a re-run tour all hold one shape.
+- **`asPlan` guards the stored shape.** `PERSIST_SHAPE` only asks whether a key
+  is an object and leaves the rows to the mutators, but both of this key's
+  sub-keys are load-bearing — `plannedOn` filters `entries` and indexes `skips`
+  — and a backup that has been through a chat app can arrive without either.
+
+Buddy sync needed no protocol change: `schedule` was never in a snapshot, and
+the plan-sync line compares today's routine by content (`routineEquals`) through
+the hero. `backup.ts` needed none either — it carries `STORAGE_VERSION` in its
+envelope and `importState` migrates forward.
 
 ## Statistics & the AI coach
 
@@ -317,7 +494,41 @@ Keep these; they're decisions, not drift. Each is commented at its site.
   document directory. The store only holds durable URIs from then on;
   `deletePersisted` cleans up replaced files and never touches a URI it
   doesn't own, which is what keeps pre-existing cache URIs harmless.
-- The design's `recent` array is computed but never rendered — not ported.
+- The design's `recent` array is computed but never rendered — not ported. What
+  Today *does* show under the week is **Recently**: the last two `history`
+  entries, read as written (name frozen at log time, `vol` as `totals()`
+  counted it), each tapping through to its day on Plan. That handoff is
+  `planFocus` — a one-shot ISO date the Plan screen consumes and clears in an
+  effect, so a cold open still lands on the present month.
+- **Today has no workout chooser, and the Routines tab is why.** `pickWorkout`
+  and `PickWorkoutSheet` are gone: they listed every routine plus a free
+  session, which is the Routines tab's whole job one tab-tap away, now with
+  search and the seed collection behind it. Every job the sheet had was
+  reassigned before it went — free session and build-together sit on the
+  Routines tab, and the rest-day card carries its own **Free session ›**
+  because the note used to point at the row this removed.
+- **Today's week is a strip, not seven rows.** The rows restated Plan's list
+  one screen from Plan; the strip keeps the glance in the calendar's own dot
+  grammar (full dot trained, ring planned, dash rest, today framed) and keeps
+  the tap — `dayPlan`, the plan sheet, now handed an ISO date. Trained beats
+  planned on a day that is both, exactly as the calendar's full dot does. Two
+  things follow from the strip being a glance rather than a list:
+  - **No "tap to change" hint.** It was written for Plan's seven named rows,
+    and those are gone (see "The Plan tab"); under this heading are seven dots
+    you read. The tap still works — it is a bonus on a glance, not the glance's
+    purpose — and `tapToChange` went with its last caller.
+  - **Seeing the whole plan sits *under* the strip, not beside the heading.**
+    The glance is what you came for; the way out of it is what you reach for
+    after reading it, so **See plan ›** is a left-aligned ghost link on the
+    line below — the rest-day card's **Free session ›** grammar.
+- **Plan carries a `‹ Back` header, and the weekday rows under its grid are
+  gone.** It is registered in the tabs but has no button in the bar, so back was
+  the only way out and nothing on the glass said so; the header is the same shape
+  Settings, Insights, Buddy sync and the picker use, with
+  `router.canGoBack() ? back() : replace('/')` as the floor for a cold landing.
+  The rows were the second answer to a question the calendar above them already
+  answered — see "The Plan tab" for the model that replaced them and for where
+  each of their jobs went.
 - "Today" is live (`src/data/date.ts`), not the design's pinned Friday
   7 August 2026. Sessions are logged by real date (`history` / `lastLog` in
   the store), and the durable slice of state persists to AsyncStorage — see
@@ -328,15 +539,48 @@ Keep these; they're decisions, not drift. Each is commented at its site.
   them through the store's `gInfo`/`kInfo`/`rInfo`/`exInfo` — never read
   `.labels`/`.names` directly in a screen — and render a `missing` result with
   the `missingName` style from `ui.tsx`.
-- **`DOW` is the schedule's key set and is never rendered.** What a screen
-  shows is `DAYS_SHORT[s.lang]` from i18n — the keys read as English in
-  either language, and did for a year before anyone noticed.
+- **`DOW` is the weekday key set and is never rendered.** What a screen shows is
+  `DAYS_SHORT[s.lang]` from i18n — the keys read as English in either language,
+  and did for a year before anyone noticed. Weekday *indexes* (a `week` rule's
+  `dows`, `todayDow`, `dowOfISO`) are Monday-based to match it.
 - **The live session is one exercise per screen**, not the design's stack of
   collapsed cards. The whole list, Add exercise, Discard and Finish live in the
   overview sheet behind the "3 / 5" chip; the bottom button is navigation only
   (Next exercise / Finish workout). Swipe or the overview moves between
   exercises — `s.active` is still what drives it, and the swipe stays a swipe:
   the hold guards the button, not the gesture.
+- **Back leaves the session running and lands on Today.** It used to be
+  swallowed: the design has no back route out of a workout, and the worry was a
+  stray press throwing one away. But a workout is the one screen you have a
+  real reason to step out of mid-way, and back is the gesture Android reaches
+  for. So it minimizes (`sessionMin`) and navigates to `/` — the move the buddy
+  tap already made, with a different destination. Nothing is discarded,
+  `elapsed` keeps counting, and both the tab-bar strip and Today's hero are the
+  way back. Finish, held, is still the only thing that ends a session, which is
+  what makes a stray press cheap. `useBackClose` lost its `swallow` option with
+  its last caller.
+- **A running workout owns Today's hero card, and no second one can start.**
+  Two halves of one rule, and the first half is why the second is needed:
+  backing out put every Start in the app within reach of a live session, so
+  `start` refuses outright — any Start tap while `s.session` is set resurfaces
+  it instead of replacing it, where it used to refuse only once a set had been
+  ticked. It is the single choke point, so "impossible to start another" holds
+  wherever the button lives. Shared starts (`withBuddy`) still pass through:
+  both phones agreed, and a one-sided refusal would strand the buddy in a
+  session this phone never joined.
+  - **The refusal is visible before the press, never after it.** Today's hero
+    switches from the day's plan to the session — kicker, name, a live dot and
+    the clock, one `n / m` line per exercise, and **Back to workout ›** — while
+    the Plan day card and the routine editor relabel their Start. The Routines
+    tab instead drops its per-card Start, its free session and its
+    build-together outright and carries one live row at the top: ten cards all
+    reading "Back to workout" is furniture, and one row says it once. Reading,
+    editing and the collection's + stay open, because installing a routine is
+    not starting one and is a fine thing to do between sets.
+  - **`hasTicked` is gone.** It existed to hold the old guard and Today's old
+    button label to one definition. Now that the guard asks only whether there
+    is a session, both read `s.session`, and a second predicate would just be a
+    way for the two to disagree again.
 - **A set is logged in exactly one place: its own tick box.** Enter on the
   weight field moves to reps, Enter on reps logs the set. There is deliberately
   no second "log" button — the box is also the only way to *un*-tick a set, so
@@ -390,10 +634,11 @@ Keep these; they're decisions, not drift. Each is commented at its site.
   a set that was lifted is a fact, and facts don't leave through an ×. Ticks
   are also refused when they would record nothing — empty fields *and* an
   empty ghost would log "BW × 0", which becomes next session's last-time lie.
-- **A routine deletes from its editor, held.** `deleteRoutine` clears the
-  schedule slots pointing at it and ends a matching co-draft; `history` is
-  untouched on purpose — entries carry their name frozen at log time, and a
-  deleted rid there is already the case the plan screen handles.
+- **A routine deletes from its editor, held.** `deleteRoutine` drops the plan
+  rules pointing at it — through `dropEntries`, so the skips that named those
+  rules go too — and ends a matching co-draft; `history` is untouched on purpose
+  — entries carry their name frozen at log time, and a deleted rid there is
+  already the case the plan screen handles.
 - **Changing exercise does not clear a running rest.** A swipe forward to
   peek and a swipe straight back used to silently cost the countdown and its
   scheduled notification. The rest is about your body, not the machine you
@@ -455,24 +700,61 @@ Keep these; they're decisions, not drift. Each is commented at its site.
   solo, because ending someone's live session from another phone would throw
   away sets they actually lifted. Any path that ends a link has to send `bye`
   first, or the other phone spends the next hour reconnecting through it.
+- **A sync row settles from either phone** (`buddySynced` — transient, the
+  radio is the only writer, the sync screen only reads). Merging a pushed or
+  pulled item answers with `itemAck`, and the ack is what upgrades the
+  sender's *Sent* to *Received* — delivery says the bytes arrived, the ack
+  says the merge ran. A pushed item also flips its own row on the receiving
+  screen, so two open sync screens tick off together. The set resets with
+  each snapshot, because it baselines the diff a stale id could dress up.
+  Protocol *addition*, not change: an un-updated peer never acks and its
+  buddy's marks stay delivery-based — degraded, never broken.
 - **`knownBuddies` is the durable half of a buddy** (the connection is not, and
   still isn't persisted). With anyone on it the radio advertises and discovers
   while the app is open, so two paired phones find each other with nobody
-  tapping anything; a known name is auto-accepted with no code. That is a
-  deliberate battery trade, decided with Calvin — the alternative was both
-  people having to tap before either could be seen.
+  tapping anything; a buddy is re-accepted with no code. That is a deliberate
+  battery trade, decided with Calvin — the alternative was both people having to
+  tap before either could be seen. Silent re-accept is gated on the pairing
+  secret, not the name — see below.
 - **Nothing takes a name off that list but the user** (× / `forgetBuddy`). It is
   how you see who is around when you run into each other, which only works if
   it outlasts every link that ever dropped — including the ones you ended.
-- **A buddy's real identity is their install id, not their name.** The radio
-  advertises `id|name` (`encodePeerName` / `decodePeerName` in buddy-sync;
-  `selfId` is ANDROID_ID or a once-minted random) and the snapshot carries the
-  sender's id — so a rename lands as "same id, new name" and `rememberBuddy`
-  renames the roster entry instead of meeting a stranger. `buddyIds` is a
-  separate persisted key (roster name → id) rather than a reshaped
-  `knownBuddies`: `PERSIST` is additive and both phones carry real name-keyed
-  rosters, which also keeps an id-less older build pairable by name. This is
-  a protocol change — both phones need the build before renames are safe.
+- **A buddy is *identified* by install id, *authenticated* by a shared secret.**
+  The radio advertises `id|name` (`encodePeerName` / `decodePeerName`; `selfId`
+  is ANDROID_ID or a once-minted random) and the snapshot carries the sender's
+  id — so a rename lands as "same id, new name" and `rememberBuddy` renames the
+  roster entry instead of meeting a stranger. `buddyIds` is a separate persisted
+  key (roster name → id). But **both halves of the advertised name are
+  self-asserted strings a nearby attacker can forge** — the id authenticates
+  nothing on its own. So identity is *proved*, not asserted:
+  - **The pairing secret (`buddySecrets`, `randomToken` in buddy-sync) is minted
+    once during the code-gated first pairing** and persisted on both phones. On
+    every reconnect the peer must prove it before this phone trusts them —
+    before it sends its snapshot, merges an `item`, honours a `sessionInvite`,
+    or applies a draft. The first pairing is still the only place a stranger
+    gets on the roster, and Nearby's confirmed auth digits are still the gate
+    there; the secret is what carries that trust across every later silent
+    reconnect.
+  - **`hello` is the first message on every link** (`parseBuddyMessage`
+    honours nothing else from an unproven endpoint). A reconnect carries
+    `proof = authProof(secret, digits)` — a keyed hash bound to *this*
+    connection's Nearby auth digits, which both endpoints witness and no third
+    party can predict, so a captured proof can't be replayed and the raw secret
+    never re-crosses the wire. A first pairing carries `newToken` from the
+    minting side instead (the requester, `!incoming`); the code was the gate, so
+    this only seeds the secret. `authed` / `meta` in `<BuddyRadio>` are the
+    transient per-endpoint handshake state; `buddyEndpoint` is not set on a
+    reconnect until the proof checks out.
+  - **A name-only impersonator gets a connection and nothing else.** It can
+    match a roster name and be accepted at the link layer, but it can't produce
+    the proof, so every sensitive message it sends is dropped and the link is
+    torn down. Before this, matching the name was the whole test — it yielded
+    the victim's full library snapshot and a write into their persisted store.
+  - `PERSIST` is additive, so `buddySecrets` needed no `STORAGE_VERSION` bump.
+    This is a **protocol change**: both phones need the build, and **a buddy
+    paired before secrets existed has none — they re-pair once, through the
+    code, to mint one** (a known name with no secret is treated as a stranger,
+    not silently accepted). An id-less older build no longer auto-reconnects.
 - **The only connection this app opens by itself is back to the buddy of the
   session in progress** (`s.buddy`), because a mid-workout drop has to heal
   without anyone tapping. Everyone else on the roster is discovered, listed and
@@ -535,9 +817,11 @@ Keep these; they're decisions, not drift. Each is commented at its site.
   since): filling a hole is not the same as overwriting a fact, and saving a
   variant must not retitle the session it came from.
 - **A day you trained is a full dot on the calendar whether or not anything was
-  scheduled.** The dot used to test the schedule first, so a freeform Saturday
-  was invisible on the month grid and the day card called it "Nothing planned"
-  with the session listed right underneath it.
+  planned.** The dot used to test the plan first, so a freeform Saturday was
+  invisible on the month grid and the day card called it "Nothing planned" with
+  the session listed right underneath it. It is now also why the day panel keeps
+  planned rows and logged cards in separate blocks: a day can be either, both or
+  neither, per row, and all of those have to read correctly.
 - **Every logged set's rest is `restSeconds`, not a constant** — a setting, 0
   meaning off. `REST_SECONDS` is gone from the session overlay.
 - **A rest that ends out of the app arrives as a notification** (`restAlert`,
@@ -606,7 +890,13 @@ deliberately beat their English — don't literalize them back).
   **Session** = the live (shared) one, **Training** = the activity;
   **Handy** = the phone — **Gerät** is equipment only; **Partner**, not
   Buddy; **Wdh.**, not Whd.; a screen tap is a **Fingertipp**, *abhaken*
-  means to tick. Trailing activity-ellipses attach (`Suche…`).
+  means to tick; a plan's repeat is a **Wiederholung**. Trailing
+  activity-ellipses attach (`Suche…`).
+- **A generated phrase needs both German forms.** English composes a repeat
+  uniformly — *every {n} days* — where German switches on the count: *jeden Tag*
+  / *alle 3 Tage*, *jede Woche* / *alle 2 Wochen*. Two strings per unit, picked
+  by `n === 1` in `repeatLabel`. The fun facts dodged this by only ever being
+  plural; a repeat of one is the common case, so it is met head-on.
 - **The seed library speaks both languages too.** Seeded exercise names carry
   `names.de` via `DE_NAMES` — only where a German gym genuinely says
   something else (`Butterfly` for the pec deck; `Plank` stays `Plank`) — and

@@ -12,10 +12,12 @@ import { BackHandler } from 'react-native';
  * registered exactly once. Re-registering on every render would make whichever
  * overlay rendered last the newest listener, and the layering would break.
  *
- * Pass `swallow` for an overlay with no back route (the live session): back is
- * consumed so it cannot fall through, but nothing closes.
+ * Back is always consumed — an overlay is on screen, so the press belongs to
+ * it and must not fall through to the navigator underneath. The live session
+ * used to opt out of the callback with a `swallow` flag; it now has a real
+ * back route (minimize, land on Today), so nothing needs one.
  */
-export function useBackClose(onBack: () => void, { swallow = false } = {}) {
+export function useBackClose(onBack: () => void) {
   const cb = useRef(onBack);
 
   useEffect(() => {
@@ -24,9 +26,9 @@ export function useBackClose(onBack: () => void, { swallow = false } = {}) {
 
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (!swallow) cb.current();
+      cb.current();
       return true;
     });
     return () => sub.remove();
-  }, [swallow]);
+  }, []);
 }

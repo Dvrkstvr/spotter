@@ -8,7 +8,7 @@
  * what makes "missing translation" well-defined).
  */
 import type { BuddySnapshot } from '@/data/buddy-transport';
-import type { Exercise, Routine } from '@/data/exercises';
+import { isMeasure, type Exercise, type Routine, type RoutineItem } from '@/data/exercises';
 import type { Lang, LangMap } from '@/data/i18n';
 import type { Labelled } from '@/store/workout-store';
 
@@ -382,13 +382,105 @@ export const isKnownPeer = (
   s.knownBuddies.includes(peer.name) ||
   (peer.id !== null && Object.values(s.buddyIds).includes(peer.id));
 
+/**
+ * The roster name this advertised identity maps to, or null for a stranger.
+ * Install id first — that is what survives a rename — then exact display name
+ * for id-less older builds. This is *identification*, not authentication: both
+ * halves are self-asserted and forgeable, which is the whole reason the
+ * pairing secret below exists.
+ */
+export const rosterNameFor = (
+  s: { knownBuddies: string[]; buddyIds: Record<string, string> },
+  peer: PeerIdentity
+): string | null => {
+  if (peer.id !== null) {
+    const byId = Object.keys(s.buddyIds).find((n) => s.buddyIds[n] === peer.id);
+    if (byId) return byId;
+  }
+  return s.knownBuddies.includes(peer.name) ? peer.name : null;
+};
+
+/* ── pairing secret (impersonation defence) ────────────────────────────── */
+
+/**
+ * A per-pairing shared secret, minted once during the code-gated first
+ * pairing and persisted on both phones (`buddySecrets` in the store). It is
+ * the thing a *reconnecting* peer must prove before this phone trusts it —
+ * sends it a snapshot, merges its items, honours its session invites. The
+ * advertised name and install id authenticate nothing on their own (both are
+ * self-asserted strings a nearby attacker can forge), so without this a device
+ * that merely knows a buddy's first name could impersonate them. Only a phone
+ * that was in the room for the confirmed first pairing ever learns this.
+ *
+ * 128 bits of `Math.random` — not a CSPRNG, but the secret is only ever
+ * exchanged over the code-authenticated, Nearby-encrypted channel and never
+ * leaves it, so its one job is to be unguessable to an impersonator who has
+ * never seen it. (`identity.ts` mints the install id the same way.)
+ */
+export const randomToken = (): string =>
+  Array.from({ length: 4 }, () =>
+    Math.floor(Math.random() * 0x100000000)
+      .toString(16)
+      .padStart(8, '0')
+  ).join('');
+
+/**
+ * The proof a peer sends to show it holds the pairing secret, bound to *this*
+ * connection via Nearby's authentication digits. Both endpoints witness the
+ * same digits — an artefact of the encrypted handshake, unpredictable to any
+ * third party — so a proof captured from one session cannot be replayed into
+ * another, and the raw secret is never re-sent after enrolment.
+ *
+ * A pure-JS keyed hash (four decorrelated FNV-1a lanes → 128 bits) rather than
+ * a native SHA: the channel is already encrypted and per-session keyed, so an
+ * attacker never observes a proof to begin with — this only has to be a
+ * stable, not-invertible-in-practice mixing of (secret, digits). If the
+ * transport is ever not encrypted, swap in expo-crypto through the
+ * optional-native bridge.
+ */
+export const authProof = (secret: string, digits: string): string =>
+  [0, 1, 2, 3]
+    .map((lane) => {
+      const msg = `${secret}|${digits}|${lane}`;
+      let h = (0x811c9dc5 ^ Math.imul(lane, 0x9e3779b1)) >>> 0;
+      for (let i = 0; i < msg.length; i++) {
+        h ^= msg.charCodeAt(i);
+        h = Math.imul(h, 0x01000193);
+      }
+      return (h >>> 0).toString(16).padStart(8, '0');
+    })
+    .join('');
+
+/** Whether a peer's hello proves the secret we hold for them on this link. */
+export const proofOk = (
+  secret: string | undefined,
+  proof: unknown,
+  digits: string
+): boolean => !!secret && typeof proof === 'string' && proof === authProof(secret, digits);
+
 /* ── wire protocol (real radio) ────────────────────────────────────────── */
 
 /** Messages the two phones exchange once Nearby connects them. */
 export type BuddyMessage =
+  /**
+   * The first message on every connection, before anything sensitive crosses.
+   * A reconnecting peer carries `proof` (see `authProof`); the first pairing
+   * carries `newToken` from the minting side instead — the code check was the
+   * gate there, and this only *establishes* the secret for next time. Nothing
+   * but a `hello` is honoured from an unauthenticated endpoint.
+   */
+  | { v: 1; t: 'hello'; name: string; id?: string; proof?: string; newToken?: string }
   /** `id` is the sender's install id; absent from older builds */
   | { v: 1; t: 'snapshot'; name: string; id?: string; data: SyncSide }
   | { v: 1; t: 'item'; item: SyncItem }
+  /**
+   * The receiver merged a sync item — `id` is its `syncItemId`. Delivery only
+   * says the bytes arrived; this says the merge ran, which is what upgrades
+   * the sender's Sent to Received. Sent both when a pushed item lands and when
+   * a Transfer tap pulls one, so either phone's act settles the row on the
+   * other. An older build never acks and the mark stays delivery-based.
+   */
+  | { v: 1; t: 'itemAck'; id: string }
   | { v: 1; t: 'sessionInvite'; invite: SessionInvite }
   | { v: 1; t: 'sessionJoin' }
   | { v: 1; t: 'sessionDecline' }
@@ -413,26 +505,312 @@ export type BuddyMessage =
   | { v: 1; t: 'joinAsk' }
   | { v: 1; t: 'joinReply'; ok: boolean };
 
-const MESSAGE_TYPES = new Set([
-  'snapshot',
-  'item',
-  'sessionInvite',
-  'sessionJoin',
-  'sessionDecline',
-  'progress',
-  'draftStart',
-  'draftUpdate',
-  'draftEnd',
-  'bye',
-  'joinAsk',
-  'joinReply',
-]);
+/* ── incoming payload validation ───────────────────────────────────────── */
 
+/**
+ * Everything below runs on bytes another phone sent. The envelope check (`v`,
+ * `t`) was never enough on its own: the payload bodies used to be cast
+ * (`as BuddyMessage`) and merged into persisted state unread, so a peer — a
+ * buggy build, or an attacker who cleared the secret gate — could ship a
+ * `names` that is a string instead of a map, a non-array `items`, a megabyte
+ * of them, and the store would swallow it. A wrong-typed field then crashes
+ * whatever screen assumes the shape, and because the durable blob is rehydrated
+ * every launch, that crash can be permanent.
+ *
+ * So each payload is rebuilt field-by-field into a known-good shape: right
+ * types, capped sizes, unknown fields dropped. A sub-item that can't be
+ * salvaged is filtered out rather than poisoning the whole message; a payload
+ * whose spine is wrong (a snapshot with no object `data`, an invite with no
+ * routine) drops the message entirely. The caps are generous headroom over any
+ * real library — they exist to bound a hostile payload, not to fit an honest
+ * one.
+ */
+const CAP = { str: 200, list: 400, items: 200 } as const;
+
+const capStr = (v: unknown, cap = CAP.str): string =>
+  typeof v === 'string' ? v.slice(0, cap) : '';
+
+/** A string that must be present and sanely bounded, else the item is dropped. */
+const reqStr = (v: unknown): string | null =>
+  typeof v === 'string' && v.length > 0 && v.length <= CAP.str ? v : null;
+
+const finite = (v: unknown, fb = 0): number => {
+  const n = typeof v === 'number' ? v : Number(v);
+  return Number.isFinite(n) ? n : fb;
+};
+
+const isObj = (v: unknown): v is Record<string, unknown> =>
+  typeof v === 'object' && v !== null;
+
+/** Keep only the two known languages, each a capped string. */
+const cleanLangMap = (v: unknown): LangMap => {
+  const out: LangMap = {};
+  if (isObj(v)) {
+    for (const l of LANGS) if (typeof v[l] === 'string') out[l] = capStr(v[l]);
+  }
+  return out;
+};
+
+const cleanList = <T>(v: unknown, f: (x: unknown) => T | null): T[] =>
+  (Array.isArray(v) ? v : [])
+    .slice(0, CAP.list)
+    .map(f)
+    .filter((x): x is T => x !== null);
+
+const cleanLabelled = (v: unknown): Labelled | null => {
+  if (!isObj(v)) return null;
+  const key = reqStr(v.key);
+  return key ? { key, labels: cleanLangMap(v.labels) } : null;
+};
+
+const cleanExercise = (v: unknown): Exercise | null => {
+  if (!isObj(v)) return null;
+  const id = reqStr(v.id);
+  if (!id) return null;
+  const ex: Exercise = {
+    id,
+    name: capStr(v.name),
+    group: capStr(v.group),
+    kind: capStr(v.kind),
+    last: Math.max(0, finite(v.last)),
+    lastSets: (Array.isArray(v.lastSets) ? v.lastSets : [])
+      .slice(0, CAP.items)
+      .filter((s): s is string => typeof s === 'string')
+      .map((s) => capStr(s)),
+  };
+  const names = cleanLangMap(v.names);
+  if (Object.keys(names).length) ex.names = names;
+  if (isMeasure(v.measure)) ex.measure = v.measure;
+  return ex;
+};
+
+const cleanRoutineItem = (v: unknown): RoutineItem | null => {
+  if (!isObj(v)) return null;
+  const ex = reqStr(v.ex);
+  if (!ex) return null;
+  const it: RoutineItem = {
+    ex,
+    sets: Math.min(999, Math.max(0, Math.round(finite(v.sets, 1)))),
+    reps: Math.min(99999, Math.max(0, Math.round(finite(v.reps, 0)))),
+    w: Math.max(0, finite(v.w, 0)),
+  };
+  if (v.planned === true) it.planned = true;
+  return it;
+};
+
+const cleanRoutine = (v: unknown): Routine | null => {
+  if (!isObj(v)) return null;
+  const id = reqStr(v.id);
+  if (!id) return null;
+  return {
+    id,
+    names: cleanLangMap(v.names),
+    items: (Array.isArray(v.items) ? v.items : [])
+      .slice(0, CAP.items)
+      .map(cleanRoutineItem)
+      .filter((x): x is RoutineItem => x !== null),
+  };
+};
+
+const cleanSide = (v: unknown): SyncSide | null =>
+  isObj(v)
+    ? {
+        groups: cleanList(v.groups, cleanLabelled),
+        kinds: cleanList(v.kinds, cleanLabelled),
+        custom: cleanList(v.custom, cleanExercise),
+        routines: cleanList(v.routines, cleanRoutine),
+      }
+    : null;
+
+const SYNC_ITEM_TYPES = new Set<string>(['group', 'kind', 'exercise', 'routine']);
+
+const cleanSyncItem = (v: unknown): SyncItem | null => {
+  if (!isObj(v) || typeof v.type !== 'string' || !SYNC_ITEM_TYPES.has(v.type)) return null;
+  const key = reqStr(v.key);
+  if (!key) return null;
+  const type = v.type as SyncItemType;
+  const fallback = capStr(v.fallback);
+  if (v.kind === 'translation') {
+    if (v.lang !== 'en' && v.lang !== 'de') return null;
+    if (typeof v.text !== 'string') return null;
+    return { kind: 'translation', type, key, lang: v.lang, text: capStr(v.text), names: cleanLangMap(v.names), fallback };
+  }
+  if (v.kind === 'item') return { kind: 'item', type, key, names: cleanLangMap(v.names), fallback };
+  return null;
+};
+
+const cleanStrMap = (v: unknown): Record<string, string> => {
+  const out: Record<string, string> = {};
+  if (isObj(v))
+    for (const [k, val] of Object.entries(v).slice(0, CAP.items))
+      if (k.length <= CAP.str && typeof val === 'string') out[k] = capStr(val);
+  return out;
+};
+
+const cleanInvite = (v: unknown): SessionInvite | null => {
+  if (!isObj(v)) return null;
+  const routine = cleanRoutine(v.routine);
+  return routine
+    ? {
+        routine,
+        custom: cleanList(v.custom, cleanExercise),
+        groups: cleanList(v.groups, cleanLabelled),
+        kinds: cleanList(v.kinds, cleanLabelled),
+      }
+    : null;
+};
+
+const cleanDraft = (v: unknown): DraftPayload | null => {
+  if (!isObj(v)) return null;
+  const routine = cleanRoutine(v.routine);
+  return routine
+    ? {
+        routine,
+        custom: cleanList(v.custom, cleanExercise),
+        groups: cleanList(v.groups, cleanLabelled),
+        kinds: cleanList(v.kinds, cleanLabelled),
+        addedBy: cleanStrMap(v.addedBy),
+        picking: v.picking === true,
+      }
+    : null;
+};
+
+const cleanTurnChoice = (v: unknown): TurnChoice | null => {
+  if (!isObj(v) || (v.mode !== 'alternate' && v.mode !== 'parallel')) return null;
+  return typeof v.rev === 'number' && Number.isFinite(v.rev) ? { mode: v.mode, rev: v.rev } : null;
+};
+
+const cleanModes = (v: unknown): Record<string, TurnChoice> => {
+  const out: Record<string, TurnChoice> = {};
+  if (isObj(v))
+    for (const [k, val] of Object.entries(v).slice(0, CAP.items)) {
+      if (k.length > CAP.str) continue;
+      const t = cleanTurnChoice(val);
+      if (t) out[k] = t;
+    }
+  return out;
+};
+
+const cleanFirstUp = (v: unknown): FirstUpChoice | undefined => {
+  if (!isObj(v) || typeof v.policy !== 'string' || !FIRST_UP_SET.has(v.policy)) return undefined;
+  if (typeof v.seed !== 'number' || !Number.isFinite(v.seed)) return undefined;
+  if (typeof v.rev !== 'number' || !Number.isFinite(v.rev)) return undefined;
+  return { policy: v.policy as FirstUp, seed: v.seed, rev: v.rev };
+};
+
+const cleanBids = (v: unknown): Record<string, Bid> | undefined => {
+  if (!isObj(v)) return undefined;
+  const out: Record<string, Bid> = {};
+  for (const [k, val] of Object.entries(v).slice(0, CAP.items))
+    if (k.length <= CAP.str && (val === 'me' || val === 'you')) out[k] = val;
+  return out;
+};
+
+const cleanProgress = (v: unknown): BuddyProgress | null => {
+  if (!isObj(v)) return null;
+  const list = (Array.isArray(v.list) ? v.list : [])
+    .slice(0, CAP.items)
+    .flatMap((e): { ex: string; done: boolean[] }[] => {
+      if (!isObj(e) || typeof e.ex !== 'string' || e.ex.length > CAP.str) return [];
+      const done = (Array.isArray(e.done) ? e.done : []).slice(0, CAP.items).map((b) => b === true);
+      return [{ ex: e.ex, done }];
+    });
+  const prog: BuddyProgress = {
+    rid: typeof v.rid === 'string' ? capStr(v.rid) : null,
+    active: typeof v.active === 'string' ? capStr(v.active) : null,
+    list,
+    finished: v.finished === true,
+    modes: cleanModes(v.modes),
+  };
+  const first = cleanFirstUp(v.first);
+  if (first) prog.first = first;
+  const bids = cleanBids(v.bids);
+  if (bids) prog.bids = bids;
+  return prog;
+};
+
+/**
+ * Parse and validate one wire message. Returns a message whose payload has
+ * been rebuilt into a known-good shape, or null — for bad JSON, a wrong
+ * envelope, or a body that couldn't be salvaged. Every handler downstream can
+ * treat the result as trusted-shaped; the security gate (is this peer allowed
+ * to be heard at all) is separate, in `<BuddyRadio>`.
+ */
 export const parseBuddyMessage = (raw: string): BuddyMessage | null => {
+  let m: unknown;
   try {
-    const m = JSON.parse(raw);
-    return m && m.v === 1 && MESSAGE_TYPES.has(m.t) ? (m as BuddyMessage) : null;
+    m = JSON.parse(raw);
   } catch {
     return null;
+  }
+  if (!isObj(m) || m.v !== 1 || typeof m.t !== 'string') return null;
+
+  switch (m.t) {
+    case 'hello':
+      return typeof m.name === 'string'
+        ? {
+            v: 1,
+            t: 'hello',
+            name: capStr(m.name),
+            ...(typeof m.id === 'string' ? { id: capStr(m.id) } : {}),
+            ...(typeof m.proof === 'string' ? { proof: capStr(m.proof) } : {}),
+            ...(typeof m.newToken === 'string' ? { newToken: capStr(m.newToken) } : {}),
+          }
+        : null;
+    case 'snapshot': {
+      const data = cleanSide(m.data);
+      return data && typeof m.name === 'string'
+        ? {
+            v: 1,
+            t: 'snapshot',
+            name: capStr(m.name),
+            data,
+            ...(typeof m.id === 'string' ? { id: capStr(m.id) } : {}),
+          }
+        : null;
+    }
+    case 'item': {
+      const item = cleanSyncItem(m.item);
+      return item ? { v: 1, t: 'item', item } : null;
+    }
+    case 'itemAck':
+      // The id is a syncItemId — a typed prefix on a capped key, so it may
+      // run a shade past what CAP.str allows a bare string.
+      return typeof m.id === 'string' && m.id.length > 0 && m.id.length <= CAP.str + 24
+        ? { v: 1, t: 'itemAck', id: m.id }
+        : null;
+    case 'sessionInvite': {
+      const invite = cleanInvite(m.invite);
+      return invite ? { v: 1, t: 'sessionInvite', invite } : null;
+    }
+    case 'progress': {
+      const state = cleanProgress(m.state);
+      return state ? { v: 1, t: 'progress', state } : null;
+    }
+    case 'draftStart': {
+      const draft = cleanDraft(m.draft);
+      return draft ? { v: 1, t: 'draftStart', draft } : null;
+    }
+    case 'draftUpdate': {
+      const draft = cleanDraft(m.draft);
+      return draft ? { v: 1, t: 'draftUpdate', draft } : null;
+    }
+    case 'draftEnd': {
+      const draft = cleanDraft(m.draft);
+      const reason = m.reason === 'save' || m.reason === 'start' ? m.reason : null;
+      return draft && reason ? { v: 1, t: 'draftEnd', reason, draft } : null;
+    }
+    case 'joinReply':
+      return typeof m.ok === 'boolean' ? { v: 1, t: 'joinReply', ok: m.ok } : null;
+    case 'sessionJoin':
+      return { v: 1, t: 'sessionJoin' };
+    case 'sessionDecline':
+      return { v: 1, t: 'sessionDecline' };
+    case 'bye':
+      return { v: 1, t: 'bye' };
+    case 'joinAsk':
+      return { v: 1, t: 'joinAsk' };
+    default:
+      return null;
   }
 };

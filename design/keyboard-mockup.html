@@ -1,0 +1,695 @@
+<title>Spotter — Inputs above the keyboard (mockup)</title>
+<style>
+  /* ── Nocturne, verbatim from src/design/tokens.ts ─────────────────────
+     Single-theme on purpose: this mocks the app's default (blurple · dark),
+     which is byte-identical to the ported design palette. */
+  :root {
+    --bg: #161826;          /* app page */
+    --surface: #232532;
+    --text: #e9e9ed;
+    --accent: #9184d9;
+    --accent2: #a7a1db;
+    --a100: #f5f4ff; --a200: #e7e5fe; --a300: #d2cefd; --a400: #b5abfc;
+    --a700: #5d5294; --a800: #423a6a; --a900: #2b2741;
+    --n100: #f3f5fe; --n300: #cbcedd; --n400: #b2b6ca; --n500: #9397ab; --n600: #75798c;
+    --n700: #595d6c; --n800: #3f424d; --n900: #292b31;
+    --scrim: #0b0c14;
+    --divider: rgba(233, 233, 237, 0.16);
+    --rule: rgba(233, 233, 237, 0.09);
+    --wash-t8: rgba(233, 233, 237, 0.08);
+    --wash-a16: rgba(145, 132, 217, 0.16);
+    --wash-a10: rgba(145, 132, 217, 0.10);
+    --wash-a7: rgba(145, 132, 217, 0.07);
+    /* system keyboard — deliberately not an app colour: it is Android's
+       surface, and drawing it in Nocturne would claim it as ours */
+    --ime: #1f2128;
+    --ime-key: #30323c;
+    --ime-key-dim: #262832;
+    --sans: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--scrim);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 1180px; margin: 0 auto; padding: 56px 28px 96px; }
+
+  .kicker {
+    font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--accent); font-weight: 400;
+  }
+  h1 {
+    font-weight: 500; font-size: 40px; line-height: 1.12;
+    letter-spacing: -0.015em; margin: 10px 0 14px; text-wrap: balance;
+  }
+  h2.sec { font-weight: 500; font-size: 24px; letter-spacing: -0.015em; margin: 0 0 6px; }
+  .lede { color: var(--n400); max-width: 66ch; }
+  .lede strong { color: var(--text); font-weight: 500; }
+  .lede code, .notes code, .settled code {
+    font-family: var(--mono); font-size: 12.5px; color: var(--a300);
+    background: var(--n900); border-radius: 4px; padding: 1px 5px;
+  }
+
+  .settled {
+    margin: 26px 0 0; border: 1px solid var(--divider); border-left: 2px solid var(--accent);
+    border-radius: 8px; padding: 13px 16px; max-width: 78ch;
+  }
+  .settled .h { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); }
+  .settled ul { margin: 9px 0 0; padding-left: 18px; color: var(--n400); font-size: 13.5px; display: grid; gap: 6px; }
+  .settled li::marker { color: var(--n700); }
+  .settled strong { color: var(--text); font-weight: 500; }
+
+  hr.fade {
+    border: 0; height: 1px; margin: 52px 0;
+    background: linear-gradient(90deg, transparent, var(--divider) 48px, var(--divider) calc(100% - 48px), transparent);
+  }
+
+  /* ── the before/after pair ── */
+  .pair { display: grid; grid-template-columns: 348px 348px; gap: 32px; margin-top: 26px; align-items: start; }
+  .half .cap { font-size: 13px; font-weight: 500; margin-bottom: 3px; }
+  .half .cap.bad { color: var(--n400); }
+  .half .cap.good { color: var(--accent); }
+  .half .sub { font-size: 12px; color: var(--n500); margin-bottom: 12px; max-width: 40ch; min-height: 38px; }
+  .notes { margin-top: 20px; max-width: 72ch; }
+  .notes ul { margin: 10px 0 0; padding-left: 18px; color: var(--n400); font-size: 14px; display: grid; gap: 9px; }
+  .notes li::marker { color: var(--n700); }
+  .notes strong { color: var(--text); font-weight: 500; }
+  @media (max-width: 880px) { .pair { grid-template-columns: 1fr; } }
+
+  /* ── phone frame ── */
+  .phone {
+    width: 348px; height: 748px; background: var(--bg);
+    border: 1px solid var(--n800); border-radius: 30px;
+    overflow: hidden; display: flex; flex-direction: column;
+    box-shadow: 0 16px 40px rgba(0,0,0,0.55); position: relative;
+  }
+  .status {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 20px 4px; font-size: 11.5px; color: var(--n500); flex: none;
+  }
+  .batt { display: inline-block; width: 18px; height: 9px; border: 1px solid var(--n600); border-radius: 2px; position: relative; }
+  .batt::after { content: ""; position: absolute; inset: 1.5px 30% 1.5px 1.5px; background: var(--n500); border-radius: 1px; }
+  .app { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+
+  /* in-phone primitives */
+  .sc-kicker { font-size: 9.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent); }
+  .sc-h3 { font-weight: 500; font-size: 22px; letter-spacing: -0.01em; line-height: 1.15; }
+  .sc-h4 { font-weight: 500; font-size: 17px; letter-spacing: -0.01em; }
+  .dim { color: var(--n500); }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    border: 1px solid var(--divider); border-radius: 8px;
+    padding: 7px 14px; font-size: 13px; font-weight: 500; color: var(--text);
+  }
+  .btn.block { display: flex; width: 100%; }
+
+  /* ── the Android keyboard ─────────────────────────────────────────────
+     In the "today" phones it is position:absolute — drawn over an app that
+     did not move, which is exactly the bug. In the "fixed" phones it is a
+     plain flex sibling: the app region genuinely ends where the keys begin. */
+  .ime {
+    background: var(--ime); border-top: 1px solid rgba(255,255,255,0.05);
+    padding: 8px 6px 4px; display: flex; flex-direction: column; gap: 7px;
+    flex: none;
+  }
+  .ime.over { position: absolute; left: 0; right: 0; bottom: 0; z-index: 40; box-shadow: 0 -10px 24px rgba(0,0,0,0.35); }
+  .ime .krow { display: flex; gap: 6px; padding: 0 2px; }
+  .ime .key {
+    flex: 1; height: 46px; background: var(--ime-key); border-radius: 7px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16.5px; color: #dfe1e8;
+  }
+  .ime.numpad .key { height: 58px; font-size: 20px; }
+  .ime .key.fn { background: var(--ime-key-dim); color: var(--n400); font-size: 13px; }
+  .ime .key.go { background: var(--a700); color: var(--a100); }
+  .ime .key.space { flex: 4; }
+  .ime .key.shift, .ime .key.del { flex: 1.4; }
+  .ime .strip { display: flex; align-items: center; padding: 0 6px 2px; }
+  .ime .strip span { flex: 1; text-align: center; font-size: 13px; color: var(--n400); padding: 5px 0; }
+  .ime .strip span + span { border-left: 1px solid rgba(255,255,255,0.07); }
+  .ime .strip span.mid { color: var(--text); font-weight: 500; }
+  .ime .navpill { width: 96px; height: 3.5px; border-radius: 2px; background: var(--n600); margin: 7px auto 4px; }
+
+  /* ── session screen ── */
+  .ses-head { flex: none; padding: 12px 18px 0; }
+  .ses-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+  .ses-count { font-size: 11.5px; color: var(--n500); font-variant-numeric: tabular-nums; white-space: nowrap; padding-top: 16px; }
+  .ses-prog { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+  .ses-bar { flex: 1; height: 3px; border-radius: 2px; background: var(--n900); position: relative; overflow: hidden; }
+  .ses-bar::after { content: ""; position: absolute; inset: 0 30% 0 0; background: var(--accent); border-radius: 2px; }
+  .pos-chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    border: 1px solid var(--divider); border-radius: 7px; padding: 3px 9px;
+    font-size: 11.5px; color: var(--n300); font-variant-numeric: tabular-nums;
+  }
+  .pos-chip .caret { font-size: 9px; color: var(--n600); }
+  .ex-head { flex: none; padding: 14px 18px 0; }
+  .ex-name-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .ex-name { font-weight: 500; font-size: 23px; letter-spacing: -0.01em; }
+  .howto { border: 1px solid var(--divider); border-radius: 7px; padding: 4px 10px; font-size: 11.5px; color: var(--n300); }
+  .ex-sub-row { display: flex; align-items: baseline; justify-content: space-between; margin-top: 3px; }
+  .ex-sub { font-size: 12px; color: var(--n500); }
+  .ex-count { font-size: 11.5px; color: var(--n600); font-variant-numeric: tabular-nums; }
+  .seal-lane { height: 0; border-top: 1px solid var(--wash-t8); margin: 12px 16px 0; }
+
+  .ses-body { flex: 1; overflow: hidden; padding: 8px 16px 0; position: relative; }
+  .col-head { display: flex; gap: 8px; padding: 0 2px 5px; }
+  .col-head span { font-size: 9.5px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--n700); }
+  .c-idx { width: 16px; } .c-prev { width: 66px; } .c-flex { flex: 1; text-align: center; } .c-chk { width: 34px; }
+
+  .set-row { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; padding: 0 2px; }
+  .set-row .idx { width: 16px; font-size: 12px; color: var(--n600); font-variant-numeric: tabular-nums; }
+  .set-row .idx.mark { color: var(--n500); font-size: 13px; }
+  .set-row .prev { width: 66px; font-size: 11.5px; color: var(--n500); font-variant-numeric: tabular-nums; }
+  .cell {
+    flex: 1; text-align: center; border: 1px solid var(--divider); border-radius: 8px;
+    padding: 6px 2px; font-size: 15px; color: var(--text); font-variant-numeric: tabular-nums;
+    background: transparent;
+  }
+  .set-row.done .cell { color: var(--n500); border-color: var(--rule); }
+  .chk {
+    width: 34px; height: 32px; border-radius: 7px; border: 1px solid var(--divider);
+    display: flex; align-items: center; justify-content: center; flex: none;
+  }
+  .set-row.done .chk { background: var(--accent); border-color: var(--accent); color: #14121f; font-size: 15px; }
+  .live-box {
+    margin: 3px 0 5px; padding: 8px; border: 1px solid var(--a700); border-radius: 12px;
+    background: var(--wash-a7);
+  }
+  .live-box .set-row { margin-bottom: 0; padding: 0; }
+  .live-box .idx { color: var(--a400); }
+  .live-box .cell {
+    font-size: 22px; min-height: 46px; padding: 4px 2px; background: var(--bg);
+    border-color: var(--a800); display: flex; align-items: center; justify-content: center;
+  }
+  .live-box .cell.focus { border-color: var(--accent); }
+  .live-box .cell.focus .caret-i { display: inline-block; width: 1.5px; height: 22px; background: var(--accent); margin-left: 2px; animation: blink 1.1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .add-set {
+    border: 1px dashed var(--divider); border-radius: 8px; padding: 8px;
+    text-align: center; font-size: 12.5px; color: var(--n400); margin-top: 4px;
+  }
+  .ses-foot { flex: none; padding: 10px 16px 14px; }
+  .cta {
+    height: 50px; border-radius: 8px; background: var(--wash-a10);
+    border: 1px dashed var(--a700); display: flex; align-items: center; justify-content: center;
+    font-size: 15px; font-weight: 500; color: var(--accent);
+  }
+  .fade-top { position: absolute; left: 0; right: 0; top: 0; height: 26px;
+    background: linear-gradient(var(--bg), transparent); z-index: 5; pointer-events: none; }
+
+  /* ── bottom sheets ── */
+  .scrim-bg { flex: 1; background: rgba(11, 12, 20, 0.66); position: relative; }
+  .under { position: absolute; inset: 0; padding: 14px 18px; opacity: 0.5; z-index: -1; }
+  .sheet-wrap { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
+  .sheet {
+    background: var(--surface); border-radius: 18px 18px 0 0;
+    box-shadow: 0 -12px 34px rgba(0,0,0,0.45);
+    display: flex; flex-direction: column; overflow: hidden; flex: none;
+  }
+  .grabber { width: 36px; height: 4px; border-radius: 2px; background: var(--n700); margin: 14px auto; flex: none; }
+  .sheet-body { padding: 0 16px 20px; overflow: hidden; position: relative; }
+  .sheet .fade-top-s { position: absolute; left: 0; right: 0; top: 0; height: 24px;
+    background: linear-gradient(var(--surface), transparent); z-index: 5; }
+
+  /* routine editor */
+  .r-name { font-weight: 500; font-size: 22px; letter-spacing: -0.01em; padding-bottom: 2px; display: flex; align-items: center; }
+  .r-name .caret-i { display: inline-block; width: 1.5px; height: 22px; background: var(--accent); margin-left: 2px; animation: blink 1.1s steps(1) infinite; }
+  .r-sum { font-size: 12px; color: var(--n500); margin-top: 2px; }
+  .r-cols { display: flex; gap: 7px; margin-top: 14px; padding-bottom: 5px; }
+  .r-cols span { font-size: 9.5px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--n700); }
+  .rc-name { flex: 1; } .rc-narrow { width: 40px; text-align: center; } .rc-wide { width: 52px; text-align: center; } .rc-del { width: 20px; }
+  .r-row { display: flex; align-items: center; gap: 7px; margin-bottom: 9px; }
+  .r-row .nm { flex: 1; min-width: 0; }
+  .r-row .nm .t { font-size: 13.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .r-row .nm .k { font-size: 10.5px; color: var(--n600); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .r-in {
+    width: 40px; border: 1px solid var(--divider); border-radius: 7px; padding: 6px 2px;
+    text-align: center; font-size: 13px; color: var(--text); font-variant-numeric: tabular-nums;
+  }
+  .r-in.wide { width: 52px; }
+  .r-in.focus { border-color: var(--accent); background: var(--wash-a10); }
+  .r-in.focus .caret-i { display: inline-block; width: 1.5px; height: 13px; background: var(--accent); margin-left: 1px; animation: blink 1.1s steps(1) infinite; }
+  .r-del { width: 20px; text-align: center; color: var(--n600); font-size: 14px; }
+  .r-add { border: 1px dashed var(--divider); border-radius: 8px; padding: 8px; text-align: center; font-size: 12.5px; color: var(--n400); margin-top: 4px; }
+
+  /* mark sheet */
+  .mk-sub { font-size: 12px; color: var(--n500); margin-top: 1px; }
+  .mk-prev { display: flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 11.5px; color: var(--n500); }
+  .mk-row { display: flex; gap: 7px; margin-top: 12px; }
+  .mk-tile {
+    flex: 1; border: 1px solid var(--divider); border-radius: 10px; padding: 10px 4px 8px;
+    display: flex; flex-direction: column; align-items: center; gap: 5px; text-align: center;
+  }
+  .mk-tile .g { font-size: 18px; color: var(--n400); line-height: 1; }
+  .mk-tile .l { font-size: 10px; color: var(--n400); line-height: 1.25; }
+  .mk-tile.on { border-color: var(--accent); background: var(--wash-a16); }
+  .mk-tile.on .g, .mk-tile.on .l { color: var(--a200); }
+  .field-l { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--n500); margin: 16px 0 6px; }
+  .mk-note {
+    border: 1px solid var(--divider); border-radius: 8px; padding: 9px 11px; min-height: 64px;
+    font-size: 13.5px; color: var(--text);
+  }
+  .mk-note.focus { border-color: var(--accent); }
+  .mk-note .ph { color: var(--n600); }
+  .mk-note .caret-i { display: inline-block; width: 1.5px; height: 14px; background: var(--accent); margin-left: 1px; vertical-align: -2px; animation: blink 1.1s steps(1) infinite; }
+  .mk-close { margin-top: 14px; }
+</style>
+
+<div class="page">
+  <div class="kicker">Spotter · mockup</div>
+  <h1>Inputs above the keyboard</h1>
+  <p class="lede">
+    The app asks Android to shrink the window when the keyboard opens
+    (<code>softwareKeyboardLayoutMode: "resize"</code>) and the session screen's own
+    comment relies on it — <strong>SDK&nbsp;54 runs Android edge-to-edge unconditionally,
+    and under edge-to-edge that mode is a no-op</strong>. The keyboard now draws over an
+    app that did not move, and whether a field survives is an accident of where it sits.
+    The fix is not per-screen: every input in the app reaches the glass through one of two
+    shells — <code>Sheet</code> and the session's <code>FullScreen</code> — plus
+    <code>Screen</code> for the tabs. Keyboard avoidance lands in those shells once, in
+    plain JS, and every field inherits it. Below, each surface as it fails today and as it
+    behaves with the shells doing their job.
+  </p>
+
+  <hr class="fade" />
+
+  <!-- ════════════════════════ 1 · the live session ════════════════════════ -->
+  <h2 class="sec">1 · The live session — the set you're typing</h2>
+  <p class="lede">
+    Number pad, because the fields are <code>number-pad</code>. The raised row is the set
+    you're on; Enter on kg moves to reps, Enter on reps logs the set.
+  </p>
+
+  <div class="pair">
+    <div class="half">
+      <div class="cap bad">Today</div>
+      <div class="sub">Nothing moves. The keys land on the live row's tick and fields, and the CTA is gone entirely.</div>
+      <div class="phone">
+        <div class="status"><span>19:04</span><span class="batt"></span></div>
+        <div class="app">
+          <div class="ses-head">
+            <div class="ses-row">
+              <div>
+                <div class="sc-kicker">Logging</div>
+                <div class="sc-h3">Push Day A</div>
+              </div>
+              <div class="ses-count">17 of 20 sets</div>
+            </div>
+            <div class="ses-prog">
+              <div class="ses-bar"></div>
+              <span class="pos-chip">3 / 5 <span class="caret">▾</span></span>
+            </div>
+          </div>
+          <div class="ex-head">
+            <div class="ex-name-row">
+              <div class="ex-name">Bench Press</div>
+              <span class="howto">How to</span>
+            </div>
+            <div class="ex-sub-row">
+              <span class="ex-sub">Barbell · Chest</span>
+              <span class="ex-count">5/6</span>
+            </div>
+          </div>
+          <div class="seal-lane"></div>
+          <div class="ses-body">
+            <div class="col-head">
+              <span class="c-idx">#</span><span class="c-prev">Last time</span>
+              <span class="c-flex">kg</span><span class="c-flex">Reps</span><span class="c-chk"></span>
+            </div>
+            <div class="set-row done">
+              <span class="idx">1</span><span class="prev">60 × 10</span>
+              <span class="cell">60</span><span class="cell">10</span><span class="chk">✓</span>
+            </div>
+            <div class="set-row done">
+              <span class="idx">2</span><span class="prev">80 × 8</span>
+              <span class="cell">80</span><span class="cell">8</span><span class="chk">✓</span>
+            </div>
+            <div class="set-row done">
+              <span class="idx mark">↑</span><span class="prev">80 × 8</span>
+              <span class="cell">80</span><span class="cell">8</span><span class="chk">✓</span>
+            </div>
+            <div class="set-row done">
+              <span class="idx">4</span><span class="prev">80 × 7</span>
+              <span class="cell">82.5</span><span class="cell">7</span><span class="chk">✓</span>
+            </div>
+            <div class="set-row done">
+              <span class="idx">5</span><span class="prev">80 × 7</span>
+              <span class="cell">82.5</span><span class="cell">7</span><span class="chk">✓</span>
+            </div>
+            <!-- the live set: its fields and tick sit under the keys -->
+            <div class="live-box">
+              <div class="set-row">
+                <span class="idx">6</span><span class="prev">80 × 6</span>
+                <span class="cell">82.5</span>
+                <span class="cell focus">6<span class="caret-i"></span></span>
+                <span class="chk"></span>
+              </div>
+            </div>
+            <div class="add-set">Hold to add a set</div>
+          </div>
+          <div class="ses-foot"><div class="cta">Hold for the next exercise</div></div>
+
+          <!-- keyboard OVER the unmoved screen -->
+          <div class="ime numpad over">
+            <div class="krow"><span class="key">1</span><span class="key">2</span><span class="key">3</span></div>
+            <div class="krow"><span class="key">4</span><span class="key">5</span><span class="key">6</span></div>
+            <div class="krow"><span class="key">7</span><span class="key">8</span><span class="key">9</span></div>
+            <div class="krow"><span class="key fn">·</span><span class="key">0</span><span class="key fn">⌫</span></div>
+            <div class="navpill"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="half">
+      <div class="cap good">With the fix</div>
+      <div class="sub">The shell shrinks by the keyboard's height; the scroll pulls the live row into view and the CTA lands directly above the keys.</div>
+      <div class="phone">
+        <div class="status"><span>19:04</span><span class="batt"></span></div>
+        <div class="app">
+          <div class="ses-head">
+            <div class="ses-row">
+              <div>
+                <div class="sc-kicker">Logging</div>
+                <div class="sc-h3">Push Day A</div>
+              </div>
+              <div class="ses-count">17 of 20 sets</div>
+            </div>
+            <div class="ses-prog">
+              <div class="ses-bar"></div>
+              <span class="pos-chip">3 / 5 <span class="caret">▾</span></span>
+            </div>
+          </div>
+          <div class="ex-head">
+            <div class="ex-name-row">
+              <div class="ex-name">Bench Press</div>
+              <span class="howto">How to</span>
+            </div>
+            <div class="ex-sub-row">
+              <span class="ex-sub">Barbell · Chest</span>
+              <span class="ex-count">5/6</span>
+            </div>
+          </div>
+          <div class="seal-lane"></div>
+          <div class="ses-body">
+            <div class="fade-top"></div>
+            <!-- scrolled: sets 1–4 are off the top; the platform pulled the
+                 focused field into view the moment the window resized -->
+            <div class="set-row done" style="margin-top:-14px">
+              <span class="idx">5</span><span class="prev">80 × 7</span>
+              <span class="cell">82.5</span><span class="cell">7</span><span class="chk">✓</span>
+            </div>
+            <div class="live-box">
+              <div class="set-row">
+                <span class="idx">6</span><span class="prev">80 × 6</span>
+                <span class="cell">82.5</span>
+                <span class="cell focus">6<span class="caret-i"></span></span>
+                <span class="chk"></span>
+              </div>
+            </div>
+            <div class="add-set">Hold to add a set</div>
+          </div>
+          <div class="ses-foot"><div class="cta">Hold for the next exercise</div></div>
+
+          <!-- keyboard as a sibling: the app genuinely ends here -->
+          <div class="ime numpad">
+            <div class="krow"><span class="key">1</span><span class="key">2</span><span class="key">3</span></div>
+            <div class="krow"><span class="key">4</span><span class="key">5</span><span class="key">6</span></div>
+            <div class="krow"><span class="key">7</span><span class="key">8</span><span class="key">9</span></div>
+            <div class="krow"><span class="key fn">·</span><span class="key">0</span><span class="key fn">⌫</span></div>
+            <div class="navpill"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <ul>
+      <li><strong>The header stays; the ledger gives.</strong> Kicker, progress and the
+        exercise name are flex-none — only the scroll area shrinks, so you never lose
+        which exercise and which set you're on.</li>
+      <li><strong>The CTA above the keys is restored behavior, not new behavior.</strong>
+        The comment at the top of <code>session-overlay.tsx</code> promises exactly this;
+        it went quietly false when SDK&nbsp;54 made <code>resize</code> a no-op.</li>
+      <li><strong>The scroll-into-view comes free.</strong> Once the container genuinely
+        shrinks, Android's own focused-field behavior scrolls the row visible — the same
+        mechanism that made <code>adjustResize</code> work before edge-to-edge. No
+        scroll-to code of ours.</li>
+      <li><strong>This screen is also the least-typed one.</strong> Hold-and-drag steps
+        most numbers without the keyboard; the fix matters here for the first session on
+        a new exercise, and everywhere below always.</li>
+    </ul>
+  </div>
+
+  <hr class="fade" />
+
+  <!-- ════════════════════════ 2 · the routine editor ════════════════════════ -->
+  <h2 class="sec">2 · A bottom sheet — an editor's number grid</h2>
+  <p class="lede">
+    The worst geometry: a sheet is anchored to the bottom of the screen, which is exactly
+    where the keyboard appears. Every sheet in the app goes through <code>Sheet</code> in
+    <code>sheet.tsx</code>, so this fix is written once. (The app's actual routine editor
+    is a <code>FullScreen</code> — it gets the same behavior through that shell; the grid
+    drawn here stands for any sheet carrying number cells.)
+  </p>
+
+  <div class="pair">
+    <div class="half">
+      <div class="cap bad">Today</div>
+      <div class="sub">The keyboard covers the bottom half of the sheet — the kg cell being typed into is under the keys.</div>
+      <div class="phone">
+        <div class="status"><span>19:04</span><span class="batt"></span></div>
+        <div class="app">
+          <div class="scrim-bg"></div>
+          <div class="sheet">
+            <div class="grabber"></div>
+            <div class="sheet-body">
+              <div class="r-name">Push Day A</div>
+              <div class="r-sum">5 exercises · 20 sets</div>
+              <div class="r-cols">
+                <span class="rc-name">Exercise</span><span class="rc-narrow">Sets</span>
+                <span class="rc-narrow">Reps</span><span class="rc-wide">kg</span><span class="rc-del"></span>
+              </div>
+              <div class="r-row">
+                <div class="nm"><div class="t">Bench Press</div><div class="k">Barbell · Chest</div></div>
+                <span class="r-in">5</span><span class="r-in">6</span><span class="r-in wide">82.5</span><span class="r-del">×</span>
+              </div>
+              <div class="r-row">
+                <div class="nm"><div class="t">Overhead Press</div><div class="k">Barbell · Shoulders</div></div>
+                <span class="r-in">4</span><span class="r-in">8</span><span class="r-in wide">40</span><span class="r-del">×</span>
+              </div>
+              <div class="r-row">
+                <div class="nm"><div class="t">Incline Dumbbell Press</div><div class="k">Dumbbell · Chest</div></div>
+                <span class="r-in">3</span><span class="r-in">10</span><span class="r-in wide">26</span><span class="r-del">×</span>
+              </div>
+              <!-- the focused row: under the keyboard -->
+              <div class="r-row">
+                <div class="nm"><div class="t">Lateral Raise</div><div class="k">Dumbbell · Shoulders</div></div>
+                <span class="r-in">3</span><span class="r-in">12</span>
+                <span class="r-in wide focus">9<span class="caret-i"></span></span><span class="r-del">×</span>
+              </div>
+              <div class="r-row">
+                <div class="nm"><div class="t">Plank</div><div class="k">Bodyweight · Core · sec</div></div>
+                <span class="r-in">3</span><span class="r-in">60</span><span class="r-in wide">—</span><span class="r-del">×</span>
+              </div>
+              <div class="r-add">+ Add exercise</div>
+            </div>
+          </div>
+
+          <div class="ime numpad over">
+            <div class="krow"><span class="key">1</span><span class="key">2</span><span class="key">3</span></div>
+            <div class="krow"><span class="key">4</span><span class="key">5</span><span class="key">6</span></div>
+            <div class="krow"><span class="key">7</span><span class="key">8</span><span class="key">9</span></div>
+            <div class="krow"><span class="key fn">·</span><span class="key">0</span><span class="key fn">⌫</span></div>
+            <div class="navpill"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="half">
+      <div class="cap good">With the fix</div>
+      <div class="sub">The sheet rides up and sits on the keyboard; its own scroll keeps the focused row visible. The scrim above stays a scrim.</div>
+      <div class="phone">
+        <div class="status"><span>19:04</span><span class="batt"></span></div>
+        <div class="app">
+          <div class="scrim-bg"></div>
+          <div class="sheet">
+            <div class="grabber"></div>
+            <div class="sheet-body">
+              <div class="fade-top-s"></div>
+              <!-- scrolled: name + first rows off the top -->
+              <div class="r-row" style="margin-top:-6px">
+                <div class="nm"><div class="t">Overhead Press</div><div class="k">Barbell · Shoulders</div></div>
+                <span class="r-in">4</span><span class="r-in">8</span><span class="r-in wide">40</span><span class="r-del">×</span>
+              </div>
+              <div class="r-row">
+                <div class="nm"><div class="t">Incline Dumbbell Press</div><div class="k">Dumbbell · Chest</div></div>
+                <span class="r-in">3</span><span class="r-in">10</span><span class="r-in wide">26</span><span class="r-del">×</span>
+              </div>
+              <div class="r-row">
+                <div class="nm"><div class="t">Lateral Raise</div><div class="k">Dumbbell · Shoulders</div></div>
+                <span class="r-in">3</span><span class="r-in">12</span>
+                <span class="r-in wide focus">9<span class="caret-i"></span></span><span class="r-del">×</span>
+              </div>
+              <div class="r-row">
+                <div class="nm"><div class="t">Plank</div><div class="k">Bodyweight · Core · sec</div></div>
+                <span class="r-in">3</span><span class="r-in">60</span><span class="r-in wide">—</span><span class="r-del">×</span>
+              </div>
+              <div class="r-add">+ Add exercise</div>
+            </div>
+          </div>
+
+          <div class="ime numpad">
+            <div class="krow"><span class="key">1</span><span class="key">2</span><span class="key">3</span></div>
+            <div class="krow"><span class="key">4</span><span class="key">5</span><span class="key">6</span></div>
+            <div class="krow"><span class="key">7</span><span class="key">8</span><span class="key">9</span></div>
+            <div class="krow"><span class="key fn">·</span><span class="key">0</span><span class="key fn">⌫</span></div>
+            <div class="navpill"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <ul>
+      <li><strong>The sheet keeps its own scroll; the keyboard only changes what
+        "bottom" means.</strong> <code>maxHeight</code> now bounds the sheet within the
+        space above the keys, so a tall sheet shrinks rather than pushing its grabber
+        off-screen.</li>
+      <li><strong>Written once, inherited everywhere.</strong> The plan sheet, the
+        new-exercise sheet, the picker's rename fields and the settings sheets all render
+        through this shell — none of them needs to know the keyboard exists.</li>
+      <li><strong>Dismissal doesn't change.</strong> Scrim tap and the grabber drag work
+        exactly as before; the keyboard going away settles the sheet back down.</li>
+    </ul>
+  </div>
+
+  <hr class="fade" />
+
+  <!-- ════════════════════════ 3 · the mark sheet ════════════════════════ -->
+  <h2 class="sec">3 · The mark sheet — typing fully blind</h2>
+  <p class="lede">
+    The clearest failure: the note field sits at the very bottom of a bottom sheet, and
+    this one raises the full QWERTY. Today you write the note without ever seeing it.
+  </p>
+
+  <div class="pair">
+    <div class="half">
+      <div class="cap bad">Today</div>
+      <div class="sub">Field, placeholder, Close — all under the keys. The suggestion strip is the only proof you're typing anything.</div>
+      <div class="phone">
+        <div class="status"><span>19:04</span><span class="batt"></span></div>
+        <div class="app">
+          <div class="scrim-bg"></div>
+          <div class="sheet">
+            <div class="grabber"></div>
+            <div class="sheet-body">
+              <div class="sc-h4">Set 5</div>
+              <div class="mk-sub">Bench Press</div>
+              <div class="mk-prev"><span>↑</span><span>Last time — Heavier</span></div>
+              <div class="mk-row">
+                <div class="mk-tile on"><span class="g">↑</span><span class="l">Heavier</span></div>
+                <div class="mk-tile"><span class="g">↓</span><span class="l">Lighter</span></div>
+                <div class="mk-tile"><span class="g">✓</span><span class="l">Just right</span></div>
+                <div class="mk-tile"><span class="g">✎</span><span class="l">Note</span></div>
+              </div>
+              <div class="field-l">Note to yourself</div>
+              <div class="mk-note focus">heavier, but grip went first<span class="caret-i"></span></div>
+              <div class="btn block mk-close">Close</div>
+            </div>
+          </div>
+
+          <div class="ime over">
+            <div class="strip"><span>grip</span><span class="mid">first</span><span>firm</span></div>
+            <div class="krow"><span class="key">q</span><span class="key">w</span><span class="key">e</span><span class="key">r</span><span class="key">t</span><span class="key">y</span><span class="key">u</span><span class="key">i</span><span class="key">o</span><span class="key">p</span></div>
+            <div class="krow" style="padding: 0 18px"><span class="key">a</span><span class="key">s</span><span class="key">d</span><span class="key">f</span><span class="key">g</span><span class="key">h</span><span class="key">j</span><span class="key">k</span><span class="key">l</span></div>
+            <div class="krow"><span class="key fn shift">⇧</span><span class="key">z</span><span class="key">x</span><span class="key">c</span><span class="key">v</span><span class="key">b</span><span class="key">n</span><span class="key">m</span><span class="key fn del">⌫</span></div>
+            <div class="krow"><span class="key fn">?123</span><span class="key fn">,</span><span class="key space"></span><span class="key fn">.</span><span class="key go">↵</span></div>
+            <div class="navpill"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="half">
+      <div class="cap good">With the fix</div>
+      <div class="sub">The sheet sits on the keyboard; the note field is right above the keys — the words appear where you're looking.</div>
+      <div class="phone">
+        <div class="status"><span>19:04</span><span class="batt"></span></div>
+        <div class="app">
+          <div class="scrim-bg"></div>
+          <div class="sheet">
+            <div class="grabber"></div>
+            <div class="sheet-body">
+              <div class="sc-h4">Set 5</div>
+              <div class="mk-sub">Bench Press</div>
+              <div class="mk-row" style="margin-top: 10px">
+                <div class="mk-tile on"><span class="g">↑</span><span class="l">Heavier</span></div>
+                <div class="mk-tile"><span class="g">↓</span><span class="l">Lighter</span></div>
+                <div class="mk-tile"><span class="g">✓</span><span class="l">Just right</span></div>
+                <div class="mk-tile"><span class="g">✎</span><span class="l">Note</span></div>
+              </div>
+              <div class="field-l">Note to yourself</div>
+              <div class="mk-note focus">heavier, but grip went first<span class="caret-i"></span></div>
+            </div>
+          </div>
+
+          <div class="ime">
+            <div class="strip"><span>grip</span><span class="mid">first</span><span>firm</span></div>
+            <div class="krow"><span class="key">q</span><span class="key">w</span><span class="key">e</span><span class="key">r</span><span class="key">t</span><span class="key">y</span><span class="key">u</span><span class="key">i</span><span class="key">o</span><span class="key">p</span></div>
+            <div class="krow" style="padding: 0 18px"><span class="key">a</span><span class="key">s</span><span class="key">d</span><span class="key">f</span><span class="key">g</span><span class="key">h</span><span class="key">j</span><span class="key">k</span><span class="key">l</span></div>
+            <div class="krow"><span class="key fn shift">⇧</span><span class="key">z</span><span class="key">x</span><span class="key">c</span><span class="key">v</span><span class="key">b</span><span class="key">n</span><span class="key fn del">⌫</span></div>
+            <div class="krow"><span class="key fn">?123</span><span class="key fn">,</span><span class="key space"></span><span class="key fn">.</span><span class="key go">↵</span></div>
+            <div class="navpill"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <ul>
+      <li><strong>The Close button may sit under the fold while typing — that is
+        fine.</strong> Back and the scrim still close the sheet, and the keyboard's own
+        dismiss returns the sheet to its resting height with Close where it was.</li>
+      <li><strong>The words appear at the keys, like every chat app.</strong> The note is
+        answered "while you are still breathing hard" — it must not require scrolling to
+        proofread.</li>
+    </ul>
+  </div>
+
+  <hr class="fade" />
+
+  <div class="settled">
+    <div class="h">Mechanics — settled if we build this</div>
+    <ul>
+      <li><strong>Where it lands:</strong> <code>KeyboardAvoidingView</code>
+        (<code>behavior="padding"</code>) wrapped inside the two shells —
+        <code>Sheet</code> / <code>FullScreen</code> in <code>sheet.tsx</code> — and in
+        <code>Screen</code> for the tab-level search fields. No per-screen code; the
+        session overlay's stale comment gets rewritten to name the new mechanism.</li>
+      <li><strong>Pure JS, so Expo Go keeps working.</strong> No
+        <code>react-native-keyboard-controller</code>: it is a native module, which would
+        mean the optional-bridge treatment, a dev-build rebuild and new APKs on both
+        phones — for behavior the built-in component covers.</li>
+      <li><strong>One honest wart:</strong> Android only reports the keyboard <em>after</em>
+        it is up (there is no will-show event), so content moves a beat behind the keys.
+        Every JS-side approach shares this; the native module is the only cure, and it is
+        not worth its cost here.</li>
+      <li><strong>Nothing durable is touched.</strong> No store state, no
+        <code>PERSIST</code> key, no <code>STORAGE_VERSION</code> — this is layout only,
+        and <code>app.json</code> keeps <code>resize</code> for the day Android honors it
+        again.</li>
+    </ul>
+  </div>
+</div>

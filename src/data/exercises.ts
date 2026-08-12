@@ -160,6 +160,27 @@ export const routineInStyle = (
 ) => routineStyleScore(r, s, ex) > 0;
 
 /**
+ * Which family a routine files under: the style most of its lines are.
+ * Derived, never tagged — same facts as `routineStyleScore`, so seeds and
+ * user-made routines answer alike, and a routine edited toward cardio drifts
+ * into the cardio family by itself. Ties go to the earlier of
+ * strength › calisthenics › cardio; an empty routine files under none.
+ */
+export const routineFamily = (
+  r: Routine,
+  ex: (id: string) => Exercise | undefined
+): Exclude<StyleKey, 'mixed'> | null => {
+  const counts = { strength: 0, calisthenics: 0, cardio: 0 };
+  for (const it of r.items) {
+    const e = ex(it.ex);
+    if (e) counts[styleOf(e)]++;
+  }
+  const fams = ['strength', 'calisthenics', 'cardio'] as const;
+  const best = fams.reduce((a, b) => (counts[b] > counts[a] ? b : a));
+  return counts[best] > 0 ? best : null;
+};
+
+/**
  * A flat exercise list in style order: what you train first, everything else
  * after, nothing hidden — sort is stable, so both halves keep the order they
  * arrived in. `mixed` returns the list untouched: "don't sort it" is the

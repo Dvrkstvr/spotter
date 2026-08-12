@@ -6,17 +6,18 @@
  *
  *   70 exercise · 75 routine · 76 insights · 77 coach · 78 settings
  *   79 buddy sync · 80 session
- *   83 schedule · 84 pick workout · 85 picker · 86 how-to · 87 nearby
+ *   83 plan · 84 pick workout · 85 picker · 86 how-to · 87 nearby
  *   88 new exercise · 89 buddy invite / join ask · 90 summary
  *
- * 76 (insights), 77 (coach), 79 (buddy sync), 83 (schedule), and 89 (buddy
- * invite, join ask) are not from the design: the day-routine selector replaces the design's
- * tap-to-cycle, and the buddy screens belong to the real radio the design's
- * mock never had. The coach sits directly above insights because that is
- * where it is opened from and it has to cover it; closing it drops you back
- * onto the statistics you left. Both buddy questions sit just under the summary so
- * "train together?" and "can I join?" can land on top of whatever is open —
- * including the session, which is exactly where the second one arrives.
+ * 76 (insights), 77 (coach), 79 (buddy sync), 83 (plan), and 89 (buddy
+ * invite, join ask) are not from the design: the plan sheet replaces the
+ * design's tap-to-cycle day selector, and the buddy screens belong to the real
+ * radio the design's mock never had. The coach sits directly above insights
+ * because that is where it is opened from and it has to cover it; closing it
+ * drops you back onto the statistics you left. Both buddy questions sit just
+ * under the summary so "train together?" and "can I join?" can land on top of
+ * whatever is open — including the session, which is exactly where the second
+ * one arrives.
  */
 import { BuddyRadio } from '@/components/buddy-radio';
 import { BuddyInviteSheet } from '@/components/overlays/buddy-invite-sheet';
@@ -28,11 +29,10 @@ import { InsightsOverlay } from '@/components/overlays/insights-overlay';
 import { InstructionsSheet } from '@/components/overlays/instructions-sheet';
 import { JoinAskSheet } from '@/components/overlays/join-ask-sheet';
 import { NewExerciseSheet } from '@/components/overlays/new-exercise-sheet';
-import { PickWorkoutSheet } from '@/components/overlays/pick-workout-sheet';
 import { PickerOverlay } from '@/components/overlays/picker-overlay';
 import { RoutineOverlay } from '@/components/overlays/routine-overlay';
 import { ScanSheet } from '@/components/overlays/scan-sheet';
-import { ScheduleSheet } from '@/components/overlays/schedule-sheet';
+import { PlanSheet } from '@/components/overlays/plan-sheet';
 import { SessionOverlay } from '@/components/overlays/session-overlay';
 import { SettingsOverlay } from '@/components/overlays/settings-overlay';
 import { SummaryModal } from '@/components/overlays/summary-modal';
@@ -63,8 +63,7 @@ export function Overlays() {
       {s.settingsOpen && <SettingsOverlay />}
       {social && s.buddySync && <BuddySyncOverlay />}
       {s.session && !s.sessionMin && <SessionOverlay />}
-      {s.dayPick !== null && <ScheduleSheet />}
-      {s.pickWorkout && <PickWorkoutSheet />}
+      {s.dayPlan !== null && <PlanSheet />}
       {s.picker && <PickerOverlay />}
       {s.instrOpen && <InstructionsSheet />}
       {social && s.scanning && <ScanSheet />}

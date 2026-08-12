@@ -36,6 +36,7 @@ import {
   STYLE_KEYS,
 } from '@/data/exercises';
 import { DAYS_SHORT, Lang, Strings } from '@/data/i18n';
+import { weekSlots } from '@/data/plan';
 import { ensureAlarmPermission } from '@/data/rest-alarm';
 import { useBackClose } from '@/hooks/use-back-close';
 import { themed, useColors, useThemed } from '@/design/theme';
@@ -152,7 +153,12 @@ export function OnboardingOverlay() {
           .map((r) => r.id)
   );
 
-  const [week, setWeek] = useState<Record<number, string>>(() => ({ ...s.schedule }));
+  // The tour thinks in seven weekday slots and always did — `applyOnboarding`
+  // turns them into weekly rules on the way out. Reading the plan back down to
+  // slots (`weekSlots`) is the deliberate other half of that: a rule repeating
+  // every third day has no weekday to show on this screen, and this screen is
+  // not where that gets set.
+  const [week, setWeek] = useState<Record<number, string>>(() => weekSlots(s.plan));
 
   const close = () => patch({ onboarded: true, onboardingOpen: false });
 

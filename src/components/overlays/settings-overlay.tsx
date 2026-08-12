@@ -157,6 +157,10 @@ export function SettingsOverlay() {
     const env = await pickAndRead();
     if (env === 'cancelled') return;
     if (env === 'invalid') return setNote(L.restoreFailed);
+    // Refused before the confirm ever shows: a hold-to-restore that would be
+    // declined afterwards is a trick, not a safeguard. The store checks again
+    // at the seam, so the message can never race the stamp.
+    if (env.v > STORAGE_VERSION) return setNote(L.restoreNewer);
     // Confirm at the last possible moment — with the file already in hand, so
     // the question is about this backup rather than about the idea of one.
     // In the app's own grammar: the most destructive action here is the one
@@ -351,7 +355,8 @@ export function SettingsOverlay() {
       {pendingRestore && (
         <RestoreConfirm
           onConfirm={() => {
-            setNote(L.restoreDone.replace('{n}', String(importState(pendingRestore))));
+            const n = importState(pendingRestore);
+            setNote(n === null ? L.restoreNewer : L.restoreDone.replace('{n}', String(n)));
             setPendingRestore(null);
           }}
           onClose={() => setPendingRestore(null)}

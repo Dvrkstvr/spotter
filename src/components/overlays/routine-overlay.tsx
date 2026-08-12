@@ -31,7 +31,8 @@ import { FullScreen } from '@/components/sheet';
 import { useBackClose } from '@/hooks/use-back-close';
 import { radio } from '@/data/buddy-radio';
 import { measureOf, Routine } from '@/data/exercises';
-import { countN, DAYS_SHORT } from '@/data/i18n';
+import { countN, repeatLabel } from '@/data/i18n';
+import { rulesFor } from '@/data/plan';
 import { themed, useColors, useThemed } from '@/design/theme';
 import { color, font, slop, t, tracking, wash } from '@/design/tokens';
 import { Btn, Input, missingName } from '@/design/ui';
@@ -72,8 +73,12 @@ export function RoutineOverlay() {
   // disconnected mid-draft this falls back to the plain editor.
   const draft = s.coDraft?.rid === r.id && s.buddy ? s.coDraft : null;
 
-  const days =
-    DAYS_SHORT[s.lang].filter((_, i) => s.schedule[i] === r.id).join(' · ') || L.unscheduled;
+  // Every rule that puts this routine on the calendar, in the same words the
+  // Plan row pills and the plan sheet use — one formatter, three surfaces.
+  const rules = rulesFor(s.plan, r.id);
+  const days = rules.length
+    ? rules.map((e) => repeatLabel(e.repeat, L, s.lang)).join(' · ')
+    : L.unscheduled;
   const summary = `${days} · ${countN(
     r.items.reduce((a, i) => a + i.sets, 0),
     L.setCountOne,
@@ -250,13 +255,16 @@ export function RoutineOverlay() {
           </View>
         ) : (
           <>
+            {/* One workout at a time: while a session runs this button can
+                only take you back to it (the guard in `start`), so it says
+                that instead of promising a start it cannot deliver. */}
             <Btn
-              variant="primary"
+              variant={s.session ? 'secondary' : 'primary'}
               block
-              label={L.startRoutine}
+              label={s.session ? `${L.backToWorkout} ›` : L.startRoutine}
               style={styles.startBtn}
               labelStyle={styles.startLabel}
-              onPress={() => start(r.id)}
+              onPress={() => (s.session ? patch({ sessionMin: false, routineOpen: null }) : start(r.id))}
             />
             {/* The only way a routine leaves the phone, so it wears the hold
                 grammar. Hidden mid-co-draft: deleting what the buddy is

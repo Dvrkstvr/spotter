@@ -7,10 +7,22 @@
  *             worse than none. The scrim is a sibling of the panel rather than
  *             its parent, so there is no click to stop propagating on.
  * `FullScreen` — an opaque panel over the whole screen, its own back affordance.
+ *
+ * Both shells own keyboard avoidance, so no screen has to. SDK 54 runs Android
+ * edge-to-edge unconditionally, which turns `softwareKeyboardLayoutMode:
+ * resize` into a no-op — the keyboard draws over an app that no longer
+ * shrinks. The `KeyboardAvoidingView` in each shell puts the resize back in
+ * JS: a sheet rides up onto the keyboard, a full screen keeps its footer above
+ * the keys, and the platform's own scroll-to-focused-field does the rest.
+ * Deliberately not react-native-keyboard-controller — that is a native module,
+ * which Expo Go doesn't have. What the JS route costs is one beat of lag:
+ * Android only reports the keyboard after it is up, so content moves a moment
+ * behind the keys. Mockup: design/keyboard-mockup.html.
  */
 import { ReactNode, useState } from 'react';
 import {
   Animated,
+  KeyboardAvoidingView,
   PanResponder,
   Pressable,
   ScrollView,
@@ -61,7 +73,13 @@ export function Sheet({
   });
 
   return (
-    <View style={[StyleSheet.absoluteFill, { justifyContent: 'flex-end', zIndex }]}>
+    // `padding` lifts the panel onto the keyboard. The scrim is absolutely
+    // positioned, so the padding never moves it — it keeps covering the whole
+    // screen, including the strip the keyboard is about to cover anyway.
+    <KeyboardAvoidingView
+      behavior="padding"
+      style={[StyleSheet.absoluteFill, { justifyContent: 'flex-end', zIndex }]}
+    >
       <Pressable
         accessibilityLabel={L.close}
         onPress={onClose}
@@ -79,7 +97,7 @@ export function Sheet({
           {children}
         </ScrollView>
       </SheetIn>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -95,7 +113,9 @@ export function FullScreen({
   const styles = useThemed(sheet);
   return (
     <RiseIn style={[StyleSheet.absoluteFill, styles.full, { zIndex }, style]}>
-      {children}
+      <KeyboardAvoidingView behavior="padding" style={styles.avoid}>
+        {children}
+      </KeyboardAvoidingView>
     </RiseIn>
   );
 }
@@ -103,6 +123,10 @@ export function FullScreen({
 const sheet = themed(() => ({
   panel: {
     width: '100%',
+    /** With the keyboard up the shell's padding shrinks the space above the
+        keys; without this a tall panel would hold its maxHeight and push the
+        grabber off the top, instead of letting the inner scroll take over. */
+    flexShrink: 1,
     backgroundColor: color.surface,
     borderTopLeftRadius: radius.lg,
     borderTopRightRadius: radius.lg,
@@ -119,4 +143,5 @@ const sheet = themed(() => ({
     backgroundColor: color.neutral700,
   },
   full: { backgroundColor: color.bg },
+  avoid: { flex: 1 },
 }));

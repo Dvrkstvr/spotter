@@ -1,22 +1,30 @@
 /**
- * Plan — the month at a glance, the day in full, and the weekly schedule.
+ * Plan — the month, and the day in full.
  *
- * Reached from Today's "See plan", so it has no tab of its own. The design
- * fixed the month to August 2026; this shows the real current month.
+ * Reached from Today's "See plan", so it has no tab of its own — which is why
+ * it now carries a **‹ Back** header, the same shape Settings, Insights and the
+ * picker use. Android's back always worked here; nothing on the glass said so.
  *
- * The day detail below the grid is not in the design, which only ever said
- * whether a day was planned or done. This is a diary: tapping a day should
- * answer "what did I actually do", set by set — so every session logged on
- * that day gets its own card here, and the card is also where a workout that
- * isn't filed under a routine can be kept as one.
+ * The design fixed the month to August 2026; this shows the real one and pages.
+ * The weekday rows that used to sit under the grid are gone: they were the
+ * second answer to a question the calendar above them already answered, and
+ * they could only ever say "this weekday, forever". **The calendar is now the
+ * only place a plan is organised** — see `src/data/plan.ts` for the model and
+ * `design/plan-revamp-mockup.html` for the screen this is built from.
+ *
+ * The day panel answers two questions that must never merge: what was
+ * *planned* (rules, one row each) and what was *logged* (`history`, as
+ * written). A day can be one, both or neither — per row.
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { useRouter } from 'expo-router';
 
 import { Screen } from '@/components/screen';
-import { toISO, todayISO } from '@/data/date';
-import { DOW, measureOf } from '@/data/exercises';
-import { countN, DAYS_SHORT, MONTHS } from '@/data/i18n';
+import { fromISO, toISO, todayISO } from '@/data/date';
+import { measureOf } from '@/data/exercises';
+import { countN, DAYS_SHORT, fmtDayShort, MONTHS, repeatLabel } from '@/data/i18n';
+import { plannedOn, restChosen, skippedOn } from '@/data/plan';
 import { themed, useColors, useThemed } from '@/design/theme';
 import { color, font, t, tracking } from '@/design/tokens';
 import { Btn, H2, H4, H6, Input, missingName } from '@/design/ui';
@@ -27,8 +35,11 @@ const GRID_GAP = 3;
 export default function PlanScreen() {
   const styles = useThemed(sheet);
   const c = useColors();
-  const { s, L, patch, ex, exInfo, routine, doneOn, sessionsOn, rInfo, saveDayAsRoutine, start } =
-    useStore();
+  const {
+    s, L, patch, ex, exInfo, routine, doneOn, sessionsOn, rInfo, saveDayAsRoutine, start,
+    restorePlanDay,
+  } = useStore();
+  const router = useRouter();
   const [gridWidth, setGridWidth] = useState(0);
   /**
    * Which logged session has its name field open, and which has just been
@@ -50,6 +61,23 @@ export default function PlanScreen() {
    * reopening the screen always lands on the present.
    */
   const [shift, setShift] = useState(0);
+
+  /**
+   * Today's Recently rows hand a date over in `planFocus`; this is the only
+   * thing that moves `shift` without a tap. Consumed once and cleared — it is
+   * a handoff, not a position, so reopening Plan cold still lands on the
+   * present. In an effect rather than during render: it writes to the store.
+   */
+  useEffect(() => {
+    if (!s.planFocus) return;
+    const [fy, fm] = s.planFocus.split('-').map(Number);
+    const n = new Date();
+    setShift((fy - n.getFullYear()) * 12 + (fm - 1 - n.getMonth()));
+    patch({ daySel: s.planFocus, planFocus: null });
+    setNaming(null);
+    setSaved(null);
+  }, [s.planFocus, patch]);
+
   const now = new Date();
   const view = new Date(now.getFullYear(), now.getMonth() + shift, 1);
   const year = view.getFullYear();
@@ -60,14 +88,20 @@ export default function PlanScreen() {
   const today = todayISO();
   const isoOf = (day: number) => toISO(new Date(year, month, day));
 
+  const clearDay = () => {
+    setNaming(null);
+    setSaved(null);
+  };
+
   const goMonth = (d: number) => {
     const nv = new Date(year, month + d, 1);
     const dim = new Date(nv.getFullYear(), nv.getMonth() + 1, 0).getDate();
     setShift(shift + d);
-    // Keep the same day selected where the shorter month allows it.
-    patch({ daySel: Math.min(s.daySel, dim) });
-    setNaming(null);
-    setSaved(null);
+    // Keep the same day of the month where the shorter month allows it. The
+    // selection is a date now, so it has to be rewritten rather than clamped.
+    const dom = Math.min(Number(s.daySel.slice(8)), dim);
+    patch({ daySel: toISO(new Date(nv.getFullYear(), nv.getMonth(), dom)) });
+    clearDay();
   };
 
   /**
@@ -79,37 +113,88 @@ export default function PlanScreen() {
     s.history.filter((h) => h.date.startsWith(monthISO)).map((h) => h.date)
   ).size;
 
-  const selDow = (firstDow + s.daySel - 1) % 7;
-  const selRoutine = routine(s.schedule[selDow] ?? null);
-  const selSessions = sessionsOn(isoOf(s.daySel));
+  const sel = s.daySel;
+  const selSessions = sessionsOn(sel);
+  /** Today and forward is a plan; behind it is a record — see below. */
+  const editable = sel >= today;
+  const live = s.session !== null;
+
+  /**
+   * The day's planned workouts, in the order their rules were made.
+   *
+   * `logged` is matched by rid rather than by position: a free session belongs
+   * to no row and lands only in the Logged block, which is how a freeform
+   * Saturday reads. `next` is the first row *not* logged — one definition,
+   * shared with Today's hero, so the two screens can never disagree about
+   * which workout is the one to start.
+   */
+  const rows = plannedOn(s.plan, sel).map((e) => {
+    const r = routine(e.rid);
+    const name = r ? rInfo(r) : null;
+    const sets = r ? r.items.reduce((a, i) => a + i.sets, 0) : 0;
+    return {
+      entry: e,
+      name: name?.text ?? e.rid,
+      missing: !r || !!name?.missing,
+      summary: r
+        ? `${countN(r.items.length, L.exCountOne, L.exCount)} · ${countN(sets, L.setCountOne, L.setCount)}`
+        : '',
+      rule: repeatLabel(e.repeat, L, s.lang),
+      logged: selSessions.some((x) => x.h.rid === e.rid),
+    };
+  });
+  const next = rows.findIndex((r) => !r.logged);
+
+  /** Occurrences cancelled on this day — kept on screen so Restore is one tap. */
+  const off = skippedOn(s.plan, sel).map((e) => {
+    const r = routine(e.rid);
+    const name = r ? rInfo(r) : null;
+    return {
+      entry: e,
+      name: name?.text ?? e.rid,
+      missing: !r || !!name?.missing,
+      rule: repeatLabel(e.repeat, L, s.lang),
+    };
+  });
+
+  /**
+   * With no rows, the title is the whole answer — and "Rest day" is now a
+   * *choice* (a cancelled occurrence) rather than the only way to say nothing.
+   * Before dated rules every blank day called itself a rest day, which is what
+   * put "Nothing planned" over a logged session.
+   */
+  const empty = restChosen(s.plan, sel)
+    ? { title: L.restDay, body: L.restNote }
+    : {
+        title: L.nothingPlanned,
+        body: selSessions.length ? L.dayDone : L.dayFree,
+      };
 
   const pickDay = (day: number) => {
-    patch({ daySel: day });
-    setNaming(null);
-    setSaved(null);
+    patch({ daySel: isoOf(day) });
+    clearDay();
   };
 
-  const daySel = {
-    head:
-      s.lang === 'de'
-        ? `${DAYS_SHORT.de[selDow]} ${s.daySel}. ${monthName}`
-        : `${DAYS_SHORT.en[selDow]} ${s.daySel} ${monthName}`,
-    title: selRoutine ? rInfo(selRoutine).text : L.restDay,
-    // Having trained wins over what was planned, and it says so on a rest day
-    // too — the old wording only reached a day with a routine on it, so a
-    // freeform Saturday read "Nothing planned" with the session sitting
-    // right underneath.
-    body: selSessions.length
-      ? L.dayDone
-      : selRoutine
-        ? isoOf(s.daySel) < today
-          ? L.dayPlannedPast
-          : L.dayPlanned
-        : L.dayFree,
-  };
+  const planDay = (entry: string | null) => patch({ dayPlan: { iso: sel, entry } });
+
+  /** Start, or resurface the one already running — the guard in `start` decides. */
+  const startRow = (rid: string) => (live ? patch({ sessionMin: false }) : start(rid));
 
   return (
     <Screen>
+      {/* Plan is in the tabs but has no button in the bar, so this is the only
+          affordance out of it. `canGoBack` is the floor: a notification or deep
+          link can land here cold, and a dead back button is worse than none. */}
+      <View style={styles.header}>
+        <Btn
+          variant="ghost"
+          label={L.back}
+          labelStyle={styles.backLabel}
+          style={styles.backBtn}
+          onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
+        />
+      </View>
+
       <H2 size={t.h2} style={styles.tight}>
         {L.plan}
       </H2>
@@ -140,9 +225,13 @@ export default function PlanScreen() {
 
         {Array.from({ length: daysInMonth }, (_, k) => {
           const day = k + 1;
-          const rid = s.schedule[(firstDow + day - 1) % 7];
-          const isDone = doneOn(isoOf(day));
-          const isSel = day === s.daySel;
+          const iso = isoOf(day);
+          const isDone = doneOn(iso);
+          const isSel = iso === sel;
+          // One planned workout and three draw the same bar. What a day holds
+          // is the panel's job; a fourth mark nobody can read at this size is
+          // not an improvement.
+          const isPlanned = plannedOn(s.plan, iso).length > 0;
           return (
             <Pressable
               key={day}
@@ -160,14 +249,11 @@ export default function PlanScreen() {
               ]}
             >
               <Text
-                style={[
-                  styles.cellNum,
-                  { color: isoOf(day) < today ? c.neutral600 : c.neutral300 },
-                ]}
+                style={[styles.cellNum, { color: iso < today ? c.neutral600 : c.neutral300 }]}
               >
                 {day}
               </Text>
-              {/* A day you trained is a full dot whether or not anything was
+              {/* A day you trained is a full bar whether or not anything was
                   scheduled — the old order gated "done" on there being a
                   routine that day, which left every freeform workout off the
                   calendar entirely. */}
@@ -175,11 +261,7 @@ export default function PlanScreen() {
                 style={[
                   styles.dot,
                   {
-                    backgroundColor: isDone
-                      ? c.accent
-                      : rid
-                        ? c.accent800
-                        : 'transparent',
+                    backgroundColor: isDone ? c.accent : isPlanned ? c.accent800 : 'transparent',
                   },
                 ]}
               />
@@ -200,20 +282,106 @@ export default function PlanScreen() {
       </View>
 
       <View style={styles.dayCard}>
-        <Text style={styles.dayHead}>{daySel.head}</Text>
-        <Text style={styles.dayTitle}>{daySel.title}</Text>
-        <Text style={styles.dayBody}>{daySel.body}</Text>
-        {/* "Planned for today" used to be a statement with nothing to press —
-            the one day a Start belongs is the one you're standing in. */}
-        {isoOf(s.daySel) === today && !!selRoutine && selSessions.length === 0 && (
-          <Btn
-            variant="primary"
-            label={L.startBare}
-            style={styles.dayStart}
-            labelStyle={styles.dayStartLabel}
-            onPress={() => start(selRoutine.id)}
-          />
+        <Text style={styles.dayHead}>
+          {`${fmtDayShort(s.lang, fromISO(sel))}${sel === today ? ` · ${L.agoToday}` : ''}`}
+        </Text>
+
+        {rows.length === 0 && (
+          <>
+            <Text style={styles.dayTitle}>{empty.title}</Text>
+            <Text style={styles.dayBody}>{empty.body}</Text>
+          </>
         )}
+
+        {rows.map((r, i) => (
+          <Pressable
+            key={r.entry.id}
+            disabled={!editable}
+            onPress={() => planDay(r.entry.id)}
+            style={[styles.planRow, i === 0 && styles.planRowFirst]}
+          >
+            <View style={styles.planText}>
+              <Text style={[styles.planName, r.missing && missingName(c)]} numberOfLines={1}>
+                {r.name}
+              </Text>
+              {/* A past row that never happened says so where its set count
+                  would be: the plan is the only thing left to report. */}
+              <Text style={styles.planSub} numberOfLines={1}>
+                {!r.logged && sel < today ? L.dayPlannedPast : r.summary}
+              </Text>
+            </View>
+            <Text style={styles.rulePill}>{r.rule}</Text>
+            {r.logged ? (
+              <Text style={styles.planDone}>{`✓ ${L.planLogged}`}</Text>
+            ) : (
+              sel === today &&
+              !live &&
+              (i === next ? (
+                <Btn
+                  variant="primary"
+                  label={L.startBare}
+                  style={styles.rowStart}
+                  labelStyle={styles.rowStartLabel}
+                  onPress={() => startRow(r.entry.rid)}
+                />
+              ) : (
+                <Btn
+                  variant="ghost"
+                  label={`${L.startBare} ›`}
+                  style={styles.rowGhost}
+                  labelStyle={styles.rowGhostLabel}
+                  onPress={() => startRow(r.entry.rid)}
+                />
+              ))
+            )}
+          </Pressable>
+        ))}
+
+        {/* Dashed is the app's "not yet a fact" grammar — the waiting set row,
+            the held CTA — and a cancelled occurrence is exactly that. It stays
+            on screen so undoing is one tap rather than a re-plan. */}
+        {off.map((o) => (
+          <View key={o.entry.id} style={styles.offRow}>
+            <Text style={[styles.offName, o.missing && missingName(c)]} numberOfLines={1}>
+              {o.name}
+            </Text>
+            <Text style={styles.offRule}>{o.rule}</Text>
+            {editable && (
+              <Btn
+                variant="ghost"
+                label={`${L.planRestore} ›`}
+                style={styles.rowGhost}
+                labelStyle={styles.rowGhostLabel}
+                onPress={() => restorePlanDay(sel, o.entry.id)}
+              />
+            )}
+          </View>
+        ))}
+
+        <View style={styles.dayFoot}>
+          {/* One live session owns every Start in the app, so a day of rows
+              carries one way back rather than a row of identical labels. */}
+          {live && sel === today && (
+            <Btn
+              variant="secondary"
+              label={`${L.backToWorkout} ›`}
+              style={styles.backToWorkout}
+              labelStyle={styles.rowGhostLabel}
+              onPress={() => patch({ sessionMin: false })}
+            />
+          )}
+          {/* A past day is a record: a rule anchored backwards would invent
+              workouts you never planned, and skips you never chose. */}
+          {editable && (
+            <Btn
+              variant="ghost"
+              label={L.planWorkout}
+              style={styles.addPlan}
+              labelStyle={styles.addPlanLabel}
+              onPress={() => planDay(null)}
+            />
+          )}
+        </View>
       </View>
 
       {selSessions.length > 0 && (
@@ -334,44 +502,21 @@ export default function PlanScreen() {
         </>
       )}
 
-      <H6 style={styles.sectionHead}>{L.weeklyPlan}</H6>
-      <View style={styles.planRows}>
-        {DAYS_SHORT[s.lang].map((d, i) => {
-          const r = routine(s.schedule[i] ?? null);
-          const rn = r ? rInfo(r) : null;
-          // Opens the routine selector — the design cycled through the seed
-          // routines here, which locked out any user-created ones.
-          return (
-            <Pressable key={DOW[i]} onPress={() => patch({ dayPick: i })} style={styles.row}>
-              <Text style={styles.rowDay}>{d.toUpperCase()}</Text>
-              <Text
-                style={[
-                  styles.rowName,
-                  { color: r ? c.text : c.neutral600 },
-                  rn?.missing && missingName(c),
-                ]}
-                numberOfLines={1}
-              >
-                {rn ? rn.text : L.rest}
-              </Text>
-              <Text style={styles.rowMeta}>
-                {r ? countN(r.items.length, L.exCountOne, L.exCount) : ''}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
+      <View style={{ height: 14 }} />
     </Screen>
   );
 }
 
 const sheet = themed(() => ({
-  tight: { letterSpacing: tracking(t.h2, -0.02) },
+  header: { flexDirection: 'row', alignItems: 'center' },
+  backBtn: { paddingVertical: 4, paddingHorizontal: 0 },
+  backLabel: { fontSize: 13 },
+  tight: { letterSpacing: tracking(t.h2, -0.02), marginTop: 2 },
   monthRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 14,
+    marginTop: 12,
   },
   monthNav: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   monthChev: { fontSize: 18, lineHeight: 18 * 1.2 },
@@ -400,9 +545,10 @@ const sheet = themed(() => ({
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   legendText: { fontFamily: font.regular, fontSize: 11, color: color.neutral500 },
 
+  /* — the day — */
   dayCard: {
     marginTop: 14,
-    paddingVertical: 12,
+    paddingVertical: 11,
     paddingHorizontal: 13,
     borderRadius: t.cardRadius,
     backgroundColor: color.surface,
@@ -414,10 +560,68 @@ const sheet = themed(() => ({
     textTransform: 'uppercase',
     color: color.accent,
   },
-  dayTitle: { fontFamily: font.regular, fontSize: 15, color: color.text, marginTop: 4 },
+  dayTitle: { fontFamily: font.regular, fontSize: 15, color: color.neutral500, marginTop: 4 },
   dayBody: { fontFamily: font.regular, fontSize: 12, color: color.neutral500, marginTop: 2 },
-  dayStart: { alignSelf: 'flex-start', marginTop: 10, minWidth: 120 },
-  dayStartLabel: { fontSize: 13 },
+
+  /** One planned workout. The rule pill is the only new thing on this screen,
+      and it is what lets the calendar stand alone: you can see a plan
+      repeating without a second list stating it. */
+  planRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+    paddingVertical: 9,
+    borderTopWidth: 1,
+    borderTopColor: t.rule,
+  },
+  planRowFirst: { borderTopWidth: 0, marginTop: 3 },
+  planText: { flex: 1, minWidth: 0 },
+  planName: { fontFamily: font.regular, fontSize: 14.5, color: color.text },
+  planSub: { fontFamily: font.regular, fontSize: 11, color: color.neutral600, marginTop: 1 },
+  rulePill: {
+    fontFamily: font.regular,
+    fontSize: 10.5,
+    color: color.accent300,
+    borderWidth: 1,
+    borderColor: color.accent800,
+    borderRadius: 5,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+  },
+  planDone: { fontFamily: font.regular, fontSize: 11, color: color.accent400 },
+  rowStart: { paddingVertical: 6, paddingHorizontal: 13 },
+  rowStartLabel: { fontSize: 12.5 },
+  rowGhost: { paddingVertical: 4, paddingHorizontal: 4 },
+  rowGhostLabel: { fontSize: 12.5 },
+
+  offRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+    marginTop: 7,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: color.divider,
+    borderRadius: t.rowRadius,
+  },
+  offName: { flex: 1, fontFamily: font.regular, fontSize: 13.5, color: color.neutral600 },
+  offRule: {
+    fontFamily: font.regular,
+    fontSize: 10.5,
+    color: color.neutral600,
+    borderWidth: 1,
+    borderColor: color.divider,
+    borderRadius: 5,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+  },
+
+  dayFoot: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 9 },
+  backToWorkout: { paddingVertical: 6, paddingHorizontal: 12 },
+  addPlan: { paddingVertical: 3, paddingHorizontal: 0 },
+  addPlanLabel: { fontSize: 12.5 },
 
   /* — one logged session — */
   logCard: {
@@ -461,26 +665,5 @@ const sheet = themed(() => ({
   saveLabel: { fontSize: 12.5 },
   logSaved: { fontFamily: font.regular, fontSize: 11.5, color: color.accent400, marginTop: 11 },
 
-  sectionHead: { marginTop: 22, marginBottom: 8, color: color.neutral500 },
-  planRows: { gap: t.gap, paddingBottom: 10 },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: t.rowPadV,
-    paddingHorizontal: t.rowPadH,
-    borderRadius: t.rowRadius,
-    backgroundColor: t.rowBg,
-    borderBottomWidth: 1,
-    borderBottomColor: t.rule,
-  },
-  rowDay: {
-    width: 34,
-    fontFamily: font.regular,
-    fontSize: 11,
-    letterSpacing: tracking(11, 0.08),
-    color: color.neutral500,
-  },
-  rowName: { flex: 1, fontFamily: font.regular, fontSize: 14 },
-  rowMeta: { fontFamily: font.regular, fontSize: 11, color: color.neutral600 },
+  sectionHead: { marginTop: 20, marginBottom: 6, color: color.neutral500 },
 }));
