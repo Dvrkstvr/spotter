@@ -95,7 +95,14 @@ export function useBuddyLive(): BuddyLive | null {
     const iLead =
       leaderOf(s.firstUp, bp.active, myBid, theirBid, s.sessionRole) ===
       (s.sessionRole === 'guest' ? 'guest' : 'host');
-    const yours = mine < theirDone || (mine === theirDone && iLead);
+    // A drop set is two sets that must both be yours, so the handover waits
+    // for the chain rather than for the row: taking turns is about who is
+    // standing at the machine, and a set with a drop queued behind it hasn't
+    // finished being one effort. `mine` stays a count of rows on both sides —
+    // their drops inflate theirs the same way yours inflate mine, where
+    // counting heads on this side alone would skew it.
+    const chained = !!mySets.find((x) => !x.done)?.link;
+    const yours = chained || mine < theirDone || (mine === theirDone && iLead);
     const turn = mode === 'parallel' ? L.together : yours ? L.yourTurn : nm('theirTurn');
     return {
       text: `${theirDone}/${theirAll}`,

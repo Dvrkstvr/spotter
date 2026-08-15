@@ -82,8 +82,23 @@ export type LoggedSet = {
    * same one when a routine asks for more sets than last time had.
    */
   prevMark?: MarkNote | null;
+  /**
+   * This set continues the one above it — taken straight after, so the tick on
+   * that one earns no rest. A drop set, and the only thing in the app that
+   * writes one is the session: a drop is a decision about how *that* set went,
+   * which is why nothing like it exists on `RoutineItem`. See
+   * `data/superset.ts` for the rest rule both halves of this feature share.
+   */
+  link?: true;
 };
-export type SessionExercise = { ex: string; sets: LoggedSet[] };
+/**
+ * `with` is the routine's superset, carried through unchanged — the pair is
+ * made in the editor and nowhere else. The list stays **flat**: a pair is two
+ * entries that happen to be joined, so `progress.list`, `removeSessionEx`, the
+ * overview and `totals` all keep reading a list of exercises and only the
+ * screen groups them into stops.
+ */
+export type SessionExercise = { ex: string; sets: LoggedSet[]; with?: 'next' };
 export type Session = { rid: string | null; name: string; list: SessionExercise[] };
 export type Summary = {
   name: string;
@@ -147,8 +162,21 @@ export type RoutineFilter = 'all' | 'strength' | 'calisthenics' | 'cardio' | 'yo
  * What `lastMarks` cannot do is remember: it holds only the latest session per
  * exercise, so without this a note lives exactly one week and is then written
  * over. This is the copy that stays on the day it belongs to.
+ *
+ * `links` and `with` are the same arrangement for the other thing a set can
+ * carry: which of these rows was a drop taken straight off the one before it,
+ * and whether the exercise was supersetted with the next one. Both are what
+ * keeps the day readable — 50 × 8 after 65 × 6 reads as a bad set unless the
+ * record says the two were one effort — and both are optional and absent when
+ * there is nothing to say, so every entry logged before them keeps its numbers.
  */
-export type LoggedExercise = { ex: string; sets: string[]; marks?: (MarkNote | null)[] };
+export type LoggedExercise = {
+  ex: string;
+  sets: string[];
+  marks?: (MarkNote | null)[];
+  links?: boolean[];
+  with?: 'next';
+};
 /**
  * One finished session: which local day it landed on, from which routine, and
  * what was actually done.
@@ -999,6 +1027,10 @@ const sessionFrom = (s: State, r: Routine): Session => {
       const reps = it.planned ? String(it.reps) : '';
       return {
         ex: it.ex,
+        // The pair travels as it is. It is the routine's decision and the
+        // session only ever reads it — there is no pairing control anywhere
+        // in a running workout.
+        ...(it.with ? { with: it.with } : {}),
         sets: Array.from({ length: it.sets }, (_, k) => {
           // A plan asking for more sets than last time had falls back to the
           // first ghost; the mark falls back with it, or the arrow on the row
@@ -1026,6 +1058,19 @@ const sessionFrom = (s: State, r: Routine): Session => {
  * back to the first one and its verdict falls back with it, exactly as
  * `sessionFrom` does for a routine asking for more.
  */
+/**
+ * Put a new exercise on the end of a live session's list.
+ *
+ * A `with` on what used to be the last row claimed a partner that wasn't
+ * there, so it resolved to no pair — appending would silently hand it one.
+ * A superset is made in the routine and only there, and adding an exercise
+ * mid-workout is not the user saying they want one.
+ */
+const appendSessionEx = (list: SessionExercise[], fresh: SessionExercise): SessionExercise[] => [
+  ...list.map((e, k) => (k === list.length - 1 && e.with ? { ...e, with: undefined } : e)),
+  fresh,
+];
+
 const freshSessionEx = (s: State, id: string, sets: number): SessionExercise => {
   const last = s.lastLog[id]?.sets ?? [...EX, ...s.custom].find((e) => e.id === id)?.lastSets ?? [];
   const marks = s.lastMarks[id] ?? [];
@@ -1543,7 +1588,7 @@ function useWorkoutState() {
           summary: null,
         };
       return {
-        session: { ...s.session, list: [...s.session.list, fresh] },
+        session: { ...s.session, list: appendSessionEx(s.session.list, fresh) },
         active: s.session.list.length,
       };
     });
@@ -1577,7 +1622,7 @@ function useWorkoutState() {
       const fresh = freshSessionEx(merged ? { ...s, ...merged } : s, id, theirs.done.length);
       return {
         ...(merged ?? {}),
-        session: { ...s.session, list: [...s.session.list, fresh] },
+        session: { ...s.session, list: appendSessionEx(s.session.list, fresh) },
         ...(focus ? { active: s.session.list.length } : {}),
       };
     });
@@ -1594,7 +1639,12 @@ function useWorkoutState() {
       if (!s.session) return null;
       const entry = s.session.list[i];
       if (!entry || entry.sets.some((x) => x.done)) return null;
-      const list = s.session.list.filter((_, k) => k !== i);
+      const list = s.session.list
+        .filter((_, k) => k !== i)
+        // A pair needs both halves. Removing one leaves the other pointing at
+        // whatever slid up into its place, which would superset two exercises
+        // nobody joined — the same guard the routine editor's × carries.
+        .map((e, k) => (k === i - 1 && e.with ? { ...e, with: undefined } : e));
       return {
         session: { ...s.session, list },
         active: Math.max(0, Math.min(s.active > i ? s.active - 1 : s.active, list.length - 1)),
@@ -2388,7 +2438,7 @@ function useWorkoutState() {
       const lastLog = { ...s.lastLog };
       const lastMarks = { ...s.lastMarks };
       const logged: LoggedExercise[] = [];
-      for (const e of s.session.list) {
+      for (const [k, e] of s.session.list.entries()) {
         // An empty left field means bodyweight on a lift or a hold, and an
         // unrecorded distance on a run — same blank, two different facts, so
         // the measure decides which one gets written down. A `duration` set
@@ -2411,13 +2461,28 @@ function useWorkoutState() {
               : null
           );
           const marked = marks.some(Boolean);
+          // Which of the ticked rows were drops, in the same pass off the same
+          // array for the same reason. A drop is a fact about how the day went
+          // and the numbers alone misreport it: 50 × 8 under 65 × 6 reads as a
+          // set that went wrong.
+          const links = ticked.map((x) => !!x.link);
+          const linked = links.some(Boolean);
           // The day keeps its own copy, and keeps it for good. `lastMarks` is
           // the ghost for *next* time and holds one session per exercise, so
           // an exercise nobody marked this time loses the key rather than
           // keeping it: last month's "go heavier" beside this month's numbers
           // is advice about a session that no longer exists. The entry below
           // is the diary, where that same note is the point.
-          logged.push({ ex: e.ex, sets, ...(marked ? { marks } : {}) });
+          logged.push({
+            ex: e.ex,
+            sets,
+            ...(marked ? { marks } : {}),
+            ...(linked ? { links } : {}),
+            // Only when the partner actually made it into the day: a pair
+            // whose second half was never ticked isn't one, and a bracket
+            // drawn over a single block would be describing nothing.
+            ...(e.with && s.session.list[k + 1]?.sets.some((x) => x.done) ? { with: e.with } : {}),
+          });
           if (marked) lastMarks[e.ex] = marks;
           else delete lastMarks[e.ex];
         }
@@ -2479,18 +2544,20 @@ function useWorkoutState() {
   const saveAsRoutine = (name: string) => {
     patch((s) => {
       if (!s.summary?.saveable) return null;
-      const items = s.summary.saveable
-        .filter((e) => e.sets.length > 0)
-        .map((e) => {
-          const src = [...e.sets].reverse().find((x) => x.done) ?? e.sets[e.sets.length - 1];
-          const ghost = prevNums(src.prev);
-          return {
-            ex: e.ex,
-            sets: e.sets.length,
-            reps: Math.round(num(src.reps || ghost.r, 8)),
-            w: num(src.w || ghost.w, 0),
-          };
-        });
+      const kept = s.summary.saveable.filter((e) => e.sets.length > 0);
+      const items = kept.map((e, k) => {
+        const src = [...e.sets].reverse().find((x) => x.done) ?? e.sets[e.sets.length - 1];
+        const ghost = prevNums(src.prev);
+        return {
+          ex: e.ex,
+          sets: e.sets.length,
+          reps: Math.round(num(src.reps || ghost.r, 8)),
+          w: num(src.w || ghost.w, 0),
+          // As above: the pair survives into the routine, but only where its
+          // partner did too.
+          ...(e.with && k + 1 < kept.length ? { with: e.with } : {}),
+        };
+      });
       if (items.length === 0) return null;
       const L = DICT[s.lang] ?? DICT.en;
       return {
@@ -2523,17 +2590,20 @@ function useWorkoutState() {
   const saveDayAsRoutine = (i: number, name: string) =>
     patch((s) => {
       const h = s.history[i];
-      const items = (h?.list ?? [])
-        .filter((e) => e.sets.length > 0)
-        .map((e) => {
-          const n = prevNums(e.sets[e.sets.length - 1]);
-          return {
-            ex: e.ex,
-            sets: e.sets.length,
-            reps: Math.round(num(n.r, 8)),
-            w: num(n.w, 0),
-          };
-        });
+      const kept = (h?.list ?? []).filter((e) => e.sets.length > 0);
+      const items = kept.map((e, k) => {
+        const n = prevNums(e.sets[e.sets.length - 1]);
+        return {
+          ex: e.ex,
+          sets: e.sets.length,
+          reps: Math.round(num(n.r, 8)),
+          w: num(n.w, 0),
+          // The day was taken as a superset, so the routine made from it is
+          // one. Only where the partner survived the filter, or the pair
+          // would point at whatever followed it instead.
+          ...(e.with && k + 1 < kept.length ? { with: e.with } : {}),
+        };
+      });
       if (items.length === 0) return null;
       const L = DICT[s.lang] ?? DICT.en;
       const label = name.trim() || L.newRoutine;

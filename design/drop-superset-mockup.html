@@ -1,0 +1,1682 @@
+<title>Spotter — Two sets that share one rest (mockup)</title>
+<style>
+  /* ── Nocturne, verbatim from src/design/tokens.ts ─────────────────────
+     Single-theme on purpose: this mocks the app's default (blurple · dark),
+     which is byte-identical to the ported design palette. */
+  :root {
+    --bg: #161826;          /* app page */
+    --surface: #232532;
+    --text: #e9e9ed;
+    --accent: #9184d9;
+    --accent2: #a7a1db;
+    --a100: #f5f4ff; --a200: #e7e5fe; --a300: #d2cefd; --a400: #b5abfc;
+    --a500: #968ae0; --a600: #796cbf; --a700: #5d5294; --a800: #423a6a; --a900: #2b2741;
+    --n100: #f3f5fe; --n300: #cfd3e5; --n400: #b2b6ca; --n500: #9397ab; --n600: #75798c;
+    --n700: #595d6c; --n800: #3f424d; --n900: #292b31;
+    --scrim: #0b0c14;
+    --divider: rgba(233, 233, 237, 0.16);
+    --rule: rgba(233, 233, 237, 0.09);
+    --wash-t8: rgba(233, 233, 237, 0.08);
+    --wash-t5: rgba(233, 233, 237, 0.05);
+    --wash-a16: rgba(145, 132, 217, 0.16);
+    --wash-a12: rgba(145, 132, 217, 0.12);
+    --wash-a7: rgba(145, 132, 217, 0.07);
+    --sans: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--scrim);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 1180px; margin: 0 auto; padding: 56px 28px 96px; }
+
+  .kicker {
+    font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--accent); font-weight: 400;
+  }
+  h1 {
+    font-weight: 500; font-size: 40px; line-height: 1.12;
+    letter-spacing: -0.015em; margin: 10px 0 14px; text-wrap: balance;
+  }
+  h2.sec { font-weight: 500; font-size: 24px; letter-spacing: -0.015em; margin: 0 0 6px; }
+  .lede { color: var(--n400); max-width: 68ch; }
+  .lede.wide { max-width: 84ch; }
+  .lede strong { color: var(--text); font-weight: 500; }
+  .lede code, .notes code, .settled code, td code, .ask code {
+    font-family: var(--mono); font-size: 12.5px; color: var(--a300);
+    background: var(--n900); border-radius: 4px; padding: 1px 5px;
+  }
+
+  .settled {
+    margin: 26px 0 0; border: 1px solid var(--divider); border-left: 2px solid var(--accent);
+    border-radius: 8px; padding: 13px 16px; max-width: 84ch;
+  }
+  .settled .h { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); }
+  .settled ul { margin: 9px 0 0; padding-left: 18px; color: var(--n400); font-size: 13.5px; display: grid; gap: 7px; }
+  .settled li::marker { color: var(--n700); }
+  .settled strong { color: var(--text); font-weight: 500; }
+  .settled.warn { border-left-color: var(--n600); }
+  .settled.warn .h { color: var(--n400); }
+
+  hr.fade {
+    border: 0; height: 1px; margin: 52px 0;
+    background: linear-gradient(90deg, transparent, var(--divider) 48px, var(--divider) calc(100% - 48px), transparent);
+  }
+
+  /* ── frames laid out side by side ── */
+  .trio { display: grid; grid-template-columns: repeat(3, 348px); gap: 26px; margin-top: 26px; align-items: start; }
+  .pair { display: grid; grid-template-columns: 348px 348px; gap: 32px; margin-top: 26px; align-items: start; }
+  .half .cap { font-size: 13px; font-weight: 500; margin-bottom: 3px; }
+  .half .cap.bad { color: var(--n400); }
+  .half .cap.good { color: var(--accent); }
+  .half .cap.mid { color: var(--n300); }
+  .half .sub { font-size: 12px; color: var(--n500); margin-bottom: 12px; max-width: 42ch; min-height: 72px; }
+  .half .sub b { color: var(--n300); font-weight: 500; }
+  .notes { margin-top: 24px; max-width: 80ch; }
+  .notes ul { margin: 10px 0 0; padding-left: 18px; color: var(--n400); font-size: 14px; display: grid; gap: 9px; }
+  .notes li::marker { color: var(--n700); }
+  .notes strong { color: var(--text); font-weight: 500; }
+  @media (max-width: 1140px) { .trio { grid-template-columns: 1fr; } .pair { grid-template-columns: 1fr; } }
+
+  /* ── phone frame ── */
+  .phone {
+    width: 348px; background: var(--bg);
+    border: 1px solid var(--n800); border-radius: 30px;
+    padding: 12px 12px 0; overflow: hidden; position: relative;
+  }
+  .phone.tall { height: 700px; }
+  .phone.xtall { height: 860px; }
+  .phone.short { height: 560px; }
+  .phone .status {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 10px; color: var(--n700); padding: 2px 6px 8px;
+  }
+  .scr { padding: 0 4px; }
+
+  /* ── the session's exercise screen ── */
+  .topbar { display: flex; align-items: center; gap: 10px; padding: 2px 0 10px; }
+  .topbar .back { font-size: 17px; color: var(--n400); }
+  .chip {
+    font-size: 11.5px; color: var(--a300); border: 1px solid var(--a700);
+    background: var(--wash-a7); border-radius: 999px; padding: 2px 9px;
+    font-variant-numeric: tabular-nums;
+  }
+  .topbar .clock { margin-left: auto; font-size: 12px; color: var(--n500); font-variant-numeric: tabular-nums; }
+  .exname { font-size: 19px; font-weight: 500; letter-spacing: -0.01em; }
+  .exname .plus { color: var(--n700); font-weight: 400; }
+  .exmeta { font-size: 11px; color: var(--n600); margin-top: 2px; }
+  .setup { display: flex; gap: 6px; margin-top: 8px; }
+  .setup span {
+    font-size: 10px; color: var(--a300); border: 1px solid var(--a800);
+    background: var(--wash-a7); border-radius: 4px; padding: 2px 6px;
+  }
+
+  /* the set ledger — geometry mirrors session-overlay.tsx:
+     16px index · 8 gap · 66 last · 8 · flex · 8 · flex · 8 · 34 check */
+  .colhead, .setrow { display: grid; grid-template-columns: 16px 66px 1fr 1fr 34px; gap: 8px; align-items: center; }
+  .colhead { padding: 14px 2px 5px; }
+  .colhead.tight { padding: 6px 2px 4px; }
+  .colhead span {
+    font-size: 9.5px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--n700);
+  }
+  .colhead .c { text-align: center; }
+  .rowwrap { margin-bottom: 5px; position: relative; }
+  .idx { font-size: 12px; color: var(--n600); font-variant-numeric: tabular-nums; }
+  .idx.live { color: var(--a400); }
+  .prev { font-size: 11.5px; color: var(--n500); font-variant-numeric: tabular-nums; }
+  .cell {
+    text-align: center; font-size: 15px; color: var(--text);
+    border-bottom: 1px solid var(--n800); padding: 5px 0 4px;
+    font-variant-numeric: tabular-nums;
+  }
+  .cell.big { font-size: 22px; padding: 3px 0 2px; }
+  .cell.ghost { color: var(--n700); }
+  .tick {
+    width: 22px; height: 22px; border-radius: 6px; border: 1px solid var(--n700);
+    justify-self: center; display: grid; place-items: center;
+  }
+  .tick.on { border-color: var(--accent); background: var(--wash-a16); }
+  .tick.live { border-color: var(--a600); }
+  .livebox {
+    margin: 3px 0; padding: 8px; border: 1px solid var(--a700);
+    border-radius: 10px; background: var(--wash-a7);
+  }
+  .livebox.wait { border-style: dashed; border-color: var(--n700); background: transparent; }
+
+  /* ── THE CHAIN ────────────────────────────────────────────────────────
+     A linked set keeps its own number — it is a real set, and the mark
+     still takes the digit's place when one is given. The link is drawn in
+     the *gap between* two digits, so the two never compete for one slot. */
+  .rowwrap.link { margin-top: -2px; }
+  .rowwrap.link::before {                       /* the riser, up into the gap */
+    content: ''; position: absolute; left: 7px; top: -8px; height: 18px;
+    width: 1px; background: var(--a700);
+  }
+  .rowwrap.link::after {                        /* the stub, into the digit */
+    content: ''; position: absolute; left: 7px; top: 9px; width: 6px; height: 1px;
+    background: var(--a700);
+  }
+  .rowwrap.link.tolive::before { top: -6px; height: 22px; }
+  .rowwrap.link.tolive::after { top: 15px; }
+
+  /* ── THE PAIR ─────────────────────────────────────────────────────────
+     Two ledgers, one unit. A single accent hairline runs down the outside
+     of both and is the only thing binding them — the same grammar the
+     chain uses one level down, at the same weight. */
+  .pairwrap { position: relative; padding-left: 11px; margin-top: 10px; }
+  .pairwrap::before {
+    content: ''; position: absolute; left: 2px; top: 6px; bottom: 6px; width: 1px;
+    background: var(--a700);
+  }
+  .pairhalf { position: relative; }
+  .pairhalf + .pairhalf { margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--rule); }
+  .pairhalf::before {                            /* the stub into each name */
+    content: ''; position: absolute; left: -9px; top: 10px; width: 7px; height: 1px;
+    background: var(--a700);
+  }
+  .pairhalf + .pairhalf::before { top: 21px; }
+  .halfname { font-size: 13.5px; color: var(--n300); }
+  .pairhalf.on .halfname { color: var(--a200); }
+  .halfmeta { font-size: 10px; color: var(--n700); margin-top: 1px; }
+
+  /* the note line — always there, own words else the way in */
+  .markline {
+    display: flex; align-items: center; gap: 6px; margin-top: 5px; padding-left: 2px;
+  }
+  .markline .t { font-size: 11px; color: var(--n500); flex: 1; min-width: 0; }
+  .markline .t.own { color: var(--n400); }
+  .markline .t.empty { color: var(--n700); }
+  svg.mk { flex: none; }
+
+  /* the wait line under the live row — a rest, a buddy, or the one
+     sentence that says why there is no rest */
+  .waitrow {
+    display: flex; align-items: center; gap: 8px; margin-top: 8px; padding-top: 7px;
+    border-top: 1px solid var(--wash-t8);
+  }
+  .waitrow .l { flex: 1; font-size: 11.5px; color: var(--n500); font-variant-numeric: tabular-nums; }
+  .waitrow .l.chain { color: var(--a400); }
+  .waitrow .s { font-size: 11.5px; color: var(--accent); }
+
+  /* held "Add set" / "Add drop" pair under the last row */
+  .addrow { display: flex; gap: 8px; margin-top: 10px; }
+  .addbtn {
+    flex: 1; border: 1px dashed var(--n700); border-radius: 8px; padding: 8px;
+    text-align: center; font-size: 12px; color: var(--n400);
+  }
+  .addrow.small .addbtn { padding: 6px; font-size: 11px; }
+
+  .cta {
+    position: absolute; left: 16px; right: 16px; bottom: 14px;
+    border: 1px solid var(--a600); background: var(--wash-a12);
+    border-radius: 10px; padding: 12px; text-align: center;
+    font-size: 14px; color: var(--a200);
+  }
+  .cta.dashed { border-style: dashed; border-color: var(--n700); color: var(--n400); background: transparent; }
+
+  /* ── sheets ── */
+  .sheet {
+    border-top: 1px solid var(--divider); background: var(--surface);
+    border-radius: 14px 14px 0 0; padding: 14px 14px 16px;
+    position: absolute; left: 12px; right: 12px; bottom: 0;
+  }
+  .sheet h4 { font-size: 15px; font-weight: 500; }
+  .sheet .sub { font-size: 11.5px; color: var(--n600); margin-top: 1px; }
+  .marks { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; margin-top: 12px; }
+  .marktile {
+    border: 1px solid var(--divider); border-radius: 8px; padding: 9px 4px;
+    display: grid; justify-items: center; gap: 5px;
+  }
+  .marktile.on { border-color: var(--accent); background: var(--wash-a12); }
+  .marktile span { font-size: 9.5px; color: var(--n400); text-align: center; }
+  .marktile.on span { color: var(--a200); }
+  .field { margin-top: 13px; }
+  .field .lab { font-size: 10px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--n600); }
+  .field .inp {
+    margin-top: 5px; border: 1px solid var(--n800); border-radius: 8px;
+    padding: 9px 10px; font-size: 13px; color: var(--text); min-height: 46px;
+  }
+  .field .inp.ph { color: var(--n700); }
+  .swrow {
+    display: flex; align-items: center; gap: 10px; margin-top: 13px;
+    padding-top: 12px; border-top: 1px solid var(--rule);
+  }
+  .swrow .txt { flex: 1; min-width: 0; }
+  .swrow .tt { font-size: 13px; }
+  .swrow .ts { font-size: 11px; color: var(--n600); margin-top: 1px; }
+  .sw { width: 38px; height: 22px; border-radius: 11px; background: var(--n800); position: relative; flex: none; }
+  .sw::after { content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 8px; background: var(--n600); }
+  .sw.on { background: var(--wash-a16); border: 1px solid var(--a700); }
+  .sw.on::after { left: 18px; background: var(--accent); }
+
+  /* ── the overview sheet ── */
+  .ovlist { margin-top: 12px; display: grid; gap: 2px; }
+  .ovrow { display: flex; align-items: center; gap: 9px; padding: 9px 8px; border-radius: 8px; }
+  .ovrow.cur { background: var(--wash-a7); }
+  .ovdot { width: 6px; height: 6px; border-radius: 3px; background: var(--accent); flex: none; }
+  .ovname { flex: 1; font-size: 13.5px; min-width: 0; }
+  .ovrow.cur .ovname { color: var(--a200); }
+  .ovrow.done .ovname { color: var(--n500); }
+  .ovcount { font-size: 11.5px; color: var(--n600); font-variant-numeric: tabular-nums; }
+  .ovrow.cur .ovcount { color: var(--a400); }
+  .ovtick { font-size: 11px; color: var(--n600); }
+  /* a pair is one unit here too — one bracket over two rows */
+  .ovpairwrap { position: relative; padding-left: 12px; }
+  .ovpairwrap::before {
+    content: ''; position: absolute; left: 3px; top: 12px; bottom: 12px; width: 1px; background: var(--a700);
+  }
+  .ovpairtag {
+    position: absolute; left: 12px; top: -7px; font-size: 9px; color: var(--a400);
+    letter-spacing: 0.07em; text-transform: uppercase; background: var(--surface); padding: 0 5px;
+  }
+
+  /* ── the routine editor ── */
+  .edhead, .edrow { display: grid; grid-template-columns: 20px 1fr 38px 38px 56px 16px; gap: 7px; align-items: center; }
+  .edhead { padding: 12px 2px 5px; }
+  .edhead span { font-size: 9.5px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--n700); }
+  .edhead .c, .edrow .c { text-align: center; }
+  .edwrap { margin-bottom: 4px; position: relative; }
+  .grip { font-size: 13px; color: var(--n700); }
+  .edname { font-size: 13.5px; min-width: 0; }
+  .edmeta { font-size: 10px; color: var(--n700); }
+  .numin {
+    border: 1px solid var(--n800); border-radius: 6px; padding: 5px 0;
+    text-align: center; font-size: 13px; font-variant-numeric: tabular-nums;
+  }
+  .numin.planned { border-color: var(--a800); color: var(--a200); }
+  .edx { font-size: 14px; color: var(--n700); text-align: center; }
+  /* the pairing gutter — a 20px tap target between two rows */
+  .linkgap { height: 15px; position: relative; margin: -1px 0; }
+  .linkglyph {
+    position: absolute; left: 1px; top: -3px; width: 20px; height: 20px;
+    display: grid; place-items: center; font-size: 11px; color: var(--n700);
+  }
+  .linkgap.on .linkglyph { color: var(--accent); }
+  .linkgap.on::before {
+    content: ''; position: absolute; left: 9px; top: -14px; bottom: -14px; width: 1px; background: var(--a700);
+  }
+  .pairlabel {
+    position: absolute; left: 24px; top: -1px; font-size: 9.5px; color: var(--a400);
+    letter-spacing: 0.06em; text-transform: uppercase;
+  }
+  .edwrap.paired { padding-left: 9px; }
+  .edwrap.paired > .edrow { grid-template-columns: 20px 1fr 38px 38px 56px 16px; }
+
+  /* ── the diary: Plan's day panel ── */
+  .daypanel { padding-top: 4px; }
+  .dayhead { font-size: 12px; color: var(--n500); }
+  .logcard { margin-top: 8px; padding: 12px 13px; border-radius: 8px; background: var(--surface); }
+  .logtop { display: flex; align-items: baseline; gap: 8px; }
+  .logtitle { flex: 1; font-size: 15px; font-weight: 500; }
+  .logstats { font-size: 11.5px; color: var(--n500); margin-top: 3px; font-variant-numeric: tabular-nums; }
+  .logex { margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--rule); }
+  .logextop { display: flex; align-items: baseline; gap: 10px; }
+  .logexname { flex: 1; font-size: 13px; }
+  .logexcount { font-size: 10.5px; color: var(--n600); }
+  .logsets { display: flex; flex-wrap: wrap; column-gap: 14px; row-gap: 2px; margin-top: 3px; }
+  .logset { font-size: 12px; color: var(--n400); font-variant-numeric: tabular-nums; }
+  .logset .drop { color: var(--n600); }
+  .logset.full { flex-basis: 100%; display: flex; align-items: center; gap: 7px; }
+  .logset.full .nt { font-size: 11px; color: var(--n500); }
+  .logset.full .num { color: var(--n400); }
+  /* a logged pair keeps its bracket, so the diary reads like the session did */
+  .logpairwrap { position: relative; padding-left: 10px; }
+  .logpairwrap::before {
+    content: ''; position: absolute; left: 1px; top: 14px; bottom: 4px; width: 1px; background: var(--a800);
+  }
+  .logpairtag { font-size: 10px; color: var(--a400); letter-spacing: 0.06em; text-transform: uppercase; margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--rule); }
+
+  /* ── tables ── */
+  table { border-collapse: collapse; margin-top: 20px; font-size: 13.5px; width: 100%; max-width: 92ch; }
+  th, td { text-align: left; padding: 8px 14px 8px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font-size: 10px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--n600); font-weight: 400; }
+  td { color: var(--n400); }
+  td.k { color: var(--text); white-space: nowrap; }
+  td .de { color: var(--n500); }
+
+  pre {
+    margin-top: 18px; background: var(--n900); border: 1px solid var(--n800);
+    border-radius: 8px; padding: 14px 16px; overflow-x: auto;
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.7; color: var(--n300);
+  }
+  pre .c { color: var(--n600); }
+  pre .a { color: var(--a300); }
+
+  .ask { margin-top: 26px; border: 1px solid var(--divider); border-radius: 8px; padding: 4px 16px 14px; max-width: 84ch; }
+  .ask .h { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--n400); margin-top: 12px; }
+  .ask ol { margin: 10px 0 0; padding-left: 20px; color: var(--n400); font-size: 13.5px; display: grid; gap: 10px; }
+  .ask li::marker { color: var(--n700); }
+  .ask strong { color: var(--text); font-weight: 500; }
+</style>
+
+<div class="page">
+
+  <div class="kicker">Spotter · mockup</div>
+  <h1>A drop set and a superset are<br>the same missing sentence:<br><em>this one doesn't earn a rest.</em></h1>
+  <p class="lede wide">
+    Both are already representable. A drop set is a set at a lower weight taken
+    straight away — add a row, type 50, tick it. A superset is a set on the other
+    machine taken straight away. What the app gets wrong in both cases is the
+    rest: every tick starts <code>restSeconds</code>, and a three-minute
+    countdown is the precise opposite of what either of these things means.
+  </p>
+  <p class="lede wide" style="margin-top: 14px;">
+    So the rule underneath both is one sentence — <strong>a tick earns a rest
+    only when nothing is queued to be taken immediately after it</strong> — and
+    the two features are the two ways something can be queued: the next row of
+    this ledger, or the paired exercise's row in this round.
+  </p>
+
+  <div class="settled">
+    <div class="h">Settled</div>
+    <ul>
+      <li><strong>Drop sets are made in the moment, supersets only in the
+        routine.</strong> A drop is a decision about how <em>that set</em> went,
+        which nobody makes a week early; a superset is a decision about
+        <em>which two exercises</em>, which is exactly what a routine holds.
+        There is no mid-session pairing anywhere — not in the overview sheet,
+        not on the exercise screen.</li>
+      <li><strong>A superset draws both exercises on one screen.</strong> Two
+        ledgers bound by one hairline, one live row across the pair, and the
+        round is the thing that advances. §4.</li>
+      <li><strong>One exercise per screen becomes one <em>unit</em> per
+        screen.</strong> A pair is one swipe stop, one chip position, one
+        bracket in the overview. That is the whole cost of the decision, and
+        it is paid in <code>s.active</code> meaning "which unit" rather than
+        "which exercise".</li>
+      <li><strong>The chain is drawn between digits, never in one.</strong> The
+        index column belongs to <code>SetMark</code> — the mark takes the
+        digit's place. A hairline in the gutter <em>between</em> two rows can
+        never argue with it, and the pair's bracket is the same grammar one
+        level up.</li>
+      <li><strong>Additive, so no version bump.</strong> One optional field on
+        a session set, one on <code>RoutineItem</code>, two on
+        <code>LoggedExercise</code>. <code>STORAGE_VERSION</code> stays 4.</li>
+    </ul>
+  </div>
+
+  <hr class="fade">
+
+  <h2 class="sec">1 · The drop set, in the ledger</h2>
+  <p class="lede wide">
+    Bench Press, 3 planned sets. Set 3 is done at 65 and a drop to 50 is under
+    it. Three readings of the same two rows. <strong>B is the design</strong> —
+    the other two are here because each is the obvious move and each breaks
+    something already decided.
+  </p>
+
+  <div class="trio">
+
+    <!-- ── A · today ─────────────────────────────────────────────────── -->
+    <div class="half">
+      <div class="cap bad">A · Today, with no field at all</div>
+      <div class="sub">
+        Add set, type 50, tick. The numbers are right and the diary is right.
+        <b>The rest is wrong</b> — 3:00 lands between two halves of one effort,
+        and nothing on the screen or in the record says those rows were taken
+        together.
+      </div>
+      <div class="phone tall">
+        <div class="status"><span>9:41</span><span>▮▮▮</span></div>
+        <div class="scr">
+          <div class="topbar">
+            <span class="back">‹</span>
+            <span class="chip">4 / 4</span>
+            <span class="clock">31:06</span>
+          </div>
+          <div class="exname">Bench Press</div>
+          <div class="exmeta">Chest · Barbell</div>
+          <div class="setup"><span>Seat 4</span><span>Bar 20 kg</span></div>
+
+          <div class="colhead">
+            <span>#</span><span>Last time</span><span class="c">kg</span><span class="c">Reps</span><span></span>
+          </div>
+
+          <div class="rowwrap">
+            <div class="setrow">
+              <span class="idx">1</span><span class="prev">70 × 8</span>
+              <span class="cell">70</span><span class="cell">8</span>
+              <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#b5abfc" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+            </div>
+            <div class="markline"><span class="t empty">+ Note</span></div>
+          </div>
+
+          <div class="rowwrap">
+            <div class="setrow">
+              <span class="idx">2</span><span class="prev">70 × 8</span>
+              <span class="cell">70</span><span class="cell">7</span>
+              <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#b5abfc" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+            </div>
+            <div class="markline"><span class="t empty">+ Note</span></div>
+          </div>
+
+          <div class="rowwrap">
+            <div class="setrow">
+              <span class="idx">3</span><span class="prev">65 × 8</span>
+              <span class="cell">65</span><span class="cell">6</span>
+              <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#b5abfc" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+            </div>
+            <div class="markline"><span class="t empty">+ Note</span></div>
+          </div>
+
+          <div class="rowwrap">
+            <div class="livebox wait">
+              <div class="setrow">
+                <span class="idx">4</span><span class="prev">—</span>
+                <span class="cell big ghost">50</span><span class="cell big ghost">8</span>
+                <span class="tick"></span>
+              </div>
+              <div class="waitrow">
+                <span class="l">Rest · 2:47</span>
+                <span class="s">start now</span>
+              </div>
+            </div>
+            <div class="markline"><span class="t empty">+ Note</span></div>
+          </div>
+        </div>
+        <div class="cta">Next exercise</div>
+      </div>
+    </div>
+
+    <!-- ── B · the gutter chain ───────────────────────────────────────── -->
+    <div class="half">
+      <div class="cap good">B · A hairline in the gutter · the design</div>
+      <div class="sub">
+        The linked row keeps its number, sits tight to the one above, and a 1px
+        accent riser joins the two digits. <b>No rest is written</b>, and while
+        the row is live the wait line says why instead of counting down. The
+        mark can still take the digit — the link is in the gap.
+      </div>
+      <div class="phone tall">
+        <div class="status"><span>9:41</span><span>▮▮▮</span></div>
+        <div class="scr">
+          <div class="topbar">
+            <span class="back">‹</span>
+            <span class="chip">4 / 4</span>
+            <span class="clock">31:06</span>
+          </div>
+          <div class="exname">Bench Press</div>
+          <div class="exmeta">Chest · Barbell</div>
+          <div class="setup"><span>Seat 4</span><span>Bar 20 kg</span></div>
+
+          <div class="colhead">
+            <span>#</span><span>Last time</span><span class="c">kg</span><span class="c">Reps</span><span></span>
+          </div>
+
+          <div class="rowwrap">
+            <div class="setrow">
+              <span class="idx">1</span><span class="prev">70 × 8</span>
+              <span class="cell">70</span><span class="cell">8</span>
+              <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#b5abfc" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+            </div>
+            <div class="markline"><span class="t empty">+ Note</span></div>
+          </div>
+
+          <div class="rowwrap">
+            <div class="setrow">
+              <span class="idx">2</span><span class="prev">70 × 8</span>
+              <span class="cell">70</span><span class="cell">7</span>
+              <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#b5abfc" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+            </div>
+            <div class="markline"><span class="t empty">+ Note</span></div>
+          </div>
+
+          <!-- the chain head -->
+          <div class="rowwrap">
+            <div class="setrow">
+              <span class="idx">3</span><span class="prev">65 × 8</span>
+              <span class="cell">65</span><span class="cell">6</span>
+              <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#b5abfc" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+            </div>
+          </div>
+
+          <!-- the linked set, live -->
+          <div class="rowwrap link tolive">
+            <div class="livebox">
+              <div class="setrow">
+                <span class="idx live">4</span><span class="prev">—</span>
+                <span class="cell big ghost">50</span><span class="cell big ghost">8</span>
+                <span class="tick live"></span>
+              </div>
+              <div class="waitrow">
+                <span class="l chain">Drop from set 3 — no rest</span>
+              </div>
+            </div>
+            <div class="markline"><span class="t empty">+ Note</span></div>
+          </div>
+
+          <div class="addrow">
+            <span class="addbtn">+ Add set</span>
+            <span class="addbtn">+ Drop set</span>
+          </div>
+        </div>
+        <div class="cta">Next exercise</div>
+      </div>
+    </div>
+
+    <!-- ── C · sub-numbering ──────────────────────────────────────────── -->
+    <div class="half">
+      <div class="cap mid">C · Sub-numbered 3a / 3b · rejected</div>
+      <div class="sub">
+        The clearest thing to read, and it wants the one slot the app has
+        already spent. <b>Marking 3b replaces the letter with the verdict</b>,
+        so judging a drop erases the fact that it was one — and <code>3 /
+        5</code> stops being a count of rows.
+      </div>
+      <div class="phone tall">
+        <div class="status"><span>9:41</span><span>▮▮▮</span></div>
+        <div class="scr">
+          <div class="topbar">
+            <span class="back">‹</span>
+            <span class="chip">3 / 3</span>
+            <span class="clock">31:06</span>
+          </div>
+          <div class="exname">Bench Press</div>
+          <div class="exmeta">Chest · Barbell</div>
+          <div class="setup"><span>Seat 4</span><span>Bar 20 kg</span></div>
+
+          <div class="colhead">
+            <span>#</span><span>Last time</span><span class="c">kg</span><span class="c">Reps</span><span></span>
+          </div>
+
+          <div class="rowwrap">
+            <div class="setrow">
+              <span class="idx">1</span><span class="prev">70 × 8</span>
+              <span class="cell">70</span><span class="cell">8</span>
+              <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#b5abfc" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+            </div>
+            <div class="markline"><span class="t empty">+ Note</span></div>
+          </div>
+
+          <div class="rowwrap">
+            <div class="setrow">
+              <span class="idx">2</span><span class="prev">70 × 8</span>
+              <span class="cell">70</span><span class="cell">7</span>
+              <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#b5abfc" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+            </div>
+            <div class="markline"><span class="t empty">+ Note</span></div>
+          </div>
+
+          <div class="rowwrap">
+            <div class="setrow">
+              <span class="idx">3a</span><span class="prev">65 × 8</span>
+              <span class="cell">65</span><span class="cell">6</span>
+              <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#b5abfc" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+            </div>
+          </div>
+
+          <!-- the collision, drawn: 3b has been marked, and the "b" is gone -->
+          <div class="rowwrap" style="margin-top: 1px;">
+            <div class="setrow">
+              <span class="idx">
+                <svg class="mk" width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M12 4.8v14M5.8 12.6l6.2 6.2 6.2-6.2" stroke="#b5abfc" stroke-width="2.2" stroke-linecap="round"/></svg>
+              </span>
+              <span class="prev">—</span>
+              <span class="cell">50</span><span class="cell">8</span>
+              <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#b5abfc" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+            </div>
+            <div class="markline">
+              <svg class="mk" width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M12 4.8v14M5.8 12.6l6.2 6.2 6.2-6.2" stroke="#b5abfc" stroke-width="2.2" stroke-linecap="round"/></svg>
+              <span class="t own">40 next time</span>
+            </div>
+          </div>
+
+          <div class="waitrow" style="border: 0; margin-top: 14px;">
+            <span class="l" style="color: var(--n700);">↑ was <b style="color: var(--n500); font-weight: 400;">3b</b> until it was judged</span>
+          </div>
+        </div>
+        <div class="cta">Next exercise</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <ul>
+      <li><strong>The linked set is a set, so it counts like one.</strong> The
+        chip reads <code>4 / 4</code>, <code>totals()</code> adds 50 × 8 into
+        volume the way it adds any <code>load</code> set, and the ghost column
+        gets it back next week index-for-index. Nothing about the arithmetic is
+        special-cased — which is the argument for a flag on a row rather than a
+        sub-object hanging off one.</li>
+      <li><strong>The riser is <code>accent700</code>, not the accent.</strong>
+        It is structure, at the weight of the live box's own border. Louder and
+        it would compete with the one thing on the screen that is actually
+        asking for a thumb.</li>
+      <li><strong>The wait line is where the explanation goes, because the wait
+        line is what changed.</strong> <em>Drop from set 3 — no rest</em> stands
+        in the slot a countdown would have occupied and leaves with the row, the
+        same way a rest does. Nothing permanent is added to the ledger.</li>
+      <li><strong>No tip.</strong> You got here by pressing a control labelled
+        <em>Drop set</em>. The catalogue's admission test is <em>could a careful
+        person use this for a month and never find it</em> — a labelled button
+        fails it in the right direction.</li>
+    </ul>
+  </div>
+
+  <hr class="fade">
+
+  <h2 class="sec">2 · Adding a drop, mid-session</h2>
+  <p class="lede wide">
+    Two ways in, because they answer two different questions. <strong>+ Drop
+    set</strong> beside Add set is the common case — a decision made standing at
+    the bar, held like Add set is. The per-set sheet is the general one: any row
+    can be linked to the row above it, which is also the only way to
+    <em>un</em>-link one.
+  </p>
+
+  <div class="pair">
+
+    <div class="half">
+      <div class="cap good">The button, under the last row</div>
+      <div class="sub">
+        Held, like Add set, and sitting next to it — same reach, same grammar.
+        It appends a set already linked, with the weight pre-filled from the row
+        above rather than from the ghost, because a drop is defined relative to
+        <b>what you just lifted</b>.
+      </div>
+      <div class="phone short">
+        <div class="status"><span>9:41</span><span>▮▮▮</span></div>
+        <div class="scr">
+          <div class="topbar">
+            <span class="back">‹</span>
+            <span class="chip">3 / 3</span>
+            <span class="clock">30:52</span>
+          </div>
+          <div class="exname">Bench Press</div>
+          <div class="exmeta">Chest · Barbell</div>
+
+          <div class="colhead">
+            <span>#</span><span>Last time</span><span class="c">kg</span><span class="c">Reps</span><span></span>
+          </div>
+
+          <div class="rowwrap">
+            <div class="setrow">
+              <span class="idx">2</span><span class="prev">70 × 8</span>
+              <span class="cell">70</span><span class="cell">7</span>
+              <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#b5abfc" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+            </div>
+            <div class="markline"><span class="t empty">+ Note</span></div>
+          </div>
+
+          <div class="rowwrap">
+            <div class="setrow">
+              <span class="idx">3</span><span class="prev">65 × 8</span>
+              <span class="cell">65</span><span class="cell">6</span>
+              <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#b5abfc" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+            </div>
+            <div class="markline"><span class="t empty">+ Note</span></div>
+          </div>
+
+          <div class="waitrow">
+            <span class="l">Rest · 2:51</span>
+            <span class="s">start now</span>
+          </div>
+
+          <div class="addrow">
+            <span class="addbtn">+ Add set</span>
+            <span class="addbtn" style="border-color: var(--a700); color: var(--a300);">+ Drop set</span>
+          </div>
+          <div style="text-align: center; font-size: 10.5px; color: var(--n700); margin-top: 8px;">
+            hold · the rest above is cancelled with it
+          </div>
+        </div>
+        <div class="cta">Next exercise</div>
+      </div>
+    </div>
+
+    <div class="half">
+      <div class="cap good">The per-set sheet gains one row</div>
+      <div class="sub">
+        The sheet that already exists for marks and notes, reached from
+        <b>+ Note</b> or the index. One switch under the divider, phrased as a
+        statement about this set rather than a feature name — and it is the only
+        way to take the link off again.
+      </div>
+      <div class="phone short">
+        <div class="status"><span>9:41</span><span>▮▮▮</span></div>
+        <div class="scr" style="opacity: 0.35;">
+          <div class="topbar">
+            <span class="back">‹</span>
+            <span class="chip">4 / 4</span>
+            <span class="clock">31:20</span>
+          </div>
+          <div class="exname">Bench Press</div>
+          <div class="exmeta">Chest · Barbell</div>
+          <div class="colhead">
+            <span>#</span><span>Last time</span><span class="c">kg</span><span class="c">Reps</span><span></span>
+          </div>
+          <div class="rowwrap">
+            <div class="setrow">
+              <span class="idx">3</span><span class="prev">65 × 8</span>
+              <span class="cell">65</span><span class="cell">6</span><span class="tick on"></span>
+            </div>
+          </div>
+          <div class="rowwrap link">
+            <div class="setrow">
+              <span class="idx">4</span><span class="prev">—</span>
+              <span class="cell">50</span><span class="cell">8</span><span class="tick on"></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="sheet">
+          <h4>Set 4</h4>
+          <div class="sub">50 × 8 · last time — </div>
+          <div class="marks">
+            <div class="marktile">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M12 19.2V5.2M5.8 11.4l6.2-6.2 6.2 6.2" stroke="#b2b6ca" stroke-width="2.2" stroke-linecap="round"/></svg>
+              <span>Heavier</span>
+            </div>
+            <div class="marktile">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M12 4.8v14M5.8 12.6l6.2 6.2 6.2-6.2" stroke="#b2b6ca" stroke-width="2.2" stroke-linecap="round"/></svg>
+              <span>Lighter</span>
+            </div>
+            <div class="marktile">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M18.6 12A6.6 6.6 0 1 1 5.4 12a6.6 6.6 0 1 1 13.2 0" stroke="#b2b6ca" stroke-width="2.2"/></svg>
+              <span>That was it</span>
+            </div>
+            <div class="marktile">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M5.5 6.5h13M5.5 12h13M5.5 17.5h8" stroke="#b2b6ca" stroke-width="2.2" stroke-linecap="round"/></svg>
+              <span>Note</span>
+            </div>
+          </div>
+          <div class="field">
+            <div class="lab">Note</div>
+            <div class="inp ph">What you want back next time…</div>
+          </div>
+          <div class="swrow">
+            <div class="txt">
+              <div class="tt">Straight after set 3</div>
+              <div class="ts">No rest between them.</div>
+            </div>
+            <div class="sw on"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <ul>
+      <li><strong>Adding a drop cancels the rest that was already running.</strong>
+        It has to — the countdown was written by the tick on set 3, and the
+        whole claim of the new row is that set 3 didn't earn one. The scheduled
+        notification goes with it, through the scheduling effect's existing
+        cleanup, so no new cancel path is needed.</li>
+      <li><strong>The switch says what is true of the set, not what the feature
+        is called.</strong> <em>Straight after set 3 · No rest between them</em>
+        — the same register as <em>Nothing is logged</em> under Finish. The word
+        <em>drop</em> lives on the button that creates one, where it is a name
+        for an action; on the sheet it would be jargon standing in for a fact.</li>
+      <li><strong>Linking set 1 is impossible</strong> — there is nothing above
+        it — so the row is absent from the first set's sheet rather than shown
+        disabled.</li>
+    </ul>
+  </div>
+
+  <hr class="fade">
+
+  <h2 class="sec">3 · Setting a superset up — routine only</h2>
+  <p class="lede wide">
+    The pair is made here and nowhere else. A 20px tap target sits in the gap
+    between adjacent rows and joins them; the hairline it lights is the same one
+    the session draws, one level up from the drop set's. <strong>Reordering
+    still works</strong> — the grip is untouched, and dragging a row out of a
+    pair breaks it.
+  </p>
+
+  <div class="pair">
+
+    <div class="half">
+      <div class="cap good">The gutter link, in the editor</div>
+      <div class="sub">
+        Unpaired gaps carry a dim glyph; the paired one lights and labels
+        itself. <b>Adjacency, not a group id</b> — which is what the editor
+        already is, so a drag breaks the pair by itself and a giant set is just
+        two links in a row.
+      </div>
+      <div class="phone tall">
+        <div class="status"><span>9:41</span><span>▮▮▮</span></div>
+        <div class="scr">
+          <div class="topbar"><span class="back">‹</span><span style="font-size: 13px; color: var(--n400);">Routine</span></div>
+          <div class="exname" style="margin-top: 4px;">Push A</div>
+          <div class="exmeta">5 exercises · 17 sets</div>
+
+          <div class="edhead">
+            <span></span><span>Exercise</span><span class="c">Sets</span><span class="c">Reps</span><span class="c">kg</span><span></span>
+          </div>
+
+          <div class="edwrap">
+            <div class="edrow">
+              <span class="grip">⠿</span>
+              <span class="edname">Bench Press<div class="edmeta">Chest · Barbell</div></span>
+              <span class="numin">4</span><span class="numin">8</span><span class="numin planned">70</span>
+              <span class="edx">×</span>
+            </div>
+          </div>
+
+          <div class="linkgap"><span class="linkglyph">⌐</span></div>
+
+          <div class="edwrap">
+            <div class="edrow">
+              <span class="grip">⠿</span>
+              <span class="edname">Incline Press<div class="edmeta">Chest · Dumbbell</div></span>
+              <span class="numin">3</span><span class="numin">10</span><span class="numin">24</span>
+              <span class="edx">×</span>
+            </div>
+          </div>
+
+          <div class="linkgap on">
+            <span class="linkglyph">⌐</span>
+            <span class="pairlabel">Superset</span>
+          </div>
+
+          <div class="edwrap paired">
+            <div class="edrow">
+              <span class="grip">⠿</span>
+              <span class="edname">Cable Fly<div class="edmeta">Chest · Cable</div></span>
+              <span class="numin">3</span><span class="numin">12</span><span class="numin">15</span>
+              <span class="edx">×</span>
+            </div>
+          </div>
+
+          <div class="linkgap"><span class="linkglyph">⌐</span></div>
+
+          <div class="edwrap">
+            <div class="edrow">
+              <span class="grip">⠿</span>
+              <span class="edname">Triceps Pushdown<div class="edmeta">Triceps · Cable</div></span>
+              <span class="numin">3</span><span class="numin">12</span><span class="numin planned">27.5</span>
+              <span class="edx">×</span>
+            </div>
+          </div>
+
+          <div class="linkgap"><span class="linkglyph">⌐</span></div>
+
+          <div class="edwrap">
+            <div class="edrow">
+              <span class="grip">⠿</span>
+              <span class="edname">Lateral Raise<div class="edmeta">Shoulders · Dumbbell</div></span>
+              <span class="numin">3</span><span class="numin">15</span><span class="numin">8</span>
+              <span class="edx">×</span>
+            </div>
+          </div>
+
+          <div class="addrow" style="margin-top: 16px;">
+            <span class="addbtn" style="border-style: solid; border-color: var(--a600); color: var(--a200);">+ Exercise</span>
+          </div>
+
+          <div style="margin-top: 14px; font-size: 10.5px; color: var(--n700); text-align: center;">
+            the glyph between two rows is the only pairing control in the app
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="half">
+      <div class="cap mid">And the drop, if it were planned too · rejected</div>
+      <div class="sub">
+        Shown so it stays turned down. A <b>Last set drops</b> tag on the row
+        reads fine and is a lie by next Tuesday: the routine would carry a
+        decision the session has no business honouring, and a planned drop has
+        to invent a weight.
+      </div>
+      <div class="phone tall">
+        <div class="status"><span>9:41</span><span>▮▮▮</span></div>
+        <div class="scr">
+          <div class="topbar"><span class="back">‹</span><span style="font-size: 13px; color: var(--n400);">Routine</span></div>
+          <div class="exname" style="margin-top: 4px;">Push A</div>
+          <div class="exmeta">5 exercises · 17 sets</div>
+
+          <div class="edhead">
+            <span></span><span>Exercise</span><span class="c">Sets</span><span class="c">Reps</span><span class="c">kg</span><span></span>
+          </div>
+
+          <div class="edwrap">
+            <div class="edrow">
+              <span class="grip">⠿</span>
+              <span class="edname">Bench Press<div class="edmeta">Chest · Barbell</div></span>
+              <span class="numin">4</span><span class="numin">8</span><span class="numin planned">70</span>
+              <span class="edx">×</span>
+            </div>
+            <div style="padding-left: 27px; margin-top: 3px;">
+              <span style="display: inline-flex; font-size: 10px; color: var(--a300); border: 1px solid var(--a800); background: var(--wash-a7); border-radius: 4px; padding: 2px 7px;">Last set drops</span>
+            </div>
+          </div>
+
+          <div class="linkgap"></div>
+
+          <div class="edwrap">
+            <div class="edrow">
+              <span class="grip">⠿</span>
+              <span class="edname">Incline Press<div class="edmeta">Chest · Dumbbell</div></span>
+              <span class="numin">3</span><span class="numin">10</span><span class="numin">24</span>
+              <span class="edx">×</span>
+            </div>
+          </div>
+
+          <div class="settled warn" style="margin: 22px 2px 0; padding: 11px 13px;">
+            <div class="h">Why not</div>
+            <ul style="font-size: 12.5px;">
+              <li>A planned drop has to invent a weight, and the app already
+                refuses to let a plan write a number over your own history.</li>
+              <li>Two controls per editor row, for a thing decided at the bar.</li>
+              <li>It would have to reach a buddy, and their 50 kg is not yours.</li>
+            </ul>
+          </div>
+
+          <div class="settled" style="margin: 14px 2px 0; padding: 11px 13px;">
+            <div class="h">Which is the asymmetry</div>
+            <ul style="font-size: 12.5px;">
+              <li>A superset is <strong>which two exercises</strong> — a
+                template fact, so the routine owns it and there is no
+                mid-session pairing.</li>
+              <li>A drop is <strong>how that set went</strong> — a session fact,
+                so the session owns it and the routine never mentions it.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <ul>
+      <li><strong>An orphan link is nothing.</strong> A <code>with</code> on the
+        last row, or on a row whose neighbour was deleted, resolves to no pair —
+        read at the point of use, never stored-and-swept, exactly as a plan
+        entry naming a deleted routine is handled by the plan screen rather than
+        tidied away.</li>
+      <li><strong>The pair travels with the routine.</strong> It is a field on
+        <code>RoutineItem</code>, so a buddy's copy, a backup, an
+        <code>upsertShared</code> and the coach's import all carry it with no
+        new code — and <code>mergeRoutine</code> keeps yours, the way it keeps
+        your numbers.</li>
+      <li><strong>The three seeded routines gain no pairs.</strong> A superset
+        is a choice about how you like to train, and shipping one inside
+        <em>Chest A</em> would be the library making it for you.</li>
+    </ul>
+  </div>
+
+  <hr class="fade">
+
+  <h2 class="sec">4 · The superset in the session</h2>
+  <p class="lede wide">
+    Both exercises on one screen, bound by one hairline. <strong>Exactly one row
+    across the pair is live</strong> — the round is what advances, alternating
+    halves — so the screen keeps its one raised row with numbers you can hit
+    with a thumb, and everything the ledger already does keeps working inside
+    each half.
+  </p>
+
+  <div class="pair">
+
+    <div class="half">
+      <div class="cap good">Mid-round · the first half just ticked</div>
+      <div class="sub">
+        Round 2. Incline Press' set 2 is done and earned no rest, because Cable
+        Fly's set 2 is queued behind it — which is what the wait line says.
+        <b>The live row moved to the other half</b> and the heading follows it.
+      </div>
+      <div class="phone xtall">
+        <div class="status"><span>9:41</span><span>▮▮▮</span></div>
+        <div class="scr">
+          <div class="topbar">
+            <span class="back">‹</span>
+            <span class="chip">2 / 4</span>
+            <span class="clock">14:02</span>
+          </div>
+          <div class="exname">Incline Press <span class="plus">+</span> Cable Fly</div>
+          <div class="exmeta">Superset · round 2 of 3</div>
+
+          <div class="pairwrap">
+
+            <!-- ── first half — done this round ── -->
+            <div class="pairhalf">
+              <div class="halfname">Incline Press</div>
+              <div class="halfmeta">Chest · Dumbbell</div>
+              <div class="colhead tight">
+                <span>#</span><span>Last time</span><span class="c">kg</span><span class="c">Reps</span><span></span>
+              </div>
+
+              <div class="rowwrap">
+                <div class="setrow">
+                  <span class="idx">1</span><span class="prev">24 × 10</span>
+                  <span class="cell">24</span><span class="cell">10</span>
+                  <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#b5abfc" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+                </div>
+                <div class="markline"><span class="t empty">+ Note</span></div>
+              </div>
+
+              <div class="rowwrap">
+                <div class="setrow">
+                  <span class="idx">2</span><span class="prev">24 × 10</span>
+                  <span class="cell">24</span><span class="cell">9</span>
+                  <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#b5abfc" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+                </div>
+                <div class="markline"><span class="t empty">+ Note</span></div>
+              </div>
+
+              <div class="rowwrap">
+                <div class="setrow">
+                  <span class="idx">3</span><span class="prev">24 × 9</span>
+                  <span class="cell ghost">24</span><span class="cell ghost">9</span>
+                  <span class="tick"></span>
+                </div>
+                <div class="markline"><span class="t empty">+ Note</span></div>
+              </div>
+            </div>
+
+            <!-- ── second half — live ── -->
+            <div class="pairhalf on">
+              <div class="halfname">Cable Fly</div>
+              <div class="halfmeta">Chest · Cable</div>
+              <div class="colhead tight">
+                <span>#</span><span>Last time</span><span class="c">kg</span><span class="c">Reps</span><span></span>
+              </div>
+
+              <div class="rowwrap">
+                <div class="setrow">
+                  <span class="idx">1</span><span class="prev">15 × 12</span>
+                  <span class="cell">15</span><span class="cell">12</span>
+                  <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#b5abfc" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+                </div>
+                <div class="markline"><span class="t empty">+ Note</span></div>
+              </div>
+
+              <div class="rowwrap">
+                <div class="livebox">
+                  <div class="setrow">
+                    <span class="idx live">2</span><span class="prev">15 × 12</span>
+                    <span class="cell big ghost">15</span><span class="cell big ghost">12</span>
+                    <span class="tick live"></span>
+                  </div>
+                  <div class="waitrow">
+                    <span class="l chain">No rest — straight from Incline Press</span>
+                  </div>
+                </div>
+                <div class="markline"><span class="t empty">+ Note</span></div>
+              </div>
+
+              <div class="rowwrap">
+                <div class="setrow">
+                  <span class="idx">3</span><span class="prev">15 × 11</span>
+                  <span class="cell ghost">15</span><span class="cell ghost">11</span>
+                  <span class="tick"></span>
+                </div>
+                <div class="markline"><span class="t empty">+ Note</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="cta">Next exercise</div>
+      </div>
+    </div>
+
+    <div class="half">
+      <div class="cap good">End of round · the rest that is earned</div>
+      <div class="sub">
+        Cable Fly's set 2 is ticked and <b>nothing is queued behind it</b>, so
+        the ordinary countdown runs — drawn on the row it belongs to, which is
+        the first half's set 3, one round down. The heading has already moved
+        back.
+      </div>
+      <div class="phone xtall">
+        <div class="status"><span>9:41</span><span>▮▮▮</span></div>
+        <div class="scr">
+          <div class="topbar">
+            <span class="back">‹</span>
+            <span class="chip">2 / 4</span>
+            <span class="clock">15:11</span>
+          </div>
+          <div class="exname">Incline Press <span class="plus">+</span> Cable Fly</div>
+          <div class="exmeta">Superset · round 3 of 3</div>
+
+          <div class="pairwrap">
+
+            <div class="pairhalf on">
+              <div class="halfname">Incline Press</div>
+              <div class="halfmeta">Chest · Dumbbell</div>
+              <div class="colhead tight">
+                <span>#</span><span>Last time</span><span class="c">kg</span><span class="c">Reps</span><span></span>
+              </div>
+
+              <div class="rowwrap">
+                <div class="setrow">
+                  <span class="idx">1</span><span class="prev">24 × 10</span>
+                  <span class="cell">24</span><span class="cell">10</span>
+                  <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#b5abfc" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+                </div>
+                <div class="markline"><span class="t empty">+ Note</span></div>
+              </div>
+
+              <div class="rowwrap">
+                <div class="setrow">
+                  <span class="idx">2</span><span class="prev">24 × 10</span>
+                  <span class="cell">24</span><span class="cell">9</span>
+                  <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#b5abfc" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+                </div>
+                <div class="markline"><span class="t empty">+ Note</span></div>
+              </div>
+
+              <div class="rowwrap">
+                <div class="livebox wait">
+                  <div class="setrow">
+                    <span class="idx">3</span><span class="prev">24 × 9</span>
+                    <span class="cell big ghost">24</span><span class="cell big ghost">9</span>
+                    <span class="tick"></span>
+                  </div>
+                  <div class="waitrow">
+                    <span class="l">Rest · 2:31</span>
+                    <span class="s">start now</span>
+                  </div>
+                </div>
+                <div class="markline"><span class="t empty">+ Note</span></div>
+              </div>
+
+              <div class="addrow small">
+                <span class="addbtn">+ Add set</span>
+                <span class="addbtn">+ Drop set</span>
+              </div>
+            </div>
+
+            <div class="pairhalf">
+              <div class="halfname">Cable Fly</div>
+              <div class="halfmeta">Chest · Cable</div>
+              <div class="colhead tight">
+                <span>#</span><span>Last time</span><span class="c">kg</span><span class="c">Reps</span><span></span>
+              </div>
+
+              <div class="rowwrap">
+                <div class="setrow">
+                  <span class="idx">1</span><span class="prev">15 × 12</span>
+                  <span class="cell">15</span><span class="cell">12</span>
+                  <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#b5abfc" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+                </div>
+                <div class="markline"><span class="t empty">+ Note</span></div>
+              </div>
+
+              <div class="rowwrap">
+                <div class="setrow">
+                  <span class="idx">2</span><span class="prev">15 × 12</span>
+                  <span class="cell">15</span><span class="cell">12</span>
+                  <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#b5abfc" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+                </div>
+                <div class="markline"><span class="t empty">+ Note</span></div>
+              </div>
+
+              <div class="rowwrap">
+                <div class="setrow">
+                  <span class="idx">3</span><span class="prev">15 × 11</span>
+                  <span class="cell ghost">15</span><span class="cell ghost">11</span>
+                  <span class="tick"></span>
+                </div>
+                <div class="markline"><span class="t empty">+ Note</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="cta">Next exercise</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <ul>
+      <li><strong>The round is derived, never stored.</strong> It is the lowest
+        set index that isn't ticked in either half — the same "first unlogged
+        row" arithmetic the plan already uses to decide what <em>next</em>
+        means, one scope down. Nothing new is persisted and nothing can drift.</li>
+      <li><strong>The heading is the pair, and the highlight is the half.</strong>
+        <em>Incline Press + Cable Fly</em> stays put; the live half's name goes
+        <code>accent200</code> and the other stays <code>neutral300</code>. The
+        name never moves, so you always know what unit you are standing in, and
+        the colour tells you which machine to walk to.</li>
+      <li><strong>Every rule inside a half is untouched.</strong> The scrub, the
+        ghost, the note line, the mark sheet, <code>+ Add set</code>,
+        <code>+ Drop set</code> — <em>a drop set inside a superset half is just
+        a linked row</em>, and needs no thought at all. The two features nest
+        rather than interact.</li>
+      <li><strong>The buttons belong to the half, not the pair.</strong> They
+        are drawn under the live half only, which is also the half you could be
+        adding a set to — two sets of them permanently on screen would be four
+        held buttons for one unit.</li>
+      <li><strong>Uneven set counts just run out.</strong> Three sets against
+        four is three full rounds and then a fourth with one half empty; the
+        round arithmetic already says so, and the last set earns an ordinary
+        rest because nothing is queued behind it.</li>
+      <li><strong>The screen scrolls, and that is the price.</strong> Two
+        ledgers with the note line under every row do not fit a phone. The rule
+        that the way in never disappears is worth more than the scroll —
+        it was the whole argument for putting it on every row — so nothing is
+        conditionally hidden here.</li>
+    </ul>
+  </div>
+
+  <hr class="fade">
+
+  <h2 class="sec">5 · What the pair does to the rest of the session</h2>
+
+  <div class="pair">
+
+    <div class="half">
+      <div class="cap good">The overview sheet — one bracket, no controls</div>
+      <div class="sub">
+        The pair is one unit with one bracket, and tapping either row jumps to
+        the same screen. <b>No pairing control lives here</b> — the routine is
+        the only place a pair is made, so this sheet only ever shows one.
+      </div>
+      <div class="phone short">
+        <div class="status"><span>9:41</span><span>▮▮▮</span></div>
+        <div class="scr" style="opacity: 0.3;">
+          <div class="topbar"><span class="back">‹</span><span class="chip">2 / 4</span><span class="clock">14:02</span></div>
+          <div class="exname">Incline Press <span class="plus">+</span> Cable Fly</div>
+          <div class="exmeta">Superset · round 2 of 3</div>
+        </div>
+        <div class="sheet">
+          <h4>Push A</h4>
+          <div class="sub">7 of 17 sets · 14:02</div>
+          <div class="ovlist">
+            <div class="ovrow done">
+              <span class="ovname">Bench Press</span>
+              <span class="ovcount">5/5</span><span class="ovtick">✓</span>
+            </div>
+
+            <div class="ovpairwrap" style="margin-top: 9px;">
+              <span class="ovpairtag">Superset</span>
+              <div class="ovrow cur">
+                <span class="ovdot"></span>
+                <span class="ovname">Incline Press</span>
+                <span class="ovcount">2/3</span>
+              </div>
+              <div class="ovrow cur">
+                <span class="ovname" style="padding-left: 15px;">Cable Fly</span>
+                <span class="ovcount">1/3</span>
+              </div>
+            </div>
+
+            <div class="ovrow" style="margin-top: 5px;">
+              <span class="ovname">Triceps Pushdown</span>
+              <span class="ovcount">0/3</span>
+            </div>
+            <div class="ovrow">
+              <span class="ovname">Lateral Raise</span>
+              <span class="ovcount">0/3</span>
+            </div>
+          </div>
+          <div class="addrow" style="margin-top: 12px;">
+            <span class="addbtn">+ Exercise</span>
+            <span class="addbtn" style="border-style: solid; border-color: var(--a600); color: var(--a200);">Finish</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="half">
+      <div class="cap mid">The one thing that needs new arithmetic</div>
+      <div class="sub">
+        Take-turns assumes one set is one handover: <code>mine &lt;
+        theirDone</code> goes next. <b>A chain is two sets that must both be
+        yours</b>, so the count is of chain heads, not of rows — or the app
+        would ask you to hand the bar over between a set and its drop.
+      </div>
+      <div class="phone short">
+        <div class="status"><span>9:41</span><span>▮▮▮</span></div>
+        <div class="scr">
+          <div class="topbar">
+            <span class="back">‹</span><span class="chip">3 / 4</span><span class="clock">18:40</span>
+          </div>
+          <div class="exname">Bench Press</div>
+          <div class="exmeta">Chest · Barbell</div>
+
+          <div class="colhead">
+            <span>#</span><span>Last time</span><span class="c">kg</span><span class="c">Reps</span><span></span>
+          </div>
+
+          <div class="rowwrap">
+            <div class="setrow">
+              <span class="idx">2</span><span class="prev">70 × 8</span>
+              <span class="cell">70</span><span class="cell">7</span>
+              <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#b5abfc" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+            </div>
+          </div>
+
+          <div class="rowwrap link tolive">
+            <div class="livebox">
+              <div class="setrow">
+                <span class="idx live">3</span><span class="prev">—</span>
+                <span class="cell big ghost">55</span><span class="cell big ghost">8</span>
+                <span class="tick live"></span>
+              </div>
+              <div class="waitrow">
+                <span class="l chain">Drop from set 2 — no rest</span>
+              </div>
+            </div>
+            <div class="markline"><span class="t empty">+ Note</span></div>
+          </div>
+
+          <div class="rowwrap" style="margin-top: 6px;">
+            <div class="livebox wait">
+              <div class="setrow">
+                <span class="idx">4</span><span class="prev">65 × 8</span>
+                <span class="cell big ghost">65</span><span class="cell big ghost">8</span>
+                <span class="tick"></span>
+              </div>
+              <div class="waitrow">
+                <span class="l">Marc's turn</span>
+              </div>
+            </div>
+            <div class="markline"><span class="t empty">+ Note</span></div>
+          </div>
+
+          <div style="text-align: center; font-size: 10.5px; color: var(--n700); margin-top: 12px;">
+            the handover waits for the chain to finish, not for row 3
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <ul>
+      <li><strong>The buddy protocol needs nothing.</strong>
+        <code>BuddyProgress.list</code> carries <code>done</code> booleans per
+        set; a chain is still rows and a pair is still two list entries, so
+        their counts still read. Whether the link travels changes only how
+        their turn is computed, and an older build that never sends it simply
+        hands over one set early — degraded, not broken, which is the bar every
+        protocol addition here has cleared.</li>
+      <li><strong>Every rest rule already holds.</strong> <code>restLeftOf</code>
+        is untouched; what changes is one condition at the site that
+        <em>writes</em> <code>rest</code> on a tick. The alarm's cancel path is
+        the scheduling effect's cleanup, which already covers "the rest ended
+        for any reason".</li>
+      <li><strong>The statistics are unaffected.</strong> <code>keyLifts</code>
+        reads the <em>top</em> set, so a drop at 50 can't be mistaken for a lift
+        going backwards; volume is each entry's own <code>vol</code>, and a drop
+        set is honest load volume. Balance reads groups, and a pair is still two
+        exercises filed where they always were.</li>
+      <li><strong>Finish still holds while sets are open</strong> — a linked row
+        and an unfinished round are open sets like any others, and an untouched
+        drop is exactly the thing you might want to walk away from.</li>
+    </ul>
+  </div>
+
+  <hr class="fade">
+
+  <h2 class="sec">6 · The diary</h2>
+  <p class="lede wide">
+    A drop recorded as a plain fourth set reads as a bad set — <strong>50 × 8
+    after 65 × 6 looks like something went wrong</strong> unless the record says
+    the two were one effort. A pair is the same problem one level up: two
+    exercises that were taken together read as two ordinary blocks. Both keep
+    the grammar they had in the session.
+  </p>
+
+  <div class="pair">
+    <div class="half">
+      <div class="cap bad">A · Without either</div>
+      <div class="sub">Four sets, and the fourth is a mystery six weeks on. Two exercises that were one thing, filed as two.</div>
+      <div class="phone short">
+        <div class="status"><span>9:41</span><span>▮▮▮</span></div>
+        <div class="scr">
+          <div class="daypanel">
+            <div class="dayhead">Thursday · 13 August</div>
+            <div class="logcard">
+              <div class="logtop"><span class="logtitle">Push A</span></div>
+              <div class="logstats">51:20 · 4 320 kg · 17 sets</div>
+              <div class="logex">
+                <div class="logextop"><span class="logexname">Bench Press</span><span class="logexcount">4 sets</span></div>
+                <div class="logsets">
+                  <span class="logset">70 × 8</span>
+                  <span class="logset">70 × 7</span>
+                  <span class="logset">65 × 6</span>
+                  <span class="logset">50 × 8</span>
+                </div>
+              </div>
+              <div class="logex">
+                <div class="logextop"><span class="logexname">Incline Press</span><span class="logexcount">3 sets</span></div>
+                <div class="logsets">
+                  <span class="logset">24 × 10</span>
+                  <span class="logset">24 × 9</span>
+                  <span class="logset">24 × 9</span>
+                </div>
+              </div>
+              <div class="logex">
+                <div class="logextop"><span class="logexname">Cable Fly</span><span class="logexcount">3 sets</span></div>
+                <div class="logsets">
+                  <span class="logset">15 × 12</span>
+                  <span class="logset">15 × 12</span>
+                  <span class="logset">15 × 11</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="half">
+      <div class="cap good">B · Both keep their bracket · the design</div>
+      <div class="sub">
+        The chain joins the figure into one wrap item with <code>↳</code>; the
+        pair keeps the session's hairline down the side of its two blocks. Same
+        two marks, read the same way, one screen later.
+      </div>
+      <div class="phone short">
+        <div class="status"><span>9:41</span><span>▮▮▮</span></div>
+        <div class="scr">
+          <div class="daypanel">
+            <div class="dayhead">Thursday · 13 August</div>
+            <div class="logcard">
+              <div class="logtop"><span class="logtitle">Push A</span></div>
+              <div class="logstats">51:20 · 4 320 kg · 17 sets</div>
+              <div class="logex">
+                <div class="logextop"><span class="logexname">Bench Press</span><span class="logexcount">4 sets</span></div>
+                <div class="logsets">
+                  <span class="logset">70 × 8</span>
+                  <span class="logset">70 × 7</span>
+                  <span class="logset">65 × 6 <span class="drop">↳</span> 50 × 8</span>
+                </div>
+              </div>
+
+              <div class="logpairtag">Superset</div>
+              <div class="logpairwrap">
+                <div class="logex" style="border: 0; margin-top: 4px; padding-top: 0;">
+                  <div class="logextop"><span class="logexname">Incline Press</span><span class="logexcount">3 sets</span></div>
+                  <div class="logsets">
+                    <span class="logset">24 × 10</span>
+                    <span class="logset">24 × 9</span>
+                    <span class="logset">24 × 9</span>
+                  </div>
+                </div>
+                <div class="logex" style="margin-top: 7px; padding-top: 7px;">
+                  <div class="logextop"><span class="logexname">Cable Fly</span><span class="logexcount">3 sets</span></div>
+                  <div class="logsets">
+                    <span class="logset">15 × 12</span>
+                    <span class="logset">15 × 12</span>
+                    <span class="logset">15 × 11</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <ul>
+      <li><strong>The count stays honest.</strong> <em>4 sets</em>, because four
+        sets were lifted — the join is about how they were taken, not about how
+        many there were.</li>
+      <li><strong>A note still breaks the wrap.</strong> A chained figure that
+        carries words takes its own full-width line exactly as a marked set
+        does; the two features stack rather than compete, because one owns the
+        figure and the other owns the line under it.</li>
+      <li><strong>The bracket is <code>accent800</code> here, one step down from
+        the session's.</strong> Same reason the mark's glyph dims in the diary:
+        live and yours to change, versus history.</li>
+      <li><strong>Read-only, like everything else in the panel.</strong> No
+        un-linking a drop or a pair six weeks on. The panel is a record.</li>
+    </ul>
+  </div>
+
+  <hr class="fade">
+
+  <h2 class="sec">7 · The shape</h2>
+  <p class="lede wide">
+    Four optional fields, each additive inside a key that already exists — the
+    same argument that let <code>marks</code>, <code>list</code>,
+    <code>secs</code> and <code>vol</code> land without a migration.
+    <strong><code>STORAGE_VERSION</code> stays 4.</strong>
+  </p>
+
+<pre><span class="c">// src/data/exercises.ts — the pair is a routine fact, and only a routine fact</span>
+<span class="a">export type</span> RoutineItem = {
+  ex: string; sets: number; reps: number; w: number; planned?: true;
+  <span class="c">/** Supersetted with the item after it. Adjacency, not a group id: the</span>
+<span class="c">      editor is a flat reorderable list, so a drag breaks the pair by</span>
+<span class="c">      itself and a giant set is two links in a row. An orphan — last row,</span>
+<span class="c">      or a neighbour since deleted — resolves to no pair where it is read,</span>
+<span class="c">      never swept. */</span>
+  with?: 'next';
+};
+
+<span class="c">// src/store/workout-store.tsx</span>
+<span class="a">export type</span> LoggedSet = {
+  w: string; reps: string; done: boolean; prev: string;
+  mark?: SetMark; note?: string; prevMark?: MarkNote | null;
+  <span class="c">/** This set continues the one above it: taken straight after, so the</span>
+<span class="c">      tick on that one earns no rest. A drop set — made in the session and</span>
+<span class="c">      never planned, which is why nothing like it exists on RoutineItem. */</span>
+  link?: true;
+};
+
+<span class="c">/** Flat, as it always was: a pair is two entries that happen to be joined.</span>
+<span class="c">    `progress.list`, `removeSessionEx` and the overview all keep reading a</span>
+<span class="c">    list of exercises; only the screen groups them into units. */</span>
+<span class="a">export type</span> SessionExercise = { ex: string; sets: LoggedSet[]; with?: 'next' };
+
+<span class="c">// the diary's copy, index for index with `sets` — same relationship</span>
+<span class="c">// `marks` already has, and kept in step for the same reason</span>
+<span class="a">export type</span> LoggedExercise = {
+  ex: string; sets: string[]; marks?: (MarkNote | null)[];
+  links?: boolean[]; with?: 'next';
+};
+</pre>
+
+  <div class="notes">
+    <ul>
+      <li><strong>One sentence decides every rest.</strong> <em>Is anything
+        queued straight after this set?</em> — the next row of this ledger when
+        it is <code>link</code>ed, or the paired half's row of this round. One
+        predicate at the one site that writes <code>rest</code>, and both
+        features fall out of it.</li>
+      <li><strong>The session list stays flat.</strong> Grouping is computed
+        where it is drawn, so nothing that already walks
+        <code>session.list</code> — the buddy diff, the overview, the ×, the
+        totals — learns a new shape.</li>
+      <li><strong>Backups and merges need no change.</strong> Both fields ride
+        inside keys that already move whole: <code>history</code> keyed by
+        <code>historyKey</code> (date / rid / name / secs / vol, so neither can
+        split one session into two) and <code>routines</code> through
+        <code>upsertShared</code>.</li>
+    </ul>
+  </div>
+
+  <hr class="fade">
+
+  <h2 class="sec">8 · Copy</h2>
+  <p class="lede">
+    German written rather than translated. Buttons are infinitives or the plus
+    plus a noun; the wait lines are statements, in the same understated register
+    as <em>Nothing is logged</em>.
+  </p>
+
+  <table>
+    <tr><th style="width: 20ch">Key</th><th style="width: 32ch">English</th><th>German</th></tr>
+    <tr><td class="k"><code>addDrop</code></td><td>+ Drop set</td><td class="de">+ Dropsatz</td></tr>
+    <tr><td class="k"><code>dropAfter</code></td><td>Drop from set {n} — no rest</td><td class="de">Drop aus Satz {n} — keine Pause</td></tr>
+    <tr><td class="k"><code>linkLabel</code></td><td>Straight after set {n}</td><td class="de">Direkt nach Satz {n}</td></tr>
+    <tr><td class="k"><code>linkSub</code></td><td>No rest between them.</td><td class="de">Keine Pause dazwischen.</td></tr>
+    <tr><td class="k"><code>superset</code></td><td>Superset</td><td class="de">Supersatz</td></tr>
+    <tr><td class="k"><code>supersetRound</code></td><td>Superset · round {n} of {m}</td><td class="de">Supersatz · Runde {n} von {m}</td></tr>
+    <tr><td class="k"><code>noRestFrom</code></td><td>No rest — straight from {name}</td><td class="de">Keine Pause — direkt von {name}</td></tr>
+    <tr><td class="k"><code>pairNext</code></td><td>Superset with the next exercise</td><td class="de">Supersatz mit der nächsten Übung</td></tr>
+    <tr><td class="k"><code>unpair</code></td><td>Unpair</td><td class="de">Koppelung lösen</td></tr>
+  </table>
+
+  <div class="notes">
+    <ul>
+      <li><strong>The switch says <em>Straight after set {n}</em>, not
+        <em>Drop set</em>.</strong> The sheet describes the set; the button
+        names the action. A switch labelled with a feature name makes you
+        translate it back into a fact about your own workout.</li>
+      <li><strong>German keeps <em>Satz</em> for a set throughout</strong>
+        (<code>Dropsatz</code>, <code>Supersatz</code>, <em>Direkt nach Satz
+        3</em>) — the decided term, and both compounds are what a German gym
+        actually says. <em>Reduktionssatz</em> is more correct and nobody uses
+        it. <em>Runde</em> for a round, which needs no plural form here because
+        it is always <em>Runde {n} von {m}</em>.</li>
+      <li><strong><code>pairNext</code> is the pairing glyph's accessibility
+        label</strong>, not visible copy — the control is 20px of hairline, so
+        the sentence has to live somewhere.</li>
+    </ul>
+  </div>
+
+  <hr class="fade">
+
+  <h2 class="sec">9 · Where it lands</h2>
+
+  <div class="settled">
+    <div class="h">Files</div>
+    <ul>
+      <li><code>src/data/exercises.ts</code> — <code>RoutineItem.with</code>.</li>
+      <li><code>src/store/workout-store.tsx</code> — <code>LoggedSet.link</code>,
+        <code>SessionExercise.with</code>, <code>addDropSet</code>, the
+        rest-on-tick predicate, the turn count over chain heads,
+        <code>sessionFrom</code> carrying the pair, <code>finishSession</code>
+        writing <code>links</code> / <code>with</code>.</li>
+      <li><code>src/components/overlays/routine-overlay.tsx</code> — the pairing
+        gutter between rows.</li>
+      <li><code>src/components/overlays/session-overlay.tsx</code> — the chain
+        riser, <code>+ Drop set</code>, the sheet's switch, the paired screen and
+        its round arithmetic, the overview's bracket.</li>
+      <li><code>src/app/(tabs)/plan.tsx</code> — the joined figure and the
+        logged pair's bracket.</li>
+      <li><code>src/data/i18n.ts</code> — nine strings, both languages.</li>
+      <li><code>STORAGE_VERSION</code> stays 4. Nothing migrates.</li>
+    </ul>
+  </div>
+
+  <div class="settled warn">
+    <div class="h">Deliberately not built</div>
+    <ul>
+      <li><strong>Rest-pause, cluster sets, myo-reps.</strong> Every one of them
+        is <em>the same field</em> with a different rest between the halves. If
+        <code>link</code> ever needs a duration it is <code>link?: number</code>
+        — seconds — and <code>true</code> means zero. Additive again; wait for
+        someone to ask.</li>
+      <li><strong>A per-chain or per-round total.</strong> Already in the
+        session's volume, and a second figure beside the rows would be the
+        summary's one number said twice.</li>
+      <li><strong>Circuits — three or more exercises with one rest at the
+        end.</strong> <code>with: 'next'</code> repeats, and the routine editor
+        would draw it with no new code; what does not survive is the paired
+        screen, which is sized and worded for exactly two. A third half is a
+        third screen decision, not a longer bracket.</li>
+      <li><strong>A tip for either.</strong> Both are reached through labelled
+        controls — <em>+ Drop set</em>, and a routine you paired yourself. The
+        admission test is whether a careful person could use the app for a month
+        and never find it, and neither can hide.</li>
+    </ul>
+  </div>
+
+</div>

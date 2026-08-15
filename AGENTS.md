@@ -514,6 +514,110 @@ untouched.
   It is opened from there and has to cover it; closing it drops you back onto
   the statistics you left.
 
+## Drop sets and supersets
+
+Two features, one sentence: **a tick earns a rest only when nothing is queued
+to be taken immediately after it.** The app started `restSeconds` on every
+tick, which is the precise opposite of what either of these things means, and
+that was the only thing actually missing — a drop set was always representable
+(add a set, type a lower weight, tick it) and a superset always workable (swipe
+across, since changing exercise deliberately keeps a running rest). The mockup
+is `design/drop-superset-mockup.html`; the arithmetic is `src/data/superset.ts`,
+pure like `plan.ts` and `tips.ts`, with structural row types so it owes the
+store nothing.
+
+- **A drop is made in the session, a superset only in the routine.** Not an
+  inconsistency — a drop is a decision about *how that set went*, which nobody
+  makes a week early, and a superset is a decision about *which two exercises*,
+  which is exactly what a routine holds. So `RoutineItem.with` has no drop-set
+  twin, and **there is no pairing control anywhere in a running workout**: the
+  overview sheet shows a pair and never offers one. The planned-drop version
+  (*Last set drops* on an editor row) was drawn and turned down — it has to
+  invent a weight, and the app already refuses to let a plan write a number
+  over your own history.
+- **`with: 'next'` is adjacency, not a group id.** The editor is a flat
+  reorderable list, so a drag out of a pair breaks it with no bookkeeping and a
+  third exercise joined on is two links in a row. An orphan — the last row, or
+  a neighbour deleted since — resolves to no pair *where it is read*, never
+  swept, exactly as a plan entry naming a deleted routine is. Three places had
+  to learn that a pair needs both halves, and each is a place a row can leave
+  or arrive: the editor's ×, `removeSessionEx`, and `appendSessionEx` (adding
+  an exercise mid-workout must not hand a trailing `with` the partner it never
+  had).
+- **One exercise per screen became one *stop* per screen.** A `Stop` is a lone
+  exercise or a pair, as indexes into `session.list`; `s.active` still means an
+  *exercise* for everything that writes it — the overview's jump, the buddy's
+  offer, a fresh session — and is snapped to its stop on the way in. That is
+  the whole cost of the decision. The chip, the swipe and the bottom button all
+  count stops; **the list itself stays flat**, so `progress.list`,
+  `removeSessionEx`, `totals` and the buddy diff learn nothing.
+- **Exactly one row is live across a pair, and the round is what advances.**
+  `roundOf` is the lowest set index still open in either half — the same "first
+  unlogged row" arithmetic the plan uses to decide what *next* means, one scope
+  down — and within a round the first half goes, then the second. Derived,
+  never stored, so there is nothing to persist and nothing that can drift. A
+  half that has run out of sets is skipped, which is the whole of what uneven
+  set counts need.
+- **The heading names the pair; the *half's* name says which machine.** The
+  title never moves, and the live half's name goes accent — so "which of these
+  am I standing at" is answered without anything jumping. How-to, the
+  kind/group line and the machine setup move down into each half, because they
+  are facts about one machine. `Ledger` is the component that owns them, drawn
+  once normally and twice inside a pair, and it owns the column header too:
+  `unitsFor` is per-exercise, so a pair of a plank and a run heads its two
+  halves differently.
+- **The chain is drawn between digits, never in one.** The index column already
+  belongs to `SetMark` — the mark *takes the digit's place* — so a marked drop
+  would have had its own marker erased by its verdict. A hairline in the gutter
+  between two rows can't argue with it. Sub-numbering (`3a` / `3b`) was the
+  clearest thing to read and is exactly the collision this avoids.
+- **The explanation stands where the countdown would have been.** *Drop from
+  set 3 — no rest* / *No rest — straight from {name}* live in the wait slot, so
+  they leave with the row the way a rest does and nothing permanent is added to
+  the ledger. `WaitLines` draws it above the buddy's line: it is a fact about
+  the row rather than about either of you.
+- **A tick that earns nothing also ends what was running.** Ticking the first
+  half of a round mid-rest means that rest is over, and leaving it counting
+  down would draw a stale clock on the row you are walking to. Adding a drop
+  clears it too, for the stronger reason that the tick which wrote it is now
+  claimed to have earned none. Both go through `rest: null`, so the alarm is
+  cancelled by the scheduling effect's existing cleanup — no new cancel path.
+- **The turn waits for the chain, not for the row.** `mine < theirDone` assumes
+  one set is one handover; a drop is two sets that must both be yours, so a
+  live `link`ed row makes the turn yours outright. `mine` stays a count of rows
+  on both sides — their drops inflate theirs the same way yours inflate mine,
+  where counting chain heads on this side alone would skew it. Nothing new
+  crosses the wire.
+- **Four optional fields, no version bump.** `RoutineItem.with`,
+  `LoggedSet.link`, `SessionExercise.with`, and `LoggedExercise.links` / `with`
+  — every one additive inside a key that already exists, so
+  `STORAGE_VERSION` stays 4. The buddy sanitiser (`cleanRoutineItem`) had to
+  learn `with` explicitly, since it rebuilds field-by-field and drops what it
+  doesn't know: a protocol addition, and an older build simply sends a routine
+  that arrives unpaired.
+- **The diary keeps both brackets, because the numbers alone misreport them.**
+  `50 × 8` under `65 × 6` reads as a set that went wrong unless the record says
+  the two were one effort, so a drop folds into the set it came off with `↳`,
+  as one item in the existing wrap; a pair keeps the session's hairline down
+  the side of its two blocks, at `accent800` — one step down, for the same
+  reason the mark's glyph dims there. The set count stays honest (*4 sets*,
+  because four sets were lifted), and a note still breaks the wrap: one feature
+  owns the figure, the other owns the line under it. `with` is written only
+  when the partner actually got a set ticked, or the bracket would describe
+  nothing — and `saveAsRoutine` / `saveDayAsRoutine` carry it back out under
+  the same condition.
+- **No tip for either.** Both are reached through labelled controls — *+ Drop
+  set*, and a routine you paired yourself. The catalogue's admission test is
+  whether a careful person could use the app for a month and never find it, and
+  neither can hide.
+- **Deliberately not built.** Rest-pause, cluster sets and myo-reps are all the
+  same field with a different rest between the halves: if `link` ever needs a
+  duration it is `link?: number` in seconds, with `true` meaning zero —
+  additive again, so waiting for someone to ask costs nothing. Circuits repeat
+  `with: 'next'` and the editor would draw them with no new code, but the
+  paired screen is sized and worded for exactly two, so a third half is a third
+  screen decision rather than a longer bracket.
+
 ## The tips
 
 Half of what this app can do is invisible: a kg cell is a text field that is
@@ -566,15 +670,23 @@ in front of it, and then goes away for good. Mockup:
   press and hold, which is the exact confusion it exists to end. One hairline,
   no fill, an accent dot, dim text, one × at `slop`.
 - **Only `drag` gets a demo, and the demo writes nothing.** Words teach a tap
-  and cannot teach hold-then-drag. `DragDemo` draws a pointer and a figure on an
-  overlay above the cell (`pointerEvents: 'none'`); the `TextInput` underneath is
-  untouched and still typeable. Every number in it is the real one — the travel
-  is `DEMO_STEPS × PX_PER_STEP` and the pause before it moves is `HOLD_MS`, which
-  is 120 ms and a stillness test rather than a wait. It is the one animation in
+  and cannot teach a slide that isn't a scroll. `DragDemo` draws a pointer and a
+  figure on an overlay above the cell (`pointerEvents: 'none'`); the `TextInput`
+  underneath is untouched and still typeable. Every number in it is the real
+  one — the travel is `DEMO_STEPS ×` the cell's own `px`, and the touch ring
+  blooms *while* the figure is already moving rather than before it, because the
+  gesture has no wait in it and a demo that pauses teaches one that isn't there.
+  It scrubs at 1×: the gain is what a real finger finds the moment it sweeps,
+  and a pointer moving this unhurriedly would be lying to claim it. It is the
+  one animation in
   the app deliberately **off** the native driver: the figure is text, which no
   driver can animate, so the pointer and the number share one JS clock instead of
   drifting apart on two. It does not buzz — `buzz.grab` reports that *your*
   finger took the cell, and the ring is that moment drawn instead.
+- **The `drag` tip's sub-line spends its aside on the sweep, not the notch.**
+  The notch is the speed a first drag is made at and the one it discovers by
+  itself; that a faster slide steps in bigger jumps is the half nobody would go
+  looking for, so that is the half the line says out loud.
 - **The tour reads the tip strings.** `obFeatTick/Drag/Rest` are gone;
   `onboarding-overlay.tsx`'s `features()` reads `tipTick` / `tipDrag` / `tipRest`.
   One list, two surfaces, so a rundown card and an in-place hint cannot phrase
@@ -765,13 +877,35 @@ Keep these; they're decisions, not drift. Each is commented at its site.
     `LoggedSet` for the mark sheet, which prints last time's verdict for *that*
     set and is per-set correctly.
   - **The set row has exactly one note slot**: your own words, else — on a set
-    you have *ticked* — the way in (`addNote`), else nothing. The offer arrives
-    with the tick because a set you have lifted is a set you have an opinion
-    about, where row 4 is a plan and has nothing to say yet; standing on every
-    unlifted row it is 16px of furniture eight times over, on the screen
-    working hardest not to become furniture. It borrows no outline — no fill
-    and above all no dash, for the reason a tip doesn't: dashed means *this one
-    is held* at three sites.
+    you have *ticked* — the way in (`addNote`), else nothing. **All three
+    arrangements were built and two were tried on the phone**, and the order is
+    worth keeping because the reasoning is:
+    - *The index digit alone* was the original. 16px, unlabelled, and a thing
+      you had to already know about — a control you have to be told about is
+      one most people never use, and the honest fix for that is the control,
+      not a hint about it.
+    - *A line under every row* answered that and gave back too much screen:
+      eight rows is ~130px of mostly `+ Note`, and the set you are working on
+      sits that much further down. Measured in the hand, not argued about.
+    - *From the tick* is where it landed. It is the moment the two things
+      coincide — a set you have lifted is a set you have an opinion about, and
+      it is also the only set you could be writing about. Row 4 is a plan, and
+      an offer standing on it is furniture on the screen working hardest not to
+      become furniture. What it costs is that the way in arrives rather than
+      being always there; what it buys is that it arrives on every set you
+      could use it on, which is the part the index digit never managed.
+
+    It borrows no outline — no fill and above all no dash, for the reason a tip
+    doesn't: dashed means *this one is held* at three sites.
+  - **The `mark` tip was re-aimed rather than joined by a second one.** It used
+    to read *Tap the set number*, which was honest while that was the only way
+    in; with `addNote` on the glass the hidden thing is no longer the control
+    but what it is for — `+ Note` says *note* and says nothing about a verdict,
+    and nothing on the screen says the verdict comes back. So it now teaches
+    that, and arms from the *first* logged set rather than the second, which is
+    both when the line it names is drawn and when there is a set to have an
+    opinion about. A second tip would have put two hints on one feature, which
+    is what `pickTip` exists to make impossible.
   - **The diary draws it read-only, and words are what earn a line.** A verdict
     with no note is a glyph and stays in the day panel's wrap; only words break
     out to full width (`logNoted`, `flexBasis: '100%'`), so a card with nothing
@@ -793,25 +927,51 @@ Keep these; they're decisions, not drift. Each is commented at its site.
     `setups`. If a *dated* per-exercise note is ever wanted it is
     `LoggedExercise.note?: string` — additive, so waiting for someone to ask
     costs nothing.
-- **Numbers are also a gesture**: hold a kg or reps cell still for `HOLD_MS`,
-  then drag up or down to step it (0.5 kg / 1 rep per `PX_PER_STEP`). The hold
-  is only long enough to tell the finger apart from a scroll — gesture-handler
-  fails the pan the moment it moves before the delay elapses, so `HOLD_MS` is a
-  stillness test rather than a wait, and it is short enough that the gesture
-  reads as touch-and-slide. While a drag runs, the list's `scrollEnabled` goes
-  off. Most sets never need the keyboard. This one gesture is the reason
+- **Numbers are also a gesture**: touch a kg or reps cell and slide up or down
+  to step it. While a drag runs, the list's `scrollEnabled` goes off. Most sets
+  never need the keyboard. This one gesture is the reason
   `react-native-gesture-handler` is mounted at all (`GestureHandlerRootView` in
-  `src/app/_layout.tsx`), and `Gesture.Pan().activateAfterLongPress()` is what
-  keeps it apart from the list's own scroll. Everything else on this screen —
-  the swipe between exercises included — is still a plain `PanResponder`, and
-  should stay one.
+  `src/app/_layout.tsx`). Everything else on this screen — the swipe between
+  exercises included — is still a plain `PanResponder`, and should stay one.
+  - **Touch and slide, with nothing in front of it — and the list pays for
+    that.** There used to be a 120 ms stillness test (`HOLD_MS`,
+    `activateAfterLongPress`), which is what told a scrub apart from the list's
+    own scroll. It cost the gesture the thing it is for: a number you can change
+    *now* is worth reaching for between sets, one you have to press and wait on
+    first is a feature you remember existing. So the pan takes the cell after
+    `GRAB_Y` (4px) of vertical travel and **the session list is no longer
+    scrollable from a number cell** — you scroll from anywhere else in the row,
+    which is most of it. `GIVE_X` (12px) fails the pan sideways, which is what
+    still leaves the row's own swipe-between-exercises `PanResponder` alone.
+  - **A pixel is worth what its speed says.** Below `SLOW_V` the travel is
+    exactly `PX_PER_STEP` / `PX_PER_REP`; from there the gain climbs
+    quadratically to `MAX_GAIN` at `FAST_V`, read *per frame*, so one gesture
+    can sweep and then settle. Releasing above `FLING_V` glides on, launched at
+    what the pointer had over that threshold (so the glide grows from nothing at
+    the line rather than jumping at it) and at the *ungained* speed, decaying
+    with `GLIDE_TAU`. What it buys is that plus-twenty-kilos is one gesture
+    instead of 480px of travel; what it costs is reversibility — the figure is
+    integrated frame by frame rather than mapped from the gesture's total
+    travel, so dragging back only undoes if you drag back at the speed you came.
+    The expensive direction was always the long one.
+  - **The two columns have different travels, because they are different
+    units.** `PX_PER_STEP` is 12 for the half-kilo column and `PX_PER_REP` is 20
+    for the whole-unit one — reps, seconds of a hold, minutes of a run. Half a
+    kilo is small enough that 12px still lands where you meant; a whole rep on
+    the same distance turns a careful nudge into a lottery.
+  - **The glide is cancelled by touching the cell, and by nothing else having
+    to know.** `stopGlide` is the one path (unmount included, via an effect
+    cleanup), and it answers whether there *was* one — which is what makes the
+    touch that caught it count as having done something, so it doesn't also open
+    the keyboard on the way up. It deliberately does not buzz: `buzz.step`
+    reports a figure moving under your finger, and by then your finger is off.
   - **The cell is `box-only` always, focused or not, and that is
     load-bearing.** A number cell is a `TextInput`, and Android's
     `ReactEditText` answers every ACTION_DOWN with
     `requestDisallowInterceptTouchEvent(true)`. That walks up to
     `GestureHandlerRootView`, which reads it as a native view claiming the
-    touch and **cancels every handler in the orchestrator** — so a pan waiting
-    out `HOLD_MS` is already dead before the hold elapses. Moving to
+    touch and **cancels every handler in the orchestrator** — so a pan still
+    waiting on its activation offset is already dead. Moving to
     gesture-handler did not fix that; it is the same disallow one layer down,
     and for a year the drag simply never fired. What fixes it is never letting
     the finger reach the editor: `box-only` has `ReactViewGroup` intercept the
@@ -824,24 +984,24 @@ Keep these; they're decisions, not drift. Each is commented at its site.
   - **So the tap is a gesture too, and it toggles.** `Gesture.Tap` races the
     pan and focuses the field — or blurs it when it already has focus, which is
     the way out of the keyboard that doesn't log a set. A pan that activated,
-    stepped nothing and was released is routed to the same place: overshooting
-    `HOLD_MS` on what you meant as a tap costs you nothing, which is the other
-    half of why the delay can be short.
+    stepped nothing and was released is routed to the same place: crossing
+    `GRAB_Y` with a shaky thumb on what you meant as a tap costs you nothing,
+    which is the other half of why it can be as small as 4px.
   - **It is the one gesture performed under your own thumb, so it is felt
     rather than watched** — and the two moments get different weights, on the
-    haptics ladder in `src/data/haptics.ts`. `buzz.grab` is the hold landing,
-    at the same weight as a ticked set: it is what tells you when to start
-    moving, and without it you either move too early and never take the cell
-    or wait longer than you had to. `buzz.step` is the quietest thing in the
+    haptics ladder in `src/data/haptics.ts`. `buzz.grab` is the cell being
+    taken, at the same weight as a ticked set: it is what tells you the slide
+    is yours rather than the list's, which is the one thing the screen can't
+    show you under your own thumb. `buzz.step` is the quietest thing in the
     app, because it fires ten or twenty times inside one drag — and it is the
     one call in this module that leaves the cross-platform API, because
     `selectionAsync` is a 50 ms buzz on Android and `Segment_Frequent_Tick` is
     the constant Android defines for a value scrubbing under a finger. Both
     are gated on the `haptics` setting, like every other buzz.
   - **A step buzzes when the figure changes, not when the finger moves.**
-    `onUpdate` runs per frame; the cell only changes every `PX_PER_STEP`, and
-    stops changing entirely once the clamp at zero is holding it. So the
-    handler compares against the last figure it emitted and returns early —
+    `onUpdate` runs per frame; the cell only changes once the accumulated value
+    crosses the step grid, and stops changing entirely once the clamp at zero is
+    holding it. So `emit` compares against the last figure it wrote and bails —
     which is what makes a buzz mean "the number moved" without exception, and
     incidentally stops a drag writing to the store sixty times a second.
   - **The list is `keyboardShouldPersistTaps="always"` for the same reason.**

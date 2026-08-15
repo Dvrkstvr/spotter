@@ -34,6 +34,7 @@ import {
   Pressable,
   ScrollView,
   StyleProp,
+  Switch,
   Text,
   TextInput,
   TextInputProps,
@@ -54,6 +55,7 @@ import { FIRST_UPS } from '@/data/buddy-sync';
 import { isSingle, MarkNote, Measure, measureOf, SET_MARKS, SetMark } from '@/data/exercises';
 import { buzz } from '@/data/haptics';
 import { Strings } from '@/data/i18n';
+import { liveIn, restEarned, roundOf, roundsOf, stopAt, stopsOf } from '@/data/superset';
 import { pickTip, tipLive, type TipId } from '@/data/tips';
 import { useBackClose } from '@/hooks/use-back-close';
 import { useBuddyLive } from '@/hooks/use-buddy-live';
@@ -62,7 +64,9 @@ import {
   color, fill as absFill, font, linger, motion, radius, slop, t, tracking, wash,
 } from '@/design/tokens';
 import { Btn, CardKicker, Field, H3, H4, Input, missingName, Seg, Tag } from '@/design/ui';
-import { fmt, LoggedSet, markLabel, num, prevNums, restLeftOf, useStore } from '@/store/workout-store';
+import {
+  fmt, LoggedSet, markLabel, num, prevNums, restLeftOf, SessionExercise, useStore,
+} from '@/store/workout-store';
 
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 
@@ -70,17 +74,76 @@ const AnimatedPath = Animated.createAnimatedComponent(Path);
 const CHECK_LEN = 25;
 
 /**
- * How long a finger has to be still on a number before a drag on it steps the
- * figure instead of scrolling the list. Only long enough to prove it isn't a
- * scroll — gesture-handler fails the pan outright the moment the finger moves
- * before this elapses, so the delay is a stillness test rather than a wait, and
- * a press that outlasts it and lifts without moving is handed back as a tap.
+ * How far a finger travels before the drag takes the cell, and how far across
+ * before it gives it up.
+ *
+ * There used to be a 120ms stillness test in front of this, which is what told
+ * a scrub apart from the list's own scroll — and it cost the gesture the thing
+ * it is for. A number you can change *now* is worth reaching for mid-set; one
+ * you have to press and wait on first is a feature you remember existing. So
+ * the cell claims a vertical drag outright, and **the list is no longer
+ * scrollable from a number cell** — it is scrolled from anywhere else in the
+ * row, which is most of it. That is the trade, taken deliberately: a set row is
+ * mostly not cells, and the cells are the one part of it with something to do.
+ *
+ * `GRAB_Y` is a dead zone rather than a wait — small enough that touch-and-
+ * slide reads as immediate, big enough that a tap with a shaky thumb still
+ * opens the keyboard rather than nudging the figure. It also sits under
+ * Android's own scroll slop, so the pan activates and cancels the native touch
+ * *before* the ScrollView would have claimed it; a larger one would race the
+ * list rather than beat it. `GIVE_X` fails the pan on a sideways drag, which is
+ * what leaves the swipe between exercises alone.
  */
-const HOLD_MS = 120;
-/** Vertical travel per step while dragging a number. */
+const GRAB_Y = 4;
+const GIVE_X = 12;
+/**
+ * Vertical travel per step while dragging a number, at the speeds a finger
+ * moves at when it is aiming at a figure. There are two of them because the
+ * two columns are not equally easy to overshoot: half a kilo is a small enough
+ * fact that 12px of travel per step still lands where you meant, where a whole
+ * rep on the same distance turns a careful nudge into a lottery. A rep is the
+ * bigger unit, so it costs more finger.
+ */
 const PX_PER_STEP = 12;
+const PX_PER_REP = 20;
+/**
+ * How much more a pixel is worth in a sweep than in a nudge. Below `SLOW_V`
+ * the travel above is exactly what it says; from there the gain climbs to
+ * `MAX_GAIN` at `FAST_V`, and quadratically rather than linearly so that an
+ * ordinary careful drag stays at 1× and only a deliberate sweep multiplies.
+ * The point is that plus-twenty-kilos costs one gesture instead of 480px of
+ * travel, not that every drag becomes approximate.
+ */
+const SLOW_V = 250;
+const FAST_V = 2200;
+const MAX_GAIN = 6;
+/**
+ * Momentum. Releasing above `FLING_V` keeps the figure stepping, launched at
+ * whatever the pointer had *over* that threshold — so the glide grows from
+ * nothing at the line instead of jumping at it — and decaying with
+ * `GLIDE_TAU`, which puts its whole travel at roughly `v0 × GLIDE_TAU`. It
+ * ends under `GLIDE_MIN` steps a second, at the clamp, or the moment the cell
+ * is touched again.
+ *
+ * These are gesture physics rather than motion: `motion.*` is for the
+ * animations a screen plays at you, where this is the arithmetic of a control
+ * under your own thumb — the same reason the travels above are local constants.
+ */
+const FLING_V = 800;
+const GLIDE_TAU = 0.15;
+const GLIDE_MIN = 2;
 /** How many steps the drag demo travels — three, so its figure moves three times. */
 const DEMO_STEPS = 3;
+
+/**
+ * What one pixel of drag is worth right now, as a multiple of the cell's own
+ * travel. Pure and argument-taking, so the React Compiler is welcome to hoist
+ * it.
+ */
+const gainAt = (v: number) => {
+  const t = Math.min(1, Math.max(0, (Math.abs(v) - SLOW_V) / (FAST_V - SLOW_V)));
+  return 1 + (MAX_GAIN - 1) * t * t;
+};
 
 const mmss = (total: number) =>
   `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
@@ -124,8 +187,9 @@ export function SessionOverlay() {
   const router = useRouter();
   const buddyLive = useBuddyLive();
   const [overview, setOverview] = useState(false);
-  // Which set has the mark sheet open, by index into the active exercise.
-  const [markAt, setMarkAt] = useState<number | null>(null);
+  // Which set has the mark sheet open. Both indexes, because a superset puts
+  // two exercises on the screen and a bare row number would be ambiguous.
+  const [markAt, setMarkAt] = useState<{ i: number; j: number } | null>(null);
   // A number being dragged owns the gesture; the list must not scroll under it.
   const [scrubbing, setScrubbing] = useState(false);
   // Whether the keyboard is up. Only the tips read it: someone typing has
@@ -206,7 +270,21 @@ export function SessionOverlay() {
     // rest is measured from, so it starts the same way whether anyone else is
     // training with you. It runs to the end even once a buddy is done and the
     // turn has come back round, which is the whole point of resting.
-    patch((st) => (st.restSeconds > 0 ? { rest: { at: st.elapsed, skipped: false } } : null));
+    //
+    // Unless something is queued to be taken straight after it, which is the
+    // one sentence drop sets and supersets are both made of — see
+    // `data/superset.ts`. Read off the *fresh* state inside the updater, since
+    // the answer is about the row that is live now rather than the one that
+    // just landed. A tick that earns nothing also ends whatever was running:
+    // ticking the first half of a round mid-rest means that rest is over, and
+    // leaving it counting down would draw a stale clock on the row you are
+    // walking to.
+    patch((st) => {
+      if (!st.session) return null;
+      const at = stopAt(st.session.list, Math.min(st.active, st.session.list.length - 1));
+      if (at && !restEarned(st.session.list, at)) return st.rest ? { rest: null } : null;
+      return st.restSeconds > 0 ? { rest: { at: st.elapsed, skipped: false } } : null;
+    });
   }, [doneCount, tick, patch, s.haptics]);
 
   // The first wait of a shared exercise has no set behind it: the buddy simply
@@ -228,23 +306,45 @@ export function SessionOverlay() {
   // Everything from here down tolerates having no session, so that the tip
   // pick below it can be an effect — hooks cannot live under an early return,
   // and what a tip is armed by is the same state the screen is drawn from.
-  const count = session ? session.list.length : 0;
+  const list = session?.list ?? [];
+  const count = list.length;
+  /**
+   * One exercise per screen became one *stop* per screen: a lone exercise, or a
+   * superset pair. `s.active` still means an exercise for everything that
+   * writes it — the overview's jump, the buddy's offer, a fresh session — and
+   * is snapped to its stop here, which is the whole cost of the change.
+   */
+  const stops = stopsOf(list);
   // A freeform session starts empty; everything below tolerates having no
   // exercise to show, which is the state the "add your first one" screen is.
-  const i = count ? Math.min(s.active, count - 1) : -1;
-  const entry = session && i >= 0 ? session.list[i] : null;
+  const stop = count ? stopAt(list, Math.min(s.active, count - 1)) : null;
+  const i = stop ? stop.head : -1;
+  const entry = stop ? list[i] : null;
   const meta = entry ? ex(entry.ex) : undefined;
-  const units = unitsFor(measureOf(meta), L);
+  /** The pair's second half, when this stop is one. */
+  const mateIdx = stop && stop.ids.length > 1 ? stop.ids[1] : -1;
+  const mate = mateIdx >= 0 ? list[mateIdx] : null;
+  const mateMeta = mate ? ex(mate.ex) : undefined;
+  const paired = !!mate;
+
+  const stopIdx = stop ? stops.findIndex((x) => x.head === stop.head) : -1;
+  const stopCount = stops.length;
 
   const tot = totals();
   const progressPct = tot.all ? Math.round((tot.done / tot.all) * 100) : 0;
 
-  const doneN = entry ? entry.sets.filter((x) => x.done).length : 0;
-  /** The set you're on: the first one not ticked off. */
-  const liveIdx = entry ? entry.sets.findIndex((x) => !x.done) : -1;
-  const liveSet = entry && liveIdx >= 0 ? entry.sets[liveIdx] : null;
-  const sealed = !!entry && entry.sets.length > 0 && liveIdx < 0;
-  const isLast = i === count - 1;
+  const doneN = stop
+    ? stop.ids.reduce((n, k) => n + list[k].sets.filter((x) => x.done).length, 0)
+    : 0;
+  const allN = stop ? stop.ids.reduce((n, k) => n + list[k].sets.length, 0) : 0;
+  /**
+   * The set you're on, as an exercise index and a row: exactly one across a
+   * pair, and the halves alternate round by round — see `liveIn`.
+   */
+  const live = stop ? liveIn(list, stop) : null;
+  const liveSet = live ? list[live.i].sets[live.j] : null;
+  const sealed = !!stop && allN > 0 && !live;
+  const isLast = stopIdx === stopCount - 1;
   /** Whether the bottom button is currently a held gesture — see the footer. */
   const ctaHeld = !!entry && (isLast ? tot.done < tot.all : !sealed);
 
@@ -274,9 +374,13 @@ export function SessionOverlay() {
     }
     // A rest with under a minute on it is about to answer the question itself.
     if (restRunning && restLeft > 60) armed.push('rest');
-    if (doneN >= 2) armed.push('mark');
-    if (count > 1 && sealed) armed.push('swipe');
-    if (count > 1) armed.push('chip');
+    // From the first tick, because that is both when the line it explains is
+    // drawn and when there is a set to have an opinion about. It used to wait
+    // for two, back when the only way in was the set number and there was
+    // nothing on the glass to point at.
+    if (doneN >= 1) armed.push('mark');
+    if (stopCount > 1 && sealed) armed.push('swipe');
+    if (stopCount > 1) armed.push('chip');
     if (ctaHeld) armed.push('hold');
   }
   /**
@@ -305,22 +409,10 @@ export function SessionOverlay() {
     tipDone('swipe');
     patch({ active: Math.max(0, Math.min(to, count - 1)) });
   };
-
-  /** Tick a set, filling an untouched one from last time — as the box does. */
-  const logSet = (j: number) => {
-    tipDone('tick');
-    mutSession(i, (e) => {
-      const cur = e.sets[j];
-      if (!cur.w && !cur.reps) {
-        const g = prevNums(cur.prev);
-        // Nothing typed and nothing to copy: refuse rather than log the
-        // "BW × 0" that would haunt next session as the last-time ghost.
-        if (!g.w && !g.r) return;
-        cur.w = g.w;
-        cur.reps = g.r;
-      }
-      cur.done = true;
-    });
+  /** Move a whole stop at a time — a pair is one screen, so it is one step. */
+  const goStop = (d: number) => {
+    const next = stops[stopIdx + d];
+    if (next) go(next.head);
   };
 
   /**
@@ -411,6 +503,43 @@ export function SessionOverlay() {
         }
       : null;
 
+  /**
+   * Why this row has no countdown on it. Both halves of the same sentence —
+   * something is queued to be taken straight after the set that just landed —
+   * and it stands exactly where the clock would have been, so the eye that
+   * went looking for one finds the reason instead.
+   */
+  const queued =
+    liveSet?.link && live
+      ? // `live.j` is 0-based, so it is already the *previous* row's number.
+        L.dropAfter.replace('{n}', String(live.j))
+      : paired && live && live.i === mateIdx && list[i].sets[live.j]?.done && meta
+        ? L.noRestFrom.replace('{name}', exInfo(meta).text)
+        : null;
+
+  /** The visit's tip, as the node that draws under the live row. */
+  const liveTip =
+    showTip === 'drag' ? (
+      <Tip id="drag" title={L.tipDrag} sub={L.tipDragSub} />
+    ) : showTip === 'tick' ? (
+      <Tip id="tick" title={L.tipTick} sub={L.tipTickSub} />
+    ) : showTip === 'ghost' ? (
+      <Tip id="ghost" title={L.tipGhost} sub={L.tipGhostSub} />
+    ) : showTip === 'rest' ? (
+      <Tip id="rest" title={L.tipRest} sub={L.tipRestSub} />
+    ) : showTip === 'mark' ? (
+      <Tip id="mark" title={L.tipMark} sub={L.tipMarkSub} />
+    ) : null;
+
+  /**
+   * Which half carries Add set / Add drop. One row of them per stop, not per
+   * exercise: four held buttons permanently on screen for one pair is exactly
+   * the furniture this screen works hardest not to become. It follows the live
+   * half, and falls back to the last one so a sealed pair can still be
+   * extended.
+   */
+  const addUnder = paired && stop ? (live ? live.i : stop.ids[stop.ids.length - 1]) : i;
+
   // Horizontal drag moves between exercises. Nothing else on this screen
   // travels sideways, so the threshold can be generous without stealing the
   // vertical scroll or a tap into an input.
@@ -430,14 +559,14 @@ export function SessionOverlay() {
     ]).start();
   const swipe = PanResponder.create({
     onMoveShouldSetPanResponder: (_, g) =>
-      count > 1 && Math.abs(g.dx) > 24 && Math.abs(g.dx) > Math.abs(g.dy) * 1.8,
+      stopCount > 1 && Math.abs(g.dx) > 24 && Math.abs(g.dx) > Math.abs(g.dy) * 1.8,
     onPanResponderRelease: (_, g) => {
       if (g.dx <= -50) {
         if (isLast) bounce(-1);
-        else go(i + 1);
+        else goStop(1);
       } else if (g.dx >= 50) {
-        if (i <= 0) bounce(1);
-        else go(i - 1);
+        if (stopIdx <= 0) bounce(1);
+        else goStop(-1);
       }
     },
   });
@@ -469,7 +598,7 @@ export function SessionOverlay() {
             style={styles.posChip}
           >
             <Text style={styles.posText}>
-              {count ? i + 1 : 0} / {count}
+              {count ? stopIdx + 1 : 0} / {stopCount}
             </Text>
             <Text style={styles.posCaret}>▾</Text>
           </Pressable>
@@ -482,35 +611,58 @@ export function SessionOverlay() {
       </View>
 
       <Animated.View style={{ flex: 1, transform: [{ translateX: endNudge }] }}>
-      <ExerciseSlide index={i}>
+      <ExerciseSlide index={stopIdx}>
         <View style={styles.exercise} {...swipe.panHandlers}>
           {entry && meta ? (
             <>
+              {/* A pair keeps one heading for the stop and moves the per-
+                  exercise furniture — How-to, the kind/group line, the machine
+                  setup — down into each half, where it belongs to the machine
+                  you are standing at. The heading never moves; which half is
+                  live is said by the half's own name going accent. */}
               <View style={styles.exHead}>
                 <View style={styles.exNameRow}>
-                  <H3 size={23} style={[styles.exName, exInfo(meta).missing && missingName(c)]}>
-                    {exInfo(meta).text}
-                  </H3>
-                  <Btn
-                    variant="secondary"
-                    label={L.howTo}
-                    labelStyle={styles.howToLabel}
-                    style={styles.howToBtn}
-                    onPress={() => patch({ instrOpen: meta.id })}
-                  />
+                  {paired && mateMeta ? (
+                    <H3 size={19} style={styles.exName} numberOfLines={2}>
+                      <Text style={exInfo(meta).missing ? missingName(c) : undefined}>
+                        {exInfo(meta).text}
+                      </Text>
+                      <Text style={styles.pairPlus}> + </Text>
+                      <Text style={exInfo(mateMeta).missing ? missingName(c) : undefined}>
+                        {exInfo(mateMeta).text}
+                      </Text>
+                    </H3>
+                  ) : (
+                    <>
+                      <H3 size={23} style={[styles.exName, exInfo(meta).missing && missingName(c)]}>
+                        {exInfo(meta).text}
+                      </H3>
+                      <Btn
+                        variant="secondary"
+                        label={L.howTo}
+                        labelStyle={styles.howToLabel}
+                        style={styles.howToBtn}
+                        onPress={() => patch({ instrOpen: meta.id })}
+                      />
+                    </>
+                  )}
                 </View>
                 <View style={styles.exSubRow}>
                   <Text style={styles.exSub} numberOfLines={1}>
-                    {kInfo(meta.kind).text} · {gInfo(meta.group).text}
+                    {paired && stop
+                      ? L.supersetRound
+                          .replace('{n}', String(Math.min(roundOf(list, stop) + 1, roundsOf(list, stop))))
+                          .replace('{m}', String(roundsOf(list, stop)))
+                      : `${kInfo(meta.kind).text} · ${gInfo(meta.group).text}`}
                   </Text>
                   <PopOnTrue
                     on={sealed}
                     style={[styles.exCount, { color: sealed ? c.accent400 : c.neutral600 }]}
                   >
-                    {doneN}/{entry.sets.length}
+                    {doneN}/{allN}
                   </PopOnTrue>
                 </View>
-                {setup(meta.id).length > 0 && (
+                {!paired && setup(meta.id).length > 0 && (
                   <View style={styles.setupTags}>
                     {setup(meta.id).map((p, k) => (
                       <Tag
@@ -552,118 +704,67 @@ export function SessionOverlay() {
                 showsVerticalScrollIndicator={false}
                 scrollEnabled={!scrubbing}
               >
-                {/* Above the ledger, so it is read on the way in and scrolls
-                    away once you are working. */}
-                <LastNotes id={meta.id} />
-
-                <View style={styles.colHead}>
-                  <Text style={[styles.colLabel, styles.colIndex]}>#</Text>
-                  <Text style={[styles.colLabel, styles.colPrev]}>{L.lastTime}</Text>
-                  {/* Usually only the labels change. `duration` is the one
-                      measure that drops a column outright — the remaining
-                      cell keeps flex:1 and simply takes the whole span. */}
-                  {!units.single && (
-                    <Text style={[styles.colLabel, styles.colFlex]}>{units.left}</Text>
-                  )}
-                  <Text style={[styles.colLabel, styles.colFlex]}>{units.right}</Text>
-                  <View style={styles.colCheck} />
-                </View>
-
-                {entry.sets.map((set, j) => (
-                  <SetRow
-                    key={j}
-                    index={j}
-                    set={set}
-                    single={units.single}
-                    live={j === liveIdx}
-                    waiting={j === liveIdx ? waiting : null}
-                    asking={j === liveIdx ? asking : null}
-                    // Every tip about a set row draws under the live one, and
-                    // the drag's demo draws on its left-hand cell.
-                    demo={j === liveIdx && showTip === 'drag'}
-                    tip={
-                      j === liveIdx ? (
-                        showTip === 'drag' ? (
-                          <Tip id="drag" title={L.tipDrag} sub={L.tipDragSub} />
-                        ) : showTip === 'tick' ? (
-                          <Tip id="tick" title={L.tipTick} sub={L.tipTickSub} />
-                        ) : showTip === 'ghost' ? (
-                          <Tip id="ghost" title={L.tipGhost} sub={L.tipGhostSub} />
-                        ) : showTip === 'rest' ? (
-                          <Tip id="rest" title={L.tipRest} sub={L.tipRestSub} />
-                        ) : showTip === 'mark' ? (
-                          <Tip id="mark" title={L.tipMark} sub={L.tipMarkSub} />
-                        ) : null
-                      ) : null
-                    }
-                    onLog={() => logSet(j)}
+                {paired && stop ? (
+                  // Two ledgers, one hairline down the outside of both — the
+                  // same grammar the chain uses between a set and its drop,
+                  // one level up. Nothing else binds them: the live row is
+                  // still the only accented thing on the screen.
+                  <View style={styles.pairWrap}>
+                    <View style={styles.pairRule} />
+                    <View style={styles.pairBody}>
+                      {stop.ids.map((k, half) => (
+                        <View key={k} style={half > 0 ? styles.pairSecond : undefined}>
+                          <Ledger
+                            i={k}
+                            entry={list[k]}
+                            half
+                            liveJ={live && live.i === k ? live.j : -1}
+                            waiting={live && live.i === k ? waiting : null}
+                            asking={live && live.i === k ? asking : null}
+                            queued={live && live.i === k ? queued : null}
+                            tip={live && live.i === k ? liveTip : null}
+                            demo={!!live && live.i === k && showTip === 'drag'}
+                            showAdd={k === addUnder}
+                            onScrub={setScrubbing}
+                            onMark={(j) => {
+                              tipDone('mark');
+                              setMarkAt({ i: k, j });
+                            }}
+                          />
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                ) : (
+                  <Ledger
+                    i={i}
+                    entry={entry}
+                    liveJ={live ? live.j : -1}
+                    waiting={live ? waiting : null}
+                    asking={live ? asking : null}
+                    queued={live ? queued : null}
+                    tip={live ? liveTip : null}
+                    demo={!!live && showTip === 'drag'}
+                    showAdd
                     onScrub={setScrubbing}
-                    // Finding the control is the whole of what the tip was
-                    // for; what you then decide about the set is your business.
-                    onMark={() => {
+                    onMark={(j) => {
                       tipDone('mark');
-                      setMarkAt(j);
-                    }}
-                    onCopy={(w, r) => {
-                      tipDone('ghost');
-                      mutSession(i, (e) => {
-                        e.sets[j].w = w;
-                        e.sets[j].reps = r;
-                      });
-                    }}
-                    onW={(v) => mutSession(i, (e) => { e.sets[j].w = v; })}
-                    onReps={(v) => mutSession(i, (e) => { e.sets[j].reps = v; })}
-                    onToggle={(w, r) => {
-                      tipDone('tick');
-                      mutSession(i, (e) => {
-                        const cur = e.sets[j];
-                        // Ticking an untouched set logs last time's numbers —
-                        // and when there are none either, refuses: a "BW × 0"
-                        // record helps nobody and becomes next time's ghost.
-                        if (!cur.done && !cur.w && !cur.reps) {
-                          if (!w && !r) return;
-                          cur.w = w;
-                          cur.reps = r;
-                        }
-                        cur.done = !cur.done;
-                      });
+                      setMarkAt({ i, j });
                     }}
                   />
-                ))}
+                )}
 
-                {/* Nothing left to draw the wait on: the exercise is sealed
+                {/* Nothing left to draw the wait on: the whole stop is sealed
                     (or has no sets yet), so the set your rest is for lives on
                     another one. The clock still belongs on this screen, so the
                     lines stand on their own under the last row. The `ask` is
                     deliberately not repeated here — who takes the next set of
                     an exercise you have finished is not your question. */}
-                {liveIdx < 0 && waiting ? (
+                {!live && waiting ? (
                   <View style={styles.waitLoose}>
                     <WaitLines waiting={waiting} asking={null} />
                   </View>
                 ) : null}
-
-                {/* Held, not tapped: this row sits right under the last set,
-                    where a thumb reaching for the tick can find it. */}
-                <HoldBtn
-                  label={L.holdAddSet}
-                  onConfirm={() =>
-                    mutSession(i, (e) => {
-                      const last = e.sets[e.sets.length - 1];
-                      e.sets.push({
-                        w: '',
-                        reps: '',
-                        done: false,
-                        prev: last ? last.prev : '—',
-                        // The ghost and its verdict travel together, here as
-                        // everywhere else a row is built.
-                        prevMark: last ? last.prevMark : null,
-                      });
-                    })
-                  }
-                  style={styles.addSet}
-                  labelStyle={styles.addSetLabel}
-                />
               </ScrollView>
             </>
           ) : (
@@ -704,7 +805,7 @@ export function SessionOverlay() {
                 // A hold that completed is the tip's whole lesson. Only from
                 // the held variant: a tap on the solid one proves nothing.
                 if (!sealed) tipDone('hold');
-                go(i + 1);
+                goStop(1);
               }}
               style={styles.cta}
               labelStyle={styles.ctaLabel}
@@ -739,15 +840,18 @@ export function SessionOverlay() {
       {/* Guarded on the index still being there: Add set can't shrink the list,
           but the buddy's copy of a routine can, and a sheet opened over a set
           that no longer exists would be a sheet with nothing behind it. */}
-      {entry && markAt !== null && markAt < entry.sets.length && (
+      {markAt && list[markAt.i] && markAt.j < list[markAt.i].sets.length && (
         <MarkSheet
-          index={markAt}
-          set={entry.sets[markAt]}
-          exName={meta ? exInfo(meta).text : entry.ex}
+          index={markAt.j}
+          set={list[markAt.i].sets[markAt.j]}
+          exName={(() => {
+            const m = ex(list[markAt.i].ex);
+            return m ? exInfo(m).text : list[markAt.i].ex;
+          })()}
           onClose={() => setMarkAt(null)}
           onPick={(m) =>
-            mutSession(i, (e) => {
-              const cur = e.sets[markAt];
+            mutSession(markAt.i, (e) => {
+              const cur = e.sets[markAt.j];
               // Tapping the mark you already carry takes it back off, and the
               // words go with it: a note nothing points at would never be
               // shown again, and half-erased is worse than erased.
@@ -756,8 +860,8 @@ export function SessionOverlay() {
             })
           }
           onNote={(v) =>
-            mutSession(i, (e) => {
-              const cur = e.sets[markAt];
+            mutSession(markAt.i, (e) => {
+              const cur = e.sets[markAt.j];
               cur.note = v;
               // Words imply a mark, and emptying them takes back the one they
               // implied — so you can open this sheet and just type, and the
@@ -766,9 +870,242 @@ export function SessionOverlay() {
               else if (!v.trim() && cur.mark === 'note') cur.mark = undefined;
             })
           }
+          // Set 1 has nothing above it to continue, so the switch is absent
+          // rather than shown disabled — and it is the only way to take a
+          // drop's link back off again.
+          onLink={
+            markAt.j > 0
+              ? (on) =>
+                  mutSession(markAt.i, (e) => {
+                    if (on) e.sets[markAt.j].link = true;
+                    else delete e.sets[markAt.j].link;
+                  })
+              : undefined
+          }
         />
       )}
     </FullScreen>
+  );
+}
+
+/* ── one exercise's ledger ───────────────────────────────────────────────── */
+
+/**
+ * The column header, the rows, and the two held buttons under them — for one
+ * exercise, drawn once on an ordinary screen and twice inside a superset.
+ *
+ * It owns everything that is genuinely per-exercise, and the measure is why:
+ * `unitsFor` decides the column labels and whether the row has one field or
+ * two, so a pair of a plank and a run has to be able to head its two halves
+ * differently. `half` adds the name, kind/group and machine setup that a lone
+ * exercise keeps up in the screen's own heading.
+ */
+function Ledger({
+  i,
+  entry,
+  half,
+  liveJ,
+  waiting,
+  asking,
+  queued,
+  tip,
+  demo,
+  showAdd,
+  onScrub,
+  onMark,
+}: {
+  /** index into `session.list` — every write here goes through it */
+  i: number;
+  entry: SessionExercise;
+  /** one half of a superset: draw its own name block above the ledger */
+  half?: boolean;
+  /** the live row in *this* exercise, or -1 when the live row is elsewhere */
+  liveJ: number;
+  waiting: Waiting | null;
+  asking: Asking | null;
+  queued?: string | null;
+  tip?: ReactNode;
+  demo?: boolean;
+  showAdd?: boolean;
+  onScrub: (on: boolean) => void;
+  onMark: (j: number) => void;
+}) {
+  const styles = useThemed(sheet);
+  const c = useColors();
+  const { L, patch, ex, exInfo, gInfo, kInfo, setup, mutSession, tipDone } = useStore();
+  const meta = ex(entry.ex);
+  const units = unitsFor(measureOf(meta), L);
+
+  /** Tick a set, filling an untouched one from last time — as the box does. */
+  const logSet = (j: number) => {
+    tipDone('tick');
+    mutSession(i, (e) => {
+      const cur = e.sets[j];
+      if (!cur.w && !cur.reps) {
+        const g = prevNums(cur.prev);
+        // Nothing typed and nothing to copy: refuse rather than log the
+        // "BW × 0" that would haunt next session as the last-time ghost.
+        if (!g.w && !g.r) return;
+        cur.w = g.w;
+        cur.reps = g.r;
+      }
+      cur.done = true;
+    });
+  };
+
+  return (
+    <View>
+      {half && meta && (
+        <View style={styles.halfHead}>
+          <View style={styles.exNameRow}>
+            <Text
+              style={[
+                styles.halfName,
+                liveJ >= 0 && styles.halfNameLive,
+                exInfo(meta).missing && missingName(c),
+              ]}
+              numberOfLines={1}
+            >
+              {exInfo(meta).text}
+            </Text>
+            <Btn
+              variant="secondary"
+              label={L.howTo}
+              labelStyle={styles.howToLabel}
+              style={styles.howToBtn}
+              onPress={() => patch({ instrOpen: meta.id })}
+            />
+          </View>
+          <Text style={styles.halfMeta} numberOfLines={1}>
+            {kInfo(meta.kind).text} · {gInfo(meta.group).text}
+          </Text>
+          {setup(meta.id).length > 0 && (
+            <View style={styles.setupTags}>
+              {setup(meta.id).map((p, k) => (
+                <Tag key={k} tone="accent" label={`${p[0]} ${p[1]}`} textStyle={styles.setupTagText} />
+              ))}
+            </View>
+          )}
+        </View>
+      )}
+
+      {/* Above the ledger, so it is read on the way in and scrolls away once
+          you are working. */}
+      <LastNotes id={entry.ex} />
+
+      <View style={styles.colHead}>
+        <Text style={[styles.colLabel, styles.colIndex]}>#</Text>
+        <Text style={[styles.colLabel, styles.colPrev]}>{L.lastTime}</Text>
+        {/* Usually only the labels change. `duration` is the one measure that
+            drops a column outright — the remaining cell keeps flex:1 and
+            simply takes the whole span. */}
+        {!units.single && <Text style={[styles.colLabel, styles.colFlex]}>{units.left}</Text>}
+        <Text style={[styles.colLabel, styles.colFlex]}>{units.right}</Text>
+        <View style={styles.colCheck} />
+      </View>
+
+      {entry.sets.map((set, j) => (
+        <SetRow
+          key={j}
+          index={j}
+          set={set}
+          single={units.single}
+          live={j === liveJ}
+          waiting={j === liveJ ? waiting : null}
+          asking={j === liveJ ? asking : null}
+          queued={j === liveJ ? queued : null}
+          // Every tip about a set row draws under the live one, and the drag's
+          // demo draws on its left-hand cell.
+          demo={j === liveJ && !!demo}
+          tip={j === liveJ ? tip : null}
+          onLog={() => logSet(j)}
+          onScrub={onScrub}
+          // Opening the sheet is the whole of what the tip was for — it
+          // teaches what the line does, not where it is — and what you then
+          // decide about the set is your business. Every way in lands here:
+          // the `+ Note` line, your own note line, and the index cell.
+          onMark={() => onMark(j)}
+          onCopy={(w, r) => {
+            tipDone('ghost');
+            mutSession(i, (e) => {
+              e.sets[j].w = w;
+              e.sets[j].reps = r;
+            });
+          }}
+          onW={(v) => mutSession(i, (e) => { e.sets[j].w = v; })}
+          onReps={(v) => mutSession(i, (e) => { e.sets[j].reps = v; })}
+          onToggle={(w, r) => {
+            tipDone('tick');
+            mutSession(i, (e) => {
+              const cur = e.sets[j];
+              // Ticking an untouched set logs last time's numbers — and when
+              // there are none either, refuses: a "BW × 0" record helps
+              // nobody and becomes next time's ghost.
+              if (!cur.done && !cur.w && !cur.reps) {
+                if (!w && !r) return;
+                cur.w = w;
+                cur.reps = r;
+              }
+              cur.done = !cur.done;
+            });
+          }}
+        />
+      ))}
+
+      {/* Held, not tapped: this row sits right under the last set, where a
+          thumb reaching for the tick can find it. */}
+      {showAdd && (
+        <View style={styles.addRow}>
+          <HoldBtn
+            label={L.holdAddSet}
+            onConfirm={() =>
+              mutSession(i, (e) => {
+                const last = e.sets[e.sets.length - 1];
+                e.sets.push({
+                  w: '',
+                  reps: '',
+                  done: false,
+                  prev: last ? last.prev : '—',
+                  // The ghost and its verdict travel together, here as
+                  // everywhere else a row is built.
+                  prevMark: last ? last.prevMark : null,
+                });
+              })
+            }
+            style={styles.addSet}
+            labelStyle={styles.addSetLabel}
+          />
+          {/* A drop is defined against **what you just lifted**, so the weight
+              comes off the row above rather than from last week's ghost —
+              which is also why the row carries no ghost of its own: last
+              time's set N+1 was not this drop, and a figure that isn't about
+              this row is worse than none. */}
+          <HoldBtn
+            label={L.holdAddDrop}
+            onConfirm={() => {
+              mutSession(i, (e) => {
+                const last = e.sets[e.sets.length - 1];
+                const g = last ? prevNums(last.prev) : { w: '', r: '' };
+                e.sets.push({
+                  w: last ? last.w || g.w : '',
+                  reps: '',
+                  done: false,
+                  prev: '—',
+                  prevMark: null,
+                  link: true,
+                });
+              });
+              // The rest running under it was written by the tick this drop
+              // now says earned none. Its alarm goes with it, through the
+              // scheduling effect's own cleanup — no new cancel path.
+              patch((st) => (st.rest ? { rest: null } : null));
+            }}
+            style={styles.addSet}
+            labelStyle={styles.addSetLabel}
+          />
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -793,6 +1130,7 @@ function MarkSheet({
   onClose,
   onPick,
   onNote,
+  onLink,
 }: {
   index: number;
   set: LoggedSet;
@@ -801,6 +1139,8 @@ function MarkSheet({
   /** null clears the mark */
   onPick: (m: SetMark | null) => void;
   onNote: (v: string) => void;
+  /** absent on set 1, which has nothing above it to be taken straight after */
+  onLink?: (on: boolean) => void;
 }) {
   const styles = useThemed(sheet);
   const c = useColors();
@@ -873,6 +1213,34 @@ function MarkSheet({
           style={styles.markInput}
         />
       </Field>
+
+      {/* The general way to make a drop set — the button under the ledger is
+          the quick one for the common case, and this is the only way to take
+          the link back off. It says what is true of the set rather than what
+          the feature is called: `Drop set` is a name for an action and lives
+          on the button that performs one, where a switch labelled with it
+          would make you translate it back into a fact about your workout. */}
+      {onLink && (
+        <Pressable
+          accessibilityRole="switch"
+          accessibilityState={{ checked: !!set.link }}
+          onPress={() => onLink(!set.link)}
+          style={styles.linkRow}
+        >
+          <View style={styles.linkText}>
+            <Text style={styles.linkLabel}>
+              {L.linkLabel.replace('{n}', String(index))}
+            </Text>
+            <Text style={styles.linkSub}>{L.linkSub}</Text>
+          </View>
+          <Switch
+            value={!!set.link}
+            onValueChange={onLink}
+            trackColor={{ false: c.neutral800, true: c.accent700 }}
+            thumbColor={set.link ? c.accent : c.neutral500}
+          />
+        </Pressable>
+      )}
 
       <Btn variant="secondary" block label={L.close} style={styles.markClose} onPress={onClose} />
     </Sheet>
@@ -996,13 +1364,25 @@ function Overview({ onClose, onJump }: { onClose: () => void; onJump: (to: numbe
       </Text>
 
       <View style={styles.ovList}>
-        {session.list.map((entry, k) => {
-          const meta = ex(entry.ex);
-          const name = meta ? exInfo(meta) : { text: entry.ex, missing: false };
-          const done = entry.sets.filter((x) => x.done).length;
-          const all = entry.sets.length;
-          const finished = all > 0 && done === all;
-          const current = k === s.active;
+        {/* By stop rather than by exercise, so a pair reads here as the one
+            thing it is on the screen behind. There is no pairing control:
+            a superset is made in the routine and only ever read in a session,
+            so this sheet can show one and never offer one. */}
+        {stopsOf(session.list).map((stop) => {
+          const rows = stop.ids.map((k) => {
+            const entry = session.list[k];
+            const meta = ex(entry.ex);
+            const name = meta ? exInfo(meta) : { text: entry.ex, missing: false };
+            const done = entry.sets.filter((x) => x.done).length;
+            const all = entry.sets.length;
+            return { k, entry, name, done, all, finished: all > 0 && done === all };
+          });
+          const paired = rows.length > 1;
+          // The stop is current when either half is: `s.active` is snapped to
+          // the stop's head on the screen, so both rows light together.
+          const currentStop = stop.ids.includes(s.active);
+          const body = rows.map(({ k, entry, name, done, all, finished }) => {
+          const current = currentStop;
           return (
             <Pressable
               key={`${entry.ex}-${k}`}
@@ -1044,6 +1424,18 @@ function Overview({ onClose, onJump }: { onClose: () => void; onJump: (to: numbe
                 />
               )}
             </Pressable>
+          );
+          });
+          return paired ? (
+            <View key={`pair-${stop.head}`} style={styles.ovPair}>
+              <View style={styles.ovPairRule} />
+              <View style={styles.ovPairBody}>
+                <Text style={styles.ovPairTag}>{L.superset}</Text>
+                {body}
+              </View>
+            </View>
+          ) : (
+            body
           );
         })}
       </View>
@@ -1257,19 +1649,28 @@ function ExerciseSlide({ index, children }: { index: number; children: ReactNode
 
 /**
  * One number cell. A tap opens the keyboard on it and a second tap closes it
- * again; a brief press followed by a vertical drag steps the value instead —
- * 0.5 kg or one rep per 12px, up to add — which is how most sets get entered
- * without the keyboard ever opening.
+ * again; touching it and sliding steps the value instead — up to add — which is
+ * how most sets get entered without the keyboard ever opening.
+ *
+ * **How far a pixel carries depends on how fast it is travelling.** A nudge is
+ * one step per `px`, exactly as it always was, and a sweep is up to `MAX_GAIN`
+ * of them; a release above `FLING_V` glides on and slows to a stop. That is one
+ * gesture doing two jobs — landing on 62.5 kg and getting from 20 to 80 —
+ * where a fixed scale can only be tuned for one of them, and was tuned for the
+ * first. It costs the drag its reversibility: the figure is integrated frame by
+ * frame rather than mapped from the gesture's total travel, so dragging back is
+ * only an undo if you drag back at the speed you came. Worth it, because the
+ * expensive direction was always the long one.
  *
  * **The finger must never land on the `TextInput`, or there is no gesture at
  * all.** Android's `ReactEditText.onTouchEvent` answers every ACTION_DOWN with
  * `parent.requestDisallowInterceptTouchEvent(true)`, which walks up to
  * `GestureHandlerRootView` — and gesture-handler reads that as a native view
  * claiming the touch, so its root helper cancels *every* handler in the
- * orchestrator on the spot. A pan waiting out `HOLD_MS` is already dead before
- * the hold ever elapses. This is why the drag never worked: not a negotiation
- * this lost, one it was never entered into. (It is also why a `PanResponder`
- * can't do the job either — same disallow, one layer up.)
+ * orchestrator on the spot. A pan still waiting on its `GRAB_Y` is already dead
+ * by the time the finger has moved that far. This is why the drag never worked:
+ * not a negotiation this lost, one it was never entered into. (It is also why a
+ * `PanResponder` can't do the job either — same disallow, one layer up.)
  *
  * So the cell is `box-only` **always**, focused or not: `ReactViewGroup`
  * intercepts the touch natively, the editor below never sees a DOWN, and
@@ -1286,15 +1687,18 @@ function ExerciseSlide({ index, children }: { index: number; children: ReactNode
  * `"always"` (see its note), so tapping away from a field is deliberately
  * inert, and Android's back key is eaten by the IME before any of this sees it.
  *
- * `activateAfterLongPress` is what still separates the drag from the list's own
- * scroll: the pan claims the touch only after the finger has been down and
- * still, so a straight drag scrolls. Activation cancels the native touch,
- * which also means the long-press text selection menu never gets to fire.
+ * Nothing separates the drag from the list's own scroll any more, because the
+ * thing that did was the wait this gesture is better off without — see `GRAB_Y`
+ * for the trade. What is still separated is the swipe between exercises, by
+ * `GIVE_X`: a sideways drag fails the pan outright and reaches the row's own
+ * `PanResponder`. Activation cancels the native touch, which also means the
+ * long-press text selection menu never gets to fire.
  */
 function NumCell({
   value,
   ghost,
   step,
+  px,
   live,
   style,
   onText,
@@ -1306,6 +1710,8 @@ function NumCell({
   /** last time's figure — where a drag starts from when the cell is empty */
   ghost: string;
   step: number;
+  /** travel per step at aiming speed — `PX_PER_STEP` or the coarser `PX_PER_REP` */
+  px: number;
   live: boolean;
   style?: StyleProp<ViewStyle>;
   onText: (v: string) => void;
@@ -1318,12 +1724,26 @@ function NumCell({
   // Whether the editor is focused. Not what opens this cell to touches any
   // more — nothing does, see the note above — but what the tap toggles.
   const [editing, setEditing] = useState(false);
-  // Where the drag started from, and the last figure it put in the cell. Both
-  // touched only from gesture callbacks, never while rendering.
-  const base = useRef(0);
+  // The figure the drag is on before it is rounded to the step grid, and the
+  // last text this cell wrote. Both touched only from gesture and animation
+  // callbacks, never while rendering.
+  const raw = useRef(0);
   const last = useRef('');
+  // Where the last frame's finger was. The drag integrates frame by frame
+  // rather than mapping the gesture's total travel, because a pixel is worth
+  // different amounts at different speeds.
+  const lastY = useRef(0);
   // Whether the drag under way has ever moved the figure.
   const stepped = useRef(false);
+  // The glide: its frame handle, what speed is left in it (units a second),
+  // and the timestamp of the frame it last integrated.
+  const raf = useRef<number | null>(null);
+  const vel = useRef(0);
+  const at = useRef(0);
+  // Whether the touch under way began by catching a glide — in which case it
+  // has already said its piece and must not also open the keyboard on the way
+  // up. Written once per touch, in the pan's `onBegin`.
+  const caught = useRef(false);
   // The row walks Enter from weight to reps through `inputRef`; a cell nobody
   // walks to still needs a handle of its own to focus on a tap.
   const own = useRef<TextInput>(null);
@@ -1339,53 +1759,129 @@ function NumCell({
     return () => sub.remove();
   }, [editing, ref]);
 
+  // A glide outliving the cell would step a figure into a session that has
+  // moved on. Nothing else has to cancel it: every other way one ends goes
+  // through `stopGlide`.
+  useEffect(() => () => {
+    if (raf.current != null) cancelAnimationFrame(raf.current);
+  }, []);
+
   const toggleFocus = () => {
     if (editing) ref.current?.blur();
     else ref.current?.focus();
+  };
+
+  /**
+   * Put `raw` in the cell, but only when the figure on the step grid actually
+   * changes — which is once per `px` of slow travel rather than once per frame,
+   * and never while the clamp at zero is holding it still. That is what keeps a
+   * buzz meaning "the number moved", and it also stops a drag writing to the
+   * store sixty times a second. Answers whether it wrote.
+   */
+  const emit = () => {
+    const next = fmt(Math.round(raw.current / step) * step);
+    if (next === last.current) return false;
+    last.current = next;
+    stepped.current = true;
+    onText(next);
+    // You have done the thing, so the hint about it is finished — from the
+    // gesture rather than from a button, which is the whole dismissal model.
+    // Idempotent, so firing it on every step of every drag forever is free.
+    tipDone('drag');
+    return true;
+  };
+
+  /** Answers whether there was one, which is what makes the touch that ended it count. */
+  const stopGlide = () => {
+    if (raf.current == null) return false;
+    cancelAnimationFrame(raf.current);
+    raf.current = null;
+    vel.current = 0;
+    return true;
+  };
+
+  // The momentum frame. It deliberately does not buzz: `buzz.step` reports a
+  // figure moving under your finger, and by now your finger is off the glass —
+  // what the glide has instead is the number itself, which you are watching.
+  const glide = (now: number) => {
+    // First frame only records the clock; a stalled one is capped rather than
+    // integrated whole, or coming back from a dropped frame would jump.
+    const dt = at.current === 0 ? 0 : Math.min(0.064, (now - at.current) / 1000);
+    at.current = now;
+    raw.current = Math.max(0, raw.current + vel.current * dt);
+    emit();
+    vel.current *= Math.exp(-dt / GLIDE_TAU);
+    // There is nothing below zero to coast into, so a downward glide ends at
+    // the clamp instead of running its decay out against it.
+    if (raw.current === 0 && vel.current < 0) vel.current = 0;
+    if (Math.abs(vel.current) < GLIDE_MIN * step) {
+      raf.current = null;
+      return;
+    }
+    raf.current = requestAnimationFrame(glide);
   };
 
   // `runOnJS` because every callback here talks to React state and the store —
   // none of them are worklets, and babel-preset-expo would otherwise hand them
   // to the UI thread.
   const drag = Gesture.Pan()
-    .activateAfterLongPress(HOLD_MS)
+    // Touch and slide, with no hold in front of it: the cell is taken after
+    // `GRAB_Y` of vertical travel, and handed back to the row's swipe after
+    // `GIVE_X` of sideways.
+    .activeOffsetY([-GRAB_Y, GRAB_Y])
+    .failOffsetX([-GIVE_X, GIVE_X])
     .runOnJS(true)
+    // Touching the cell catches a glide, the way a finger on a scrolling list
+    // stops it. `onBegin` fires on touch-down whether or not the pan goes on to
+    // activate, which is what makes it the one writer of `caught` — the tap
+    // below and the release above both only read it.
+    .onBegin(() => {
+      caught.current = stopGlide();
+    })
     .onStart(() => {
       // An empty cell starts from last time's figure, which is what it's
       // showing as its placeholder.
-      base.current = num(value, num(ghost, 0));
-      last.current = fmt(base.current);
+      raw.current = num(value, num(ghost, 0));
+      last.current = fmt(raw.current);
+      lastY.current = 0;
       stepped.current = false;
       setDragging(true);
       onScrub(true);
       if (s.haptics) buzz.grab();
     })
     .onUpdate((g) => {
-      const steps = Math.round(-g.translationY / PX_PER_STEP);
-      const next = fmt(Math.max(0, base.current + steps * step));
-      // Only when the figure actually changes — which is once per `PX_PER_STEP`
-      // rather than once per frame, and never while the clamp at zero is
-      // holding it still. That is what keeps a buzz meaning "the number moved",
-      // and it also stops a drag writing to the store sixty times a second.
-      if (next === last.current) return;
-      last.current = next;
-      stepped.current = true;
-      onText(next);
-      // You have done the thing, so the hint about it is finished — from the
-      // gesture rather than from a button, which is the whole dismissal model.
-      // Idempotent, so firing it on every step of every drag forever is free.
-      tipDone('drag');
-      if (s.haptics) buzz.step();
+      const dy = g.translationY - lastY.current;
+      lastY.current = g.translationY;
+      // Up is more. This frame's pixels are worth `step` per `px` at aiming
+      // speed and up to `MAX_GAIN` of that in a sweep — the gain is read per
+      // frame, so one gesture can sweep and then settle.
+      raw.current = Math.max(0, raw.current - (dy / px) * gainAt(g.velocityY) * step);
+      if (emit() && s.haptics) buzz.step();
     })
-    // A press that took the cell, went nowhere and was released is a tap that
-    // took its time, and gets what a tap gets. This is what lets `HOLD_MS` be
-    // as short as it is: overshooting it costs you nothing. `onEnd` rather
-    // than `onFinalize` — a cancelled gesture is not a tap — and the travel
-    // test as well as `stepped`, because a long drag down against the clamp at
-    // zero emits no step either.
     .onEnd((g, success) => {
-      if (!success || stepped.current) return;
-      if (Math.abs(g.translationY) < PX_PER_STEP) toggleFocus();
+      if (!success) return;
+      // Let go while still moving and the figure carries on. Launched at what
+      // was left over `FLING_V` rather than at the whole velocity, so the glide
+      // grows from nothing at the threshold instead of jumping at it, and at
+      // the pointer's own speed rather than the gained one — the sweep has
+      // already been paid for in travel, and multiplying it twice is how a
+      // flick lands 60 kg away from where you were looking.
+      if (stepped.current) {
+        const over = Math.abs(g.velocityY) - FLING_V;
+        if (over <= 0) return;
+        vel.current = -Math.sign(g.velocityY) * (over / px) * step;
+        at.current = 0;
+        raf.current = requestAnimationFrame(glide);
+        return;
+      }
+      // A touch that took the cell, went nowhere and was released is a tap with
+      // a shaky thumb, and gets what a tap gets. That is what lets `GRAB_Y` be
+      // as small as it is: crossing it by accident costs you nothing. `onEnd`
+      // rather than `onFinalize` — a cancelled gesture is not a tap — and the
+      // travel test as well as `stepped`, because a long drag down against the
+      // clamp at zero emits no step either.
+      if (caught.current) return;
+      if (Math.abs(g.translationY) < px) toggleFocus();
     })
     // Fires on release and on cancellation alike, so the list can never be
     // left unscrollable.
@@ -1394,12 +1890,14 @@ function NumCell({
       onScrub(false);
     });
 
-  // Racing rather than waiting on the pan: a tap is over well inside the hold,
-  // so whichever the finger meant has already been decided by the time either
-  // could fire.
+  // Racing rather than waiting on the pan: a tap that never travelled `GRAB_Y`
+  // never let the pan activate, so whichever the finger meant has already been
+  // decided by the time either could fire.
   const tap = Gesture.Tap()
     .runOnJS(true)
-    .onEnd(() => toggleFocus());
+    .onEnd(() => {
+      if (!caught.current) toggleFocus();
+    });
 
   return (
     <GestureDetector gesture={Gesture.Race(drag, tap)}>
@@ -1458,9 +1956,23 @@ type Asking = { label: string; mine: string; theirs: string; onBid: (b: Bid) => 
  * Its own component because a sealed exercise has no live row to hang it under
  * and still has your rest running on it.
  */
-function WaitLines({ waiting, asking }: { waiting: Waiting | null; asking: Asking | null }) {
+function WaitLines({
+  waiting,
+  asking,
+  queued,
+}: {
+  waiting: Waiting | null;
+  asking: Asking | null;
+  /**
+   * Why there is no countdown here: a drop taken off the row above, or the
+   * other half of a superset round. It stands where the clock would have
+   * been — which is what makes it an explanation rather than furniture, since
+   * it leaves with the row exactly as a rest does.
+   */
+  queued?: string | null;
+}) {
   const styles = useThemed(sheet);
-  if (!waiting && !asking) return null;
+  if (!waiting && !asking && !queued) return null;
 
   // A row with nothing to tap is a line, not a Pressable — the ripple and the
   // chevron are what promise the tap does something.
@@ -1495,9 +2007,19 @@ function WaitLines({ waiting, asking }: { waiting: Waiting | null; asking: Askin
 
   return (
     <>
+      {/* Above the buddy's line and below nothing: it is a fact about this row
+          rather than about either of you, and it is the reason the clock the
+          eye was looking for isn't there. */}
+      {queued ? (
+        <View style={styles.waitRow}>
+          <Text style={[styles.waitLabel, styles.waitLabelQueued]} numberOfLines={1}>
+            {queued}
+          </Text>
+        </View>
+      ) : null}
       {own}
       {waiting?.theirs ? (
-        <View style={[styles.waitRow, !!own && styles.waitRowUnder]}>
+        <View style={[styles.waitRow, (!!own || !!queued) && styles.waitRowUnder]}>
           <Text style={[styles.waitLabel, styles.waitLabelTheirs]} numberOfLines={1}>
             {waiting.theirs}
           </Text>
@@ -1515,6 +2037,7 @@ function SetRow({
   live,
   waiting,
   asking,
+  queued,
   demo,
   tip,
   onCopy,
@@ -1527,6 +2050,8 @@ function SetRow({
 }: {
   index: number;
   set: LoggedSet;
+  /** the sentence standing in for the countdown this row didn't earn */
+  queued?: string | null;
   /** `duration` — one wide field instead of two, and no weight to walk to */
   single: boolean;
   /** the set you're on — raised, with numbers at thumb size */
@@ -1615,7 +2140,18 @@ function SetRow({
   const flyDx = 74 + inputW / 2;
 
   return (
-    <View style={styles.rowWrap}>
+    <View style={[styles.rowWrap, set.link && styles.rowWrapLinked]}>
+      {/* The chain: this set was taken straight off the one above it. Drawn in
+          the gutter *between* the two digits rather than in either of them,
+          because the index column already belongs to the mark — a marked drop
+          would otherwise erase the fact that it was one. Two hairlines at the
+          live box's own weight: structure, not a thing to press. */}
+      {set.link && (
+        <View
+          pointerEvents="none"
+          style={[styles.chainRiser, live && styles.chainRiserLive]}
+        />
+      )}
       <View
         style={[live && styles.liveBox, live && (waiting?.held || asking) && styles.liveBoxWaiting]}
       >
@@ -1657,6 +2193,7 @@ function SetRow({
                 value={set.w}
                 ghost={ghost.w}
                 step={0.5}
+                px={PX_PER_STEP}
                 onText={onW}
                 onScrub={onScrub}
                 keyboardType="decimal-pad"
@@ -1675,6 +2212,10 @@ function SetRow({
               value={set.reps}
               ghost={ghost.r}
               step={1}
+              // The whole-unit column, whichever unit it is: reps, seconds of a
+              // hold, minutes of a run. All of them are the bigger fact, and
+              // all of them get the longer travel.
+              px={PX_PER_REP}
               onText={onReps}
               onScrub={onScrub}
               keyboardType="number-pad"
@@ -1697,6 +2238,7 @@ function SetRow({
             <DragDemo
               width={inputW}
               step={single ? 1 : 0.5}
+              px={single ? PX_PER_REP : PX_PER_STEP}
               // The same expression `NumCell`'s own `onStart` uses, so the
               // demo scrubs from exactly where a real finger would.
               base={single ? num(set.reps, num(ghost.r, 0)) : num(set.w, num(ghost.w, 0))}
@@ -1726,14 +2268,26 @@ function SetRow({
           )}
         </View>
 
-        {/* The row's one note line, and it is deliberately one.
+        {/* The row's one note line: your own words, else — on a set you have
+            *ticked* — the way in. Nothing on a set still ahead of you.
 
-            Your own words when there are any; otherwise, on a set you have
-            actually lifted, the way in. Nothing on a set still ahead of you —
-            a set you have performed is a set you have an opinion about, where
-            row 4 is a plan and has nothing to say yet, and an offer standing
-            on every unlifted row is 16px of furniture eight times over on the
-            screen working hardest not to become furniture.
+            **Both other arrangements were built and tried on a real phone**,
+            and the order matters because the reasoning does. Reaching the mark
+            sheet by tapping the 16px index digit was the original, and it is
+            unlabelled and unfindable — the complaint that started this. Drawing
+            the line under *every* row answered that and gave back too much
+            screen: eight rows of a five-set exercise is 130px of mostly
+            `+ Note`, measured in the hand rather than argued about, and the set
+            you are working on sits that much further down.
+
+            So the tick. It is the moment the two things coincide: a set you
+            have lifted is a set you have an opinion about, and it is also the
+            only set you could be writing about. Row 4 is a plan — an offer
+            standing on it is furniture on the screen working hardest not to
+            become furniture. What it costs, honestly, is that the way in
+            arrives rather than being always there; what it buys is that it
+            arrives on every set you could use it on, which is the part the
+            index digit never managed.
 
             What used to sit here as well was last time's verdict, drawn on
             the live row. It has moved to `LastNotes` at the top of the
@@ -1763,7 +2317,7 @@ function SetRow({
           </Pressable>
         ) : null}
 
-        {live && <WaitLines waiting={waiting} asking={asking} />}
+        {live && <WaitLines waiting={waiting} asking={asking} queued={queued} />}
       </View>
       {/* Under the live box, never over anything: the tick, the fields and the
           CTA all stay exactly where they were, and the tip costs one row of a
@@ -1774,20 +2328,21 @@ function SetRow({
 }
 
 /**
- * The hold-and-drag, performed on the cell it is about.
+ * The touch-and-slide, performed on the cell it is about.
  *
  * The one tip in the app that needs more than words: a sentence can teach a
- * tap and cannot teach hold-then-drag. It draws a pointer and a figure on an
- * overlay above the cell — `pointerEvents: 'none'`, no synthetic touches, and
- * nothing written to the store — so what it costs the session is nothing.
+ * tap and cannot teach a slide that is not a scroll. It draws a pointer and a
+ * figure on an overlay above the cell — `pointerEvents: 'none'`, no synthetic
+ * touches, and nothing written to the store — so what it costs the session is
+ * nothing.
  *
- * **Every number in it is the real one.** The travel is three times
- * `PX_PER_STEP`, so the figure steps three times; the pause before the pointer
- * moves is `HOLD_MS`, which is 120ms and is a stillness test rather than a
- * wait. A demo that swept 60 to 100 in one gesture, or that pressed
- * deliberately for a second first, would be teaching a gesture this app does
- * not have — and the second one would have people holding until the list
- * scrolled out from under them.
+ * **Every number in it is the real one.** The travel is three times the cell's
+ * own `px`, so the figure steps three times, and it begins the moment the
+ * pointer lands because that is now when a real one begins. It scrubs at 1× on
+ * purpose, which is the honest speed for a pointer moving as unhurriedly as
+ * this one — the gain is something a real finger finds the moment it sweeps. A
+ * demo that swept 60 to 100 in one gesture would be teaching a gesture this app
+ * does not have.
  *
  * Deliberately **not** on the native driver: the figure is text, which no
  * driver can animate, so the pointer and the number it is dragging share one
@@ -1799,7 +2354,17 @@ function SetRow({
  * things. The ring is that moment drawn instead, so the real one is expected
  * rather than surprising.
  */
-function DragDemo({ width, step, base }: { width: number; step: number; base: number }) {
+function DragDemo({
+  width,
+  step,
+  px,
+  base,
+}: {
+  width: number;
+  step: number;
+  px: number;
+  base: number;
+}) {
   const styles = useThemed(sheet);
   const [fade] = useState(() => new Animated.Value(0));
   const [travel] = useState(() => new Animated.Value(0));
@@ -1808,21 +2373,25 @@ function DragDemo({ width, step, base }: { width: number; step: number; base: nu
 
   useEffect(() => {
     const id = travel.addListener(({ value }) => {
-      const n = Math.min(DEMO_STEPS, Math.max(0, Math.round(-value / PX_PER_STEP)));
+      const n = Math.min(DEMO_STEPS, Math.max(0, Math.round(-value / px)));
       setSteps((cur) => (cur === n ? cur : n));
     });
     const pass = Animated.sequence([
       Animated.timing(travel, { toValue: 0, duration: 0, useNativeDriver: false }),
       Animated.timing(ring, { toValue: 0, duration: 0, useNativeDriver: false }),
       Animated.timing(fade, { toValue: 1, duration: 240, easing: motion.quick.easing, useNativeDriver: false }),
-      Animated.delay(HOLD_MS),
-      Animated.timing(ring, { toValue: 1, duration: 340, easing: motion.tap.easing, useNativeDriver: false }),
-      Animated.timing(travel, {
-        toValue: -DEMO_STEPS * PX_PER_STEP,
-        duration: 900,
-        easing: motion.move.easing,
-        useNativeDriver: false,
-      }),
+      // The ring blooms *while* the figure is already moving, rather than
+      // before it. The gesture has no wait in it any more, and a demo that
+      // pauses on the touch teaches one that isn't there.
+      Animated.parallel([
+        Animated.timing(ring, { toValue: 1, duration: 340, easing: motion.tap.easing, useNativeDriver: false }),
+        Animated.timing(travel, {
+          toValue: -DEMO_STEPS * px,
+          duration: 900,
+          easing: motion.move.easing,
+          useNativeDriver: false,
+        }),
+      ]),
       Animated.delay(700),
       Animated.timing(fade, { toValue: 0, duration: 260, easing: motion.quick.easing, useNativeDriver: false }),
       Animated.delay(600),
@@ -1835,7 +2404,7 @@ function DragDemo({ width, step, base }: { width: number; step: number; base: nu
       loop.stop();
       travel.removeListener(id);
     };
-  }, [fade, travel, ring]);
+  }, [fade, travel, ring, px]);
 
   return (
     <Animated.View pointerEvents="none" style={[styles.demoLane, { width, opacity: fade }]}>
@@ -2163,6 +2732,33 @@ const sheet = themed(() => ({
   exCount: { fontFamily: font.regular, fontSize: 11.5, fontVariant: ['tabular-nums'] },
   setupTags: { flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginTop: 10 },
   setupTagText: { fontSize: 10.5 },
+  /* The join in `A + B`. Quiet enough that the two names read as the pair's
+     two halves rather than as a sum. */
+  pairPlus: { color: color.neutral700 },
+
+  /**
+   * A superset: two ledgers, one unit. One hairline down the outside of both
+   * is the only thing binding them — the same grammar the chain uses between a
+   * set and its drop, one level up, and deliberately nothing more: the live
+   * row has to stay the only accented thing on the screen.
+   */
+  pairWrap: { flexDirection: 'row', gap: 10 },
+  pairRule: { width: 1, borderRadius: 1, backgroundColor: color.accent700, marginVertical: 6 },
+  pairBody: { flex: 1 },
+  pairSecond: { marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: t.rule },
+  /* Per half, since the screen's own heading now names the pair. The name is
+     where "which machine am I at" is answered, so the live one takes the
+     accent — the heading above never moves. */
+  halfHead: { marginBottom: 2 },
+  halfName: {
+    flex: 1,
+    fontFamily: font.heading,
+    fontSize: 15,
+    color: color.neutral300,
+    letterSpacing: tracking(15, -0.01),
+  },
+  halfNameLive: { color: color.accent200 },
+  halfMeta: { fontFamily: font.regular, fontSize: 10.5, color: color.neutral700, marginTop: 1 },
 
   sealLane: { height: 1.5, marginTop: 12, marginHorizontal: 16 },
   sealTrack: { ...absFill, overflow: 'hidden', borderTopWidth: 1, borderTopColor: wash.text(8) },
@@ -2192,6 +2788,26 @@ const sheet = themed(() => ({
   colCheck: { width: 34 },
 
   rowWrap: { marginBottom: 5 },
+  /* A drop sits tight to the set it came off — the gap closing is half of what
+     says they were one effort, and the hairline below is the other half. */
+  rowWrapLinked: { marginTop: -2 },
+  /**
+   * The chain, drawn in the gutter *between* two rows rather than inside
+   * either index cell: that cell already belongs to `SetMark`, so a marked
+   * drop would otherwise have its own marker replaced by its verdict. It sits
+   * on the index column's centre — 8px in normally, 16 when the live box's own
+   * padding has moved the digit — at the live border's weight, because it is
+   * structure and not something to press.
+   */
+  chainRiser: {
+    position: 'absolute',
+    left: 8,
+    top: -8,
+    width: 1,
+    height: 16,
+    backgroundColor: color.accent700,
+  },
+  chainRiserLive: { left: 16, height: 24 },
   setRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   /** The set you're on: raised out of the ledger, numbers at thumb size. */
   liveBox: {
@@ -2233,6 +2849,9 @@ const sheet = themed(() => ({
   waitRowUnder: { marginTop: 4, paddingTop: 0, borderTopWidth: 0 },
   /** Theirs, a step back from yours: the same line, read second. */
   waitLabelTheirs: { color: color.neutral600 },
+  /* The reason there is no clock here. Accent, because it is a fact about the
+     row you are standing at rather than a wait you are serving. */
+  waitLabelQueued: { color: color.accent400 },
   /**
    * The same lines with no live row to hang under — a sealed exercise still
    * has your rest running on it, and a countdown that vanishes for the length
@@ -2377,6 +2996,7 @@ const sheet = themed(() => ({
   /** A ledger row, not a button — the hold fill is the only thing that reads
       as one, and only while it's being held. */
   addSet: {
+    flex: 1,
     marginTop: 3,
     paddingVertical: 9,
     paddingHorizontal: 2,
@@ -2386,6 +3006,10 @@ const sheet = themed(() => ({
     borderRadius: 0,
   },
   addSetLabel: { fontFamily: font.regular, fontSize: 12.5, color: color.neutral500 },
+  /* Add set and Add drop, side by side and equal: both are held, both add a
+     row, and the only difference between them is whether the row it adds
+     earns the one above it a rest. */
+  addRow: { flexDirection: 'row', gap: 8 },
 
   buddy: {
     flexDirection: 'row',
@@ -2458,6 +3082,20 @@ const sheet = themed(() => ({
 
   ovSub: { fontFamily: font.regular, fontSize: 11.5, color: color.neutral500, marginTop: 3 },
   ovList: { marginTop: 12 },
+  /* A pair, bracketed — one unit here because it is one stop on the screen
+     behind, and tapping either row lands on the same place. */
+  ovPair: { flexDirection: 'row', gap: 9, marginVertical: 6 },
+  ovPairRule: { width: 1, borderRadius: 1, backgroundColor: color.accent700 },
+  ovPairBody: { flex: 1 },
+  ovPairTag: {
+    fontFamily: font.regular,
+    fontSize: 9,
+    letterSpacing: tracking(9, 0.07),
+    textTransform: 'uppercase',
+    color: color.accent400,
+    paddingHorizontal: t.rowPadH,
+    marginBottom: 2,
+  },
   ovRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2542,5 +3180,19 @@ const sheet = themed(() => ({
   markHelp: { fontFamily: font.regular, fontSize: 10.5, color: color.neutral600, marginTop: 8 },
   markField: { marginTop: 14 },
   markInput: { minHeight: 66, paddingTop: 9, textAlignVertical: 'top' },
+  /* The general way to make a drop, under the sheet's own divider — the same
+     toggle-row shape Settings uses, so a switch reads as a switch here too. */
+  linkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: t.rule,
+  },
+  linkText: { flex: 1 },
+  linkLabel: { fontFamily: font.regular, fontSize: 13.5, color: color.text },
+  linkSub: { fontFamily: font.regular, fontSize: 11, color: color.neutral600, marginTop: 1 },
   markClose: { marginTop: 16, height: 40 },
 }));

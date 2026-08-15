@@ -31,9 +31,24 @@ import { pickTip } from '@/data/tips';
 import { themed, useColors, useThemed } from '@/design/theme';
 import { color, font, t, tracking } from '@/design/tokens';
 import { Btn, H2, H4, H6, Input, missingName } from '@/design/ui';
-import { fmtClock, loggedLine, useStore } from '@/store/workout-store';
+import { fmtClock, loggedLine, type LoggedExercise, useStore } from '@/store/workout-store';
 
 const GRID_GAP = 3;
+
+/**
+ * A logged session's exercises, grouped into what they were on the screen: a
+ * lone exercise, or the supersets that were taken as one thing. Adjacency,
+ * like the routine field it comes from — and a `with` on the last entry, or on
+ * one whose partner never got a set ticked, simply groups nothing.
+ */
+const logGroups = (list: readonly LoggedExercise[]): number[][] => {
+  const out: number[][] = [];
+  list.forEach((_, k) => {
+    if (k > 0 && list[k - 1].with === 'next') out[out.length - 1].push(k);
+    else out.push([k]);
+  });
+  return out;
+};
 
 export default function PlanScreen() {
   const styles = useThemed(sheet);
@@ -440,76 +455,107 @@ export default function PlanScreen() {
                 {!!stats && <Text style={styles.logStats}>{stats}</Text>}
 
                 {h.list?.length ? (
-                  h.list.map((e, k) => {
-                    const en = ex(e.ex);
-                    const info = en ? exInfo(en) : null;
-                    return (
-                      <View key={k} style={styles.logEx}>
-                        <View style={styles.logExTop}>
-                          {/* An exercise deleted since falls back to its id,
-                              greyed the same way an untranslated name is —
-                              the sets are still what happened. */}
-                          <Text
-                            style={[
-                              styles.logExName,
-                              (!info || info.missing) && missingName(c),
-                            ]}
-                            numberOfLines={1}
-                          >
-                            {info ? info.text : e.ex}
-                          </Text>
-                          <Text style={styles.logExCount}>
-                            {countN(e.sets.length, L.setCountOne, L.setCount)}
-                          </Text>
+                  // Grouped the way the session drew them: consecutive entries
+                  // joined by `with` were one superset, and two ordinary blocks
+                  // would file as two exercises what was taken as one thing.
+                  logGroups(h.list).map((group) => {
+                    const blocks = group.map((k) => {
+                      const e = h.list![k];
+                      const en = ex(e.ex);
+                      const info = en ? exInfo(en) : null;
+                      // Each drop folded into the set it came off. `50 × 8`
+                      // under `65 × 6` reads as a set that went wrong unless
+                      // the record says the two were one effort — which is the
+                      // whole reason `links` is kept.
+                      const chains: number[][] = [];
+                      e.sets.forEach((_, j) => {
+                        if (e.links?.[j] && chains.length) chains[chains.length - 1].push(j);
+                        else chains.push([j]);
+                      });
+                      const setNode = (j: number, chained: boolean) => {
+                        const line = loggedLine(e.sets[j], measureOf(en), L);
+                        const text = chained ? `↳ ${line}` : line;
+                        // Index for index with the sets — see
+                        // `LoggedExercise`. Absent on every entry logged
+                        // before marks were kept, and on any session nobody
+                        // marked.
+                        const mk = e.marks?.[j] ?? null;
+                        if (!mk) {
+                          return (
+                            <Text key={j} style={styles.logSet}>
+                              {text}
+                            </Text>
+                          );
+                        }
+                        const note = mk.note?.trim();
+                        return (
+                          // A verdict is worth a glyph and stays in the wrap;
+                          // only *words* earn a line of their own, and take
+                          // the full width to get one. The sets around it
+                          // close up as before, so a card with nothing written
+                          // on it is the card it always was.
+                          <View key={j} style={[styles.logMarked, !!note && styles.logNoted]}>
+                            <Text style={styles.logSet}>{text}</Text>
+                            {/* `neutral500`, not accent: in the session the
+                                mark is live and yours to change, here it is
+                                history, written in the greys the figures
+                                beside it are. */}
+                            <Icon d={MARK_D[mk.mark]} size={12} color={c.neutral500} strokeWidth={2.2} />
+                            {note ? (
+                              <Text style={styles.logNote} numberOfLines={2}>
+                                {note}
+                              </Text>
+                            ) : null}
+                          </View>
+                        );
+                      };
+                      return (
+                        <View key={k} style={styles.logEx}>
+                          <View style={styles.logExTop}>
+                            {/* An exercise deleted since falls back to its id,
+                                greyed the same way an untranslated name is —
+                                the sets are still what happened. */}
+                            <Text
+                              style={[styles.logExName, (!info || info.missing) && missingName(c)]}
+                              numberOfLines={1}
+                            >
+                              {info ? info.text : e.ex}
+                            </Text>
+                            <Text style={styles.logExCount}>
+                              {countN(e.sets.length, L.setCountOne, L.setCount)}
+                            </Text>
+                          </View>
+                          <View style={styles.logSets}>
+                            {chains.map((members, ci) =>
+                              members.length === 1 ? (
+                                setNode(members[0], false)
+                              ) : (
+                                <View
+                                  key={`c${ci}`}
+                                  style={[
+                                    styles.logChain,
+                                    members.some((j) => e.marks?.[j]?.note?.trim()) &&
+                                      styles.logNoted,
+                                  ]}
+                                >
+                                  {members.map((j, mi) => setNode(j, mi > 0))}
+                                </View>
+                              )
+                            )}
+                          </View>
                         </View>
-                        <View style={styles.logSets}>
-                          {e.sets.map((v, j) => {
-                            const line = loggedLine(v, measureOf(en), L);
-                            // Index for index with the sets — see
-                            // `LoggedExercise`. Absent on every entry logged
-                            // before marks were kept, and on any session
-                            // nobody marked.
-                            const mk = e.marks?.[j] ?? null;
-                            if (!mk) {
-                              return (
-                                <Text key={j} style={styles.logSet}>
-                                  {line}
-                                </Text>
-                              );
-                            }
-                            const note = mk.note?.trim();
-                            return (
-                              // A verdict is worth a glyph and stays in the
-                              // wrap; only *words* earn a line of their own,
-                              // and take the full width to get one. The sets
-                              // around it close up as before, so a card with
-                              // nothing written on it is the card it always
-                              // was.
-                              <View
-                                key={j}
-                                style={[styles.logMarked, !!note && styles.logNoted]}
-                              >
-                                <Text style={styles.logSet}>{line}</Text>
-                                {/* `neutral500`, not accent: in the session
-                                    the mark is live and yours to change, here
-                                    it is history, written in the greys the
-                                    figures beside it are. */}
-                                <Icon
-                                  d={MARK_D[mk.mark]}
-                                  size={12}
-                                  color={c.neutral500}
-                                  strokeWidth={2.2}
-                                />
-                                {note ? (
-                                  <Text style={styles.logNote} numberOfLines={2}>
-                                    {note}
-                                  </Text>
-                                ) : null}
-                              </View>
-                            );
-                          })}
+                      );
+                    });
+                    return group.length > 1 ? (
+                      <View key={`g${group[0]}`} style={styles.logPair}>
+                        <View style={styles.logPairRule} />
+                        <View style={styles.logPairBody}>
+                          <Text style={styles.logPairTag}>{L.superset}</Text>
+                          {blocks}
                         </View>
                       </View>
+                    ) : (
+                      blocks
                     );
                   })
                 ) : (
@@ -719,6 +765,26 @@ const sheet = themed(() => ({
   /** With words it leaves the wrap and takes the whole line. */
   logNoted: { flexBasis: '100%' },
   logNote: { flex: 1, minWidth: 0, fontFamily: font.regular, fontSize: 11, color: color.neutral500 },
+  /** A set and its drop, joined by `↳` — one item in the wrap, one effort. */
+  logChain: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+
+  /* A logged superset keeps the bracket the session drew it with. One step
+     down in weight from the live one, for the same reason the mark's glyph
+     dims here: there it is yours to change, here it is history. */
+  logPair: { flexDirection: 'row', gap: 9 },
+  logPairRule: { width: 1, borderRadius: 1, backgroundColor: color.accent800, marginTop: 14 },
+  logPairBody: { flex: 1 },
+  logPairTag: {
+    fontFamily: font.regular,
+    fontSize: 10,
+    letterSpacing: tracking(10, 0.06),
+    textTransform: 'uppercase',
+    color: color.accent400,
+    marginTop: 9,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: t.rule,
+  },
 
   saveLinkBtn: { alignSelf: 'flex-start', marginTop: 11, paddingVertical: 2, paddingHorizontal: 0 },
   saveLink: { fontSize: 12 },

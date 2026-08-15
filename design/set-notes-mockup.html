@@ -158,6 +158,18 @@
   .lastnote { display: flex; align-items: center; gap: 6px; }
   .lastnote .t { font-size: 11px; color: var(--n500); flex: 1; min-width: 0; }
 
+  /* the tip — one hairline, no fill, an accent dot, one × */
+  .tip {
+    display: flex; align-items: flex-start; gap: 9px;
+    border: 1px solid var(--divider); border-radius: 8px;
+    padding: 9px 10px 9px 11px; margin: 8px 0; background: transparent;
+  }
+  .tip .dot { width: 6px; height: 6px; border-radius: 3px; background: var(--accent); margin-top: 6px; flex: none; }
+  .tip .body { flex: 1; min-width: 0; }
+  .tip .tt { font-size: 13px; font-weight: 500; line-height: 17px; }
+  .tip .ts { font-size: 11.5px; color: var(--n500); line-height: 16px; }
+  .tip .x { font-size: 16px; color: var(--n600); line-height: 18px; flex: none; }
+
   .waitrow {
     display: flex; align-items: center; gap: 8px; margin-top: 8px; padding-top: 7px;
     border-top: 1px solid var(--wash-t8);
@@ -264,10 +276,11 @@
   <div class="settled">
     <div class="h">What this mockup decides</div>
     <ul>
-      <li><strong>In the session, the line arrives with the tick.</strong> A set
-        that has been lifted can be judged; one three rows down cannot. So every
-        <em>done</em> set carries the slim line — the note when there is one, a
-        dim way in when there isn't — and untouched rows stay bare.</li>
+      <li><strong>In the session, the line arrives with the tick.</strong> The
+        note when there is one, a dim way in when there isn't — on every set you
+        have lifted, and none you haven't. The mark sheet used to be reachable
+        only by tapping the 16px index digit; the line is the fix for that, and
+        the tick is what keeps it from costing a screenful.</li>
       <li><strong>Last time's verdicts hoist to the top of the exercise.</strong>
         Whole, each naming its set, read before set 1 — where advice can still
         change what you do. They leave the set row entirely rather than being
@@ -292,8 +305,9 @@
   <h2 class="sec">1 · The session row</h2>
   <p class="lede wide">
     Three densities for the same 5-set exercise. Set 1 and 2 are done, set 3 is
-    live. The middle frame is the literal reading of <em>permanently shown</em>;
-    the right-hand one is what I'd ship.
+    live. <strong>C is what shipped</strong>, after B was built and run on a
+    real phone. All three are kept: the argument only settles once you have seen
+    what each one costs in the hand.
   </p>
 
   <div class="trio">
@@ -389,12 +403,12 @@
 
     <!-- ── B · a line under every row ─────────────────────────────────── -->
     <div class="half">
-      <div class="cap mid">B · Under every row, always</div>
+      <div class="cap no">B · Under every row, always · tried, reverted</div>
       <div class="sub">
-        The literal reading. Every set carries the line whether or not it has
-        anything to say. <b>Five sets buy five lines</b> — and on an 8-set day
-        that is ~130px of mostly <em>+ Note</em>, which is furniture on the one
-        screen working hardest not to become it.
+        Every set carries the line whether or not it has anything to say.
+        Built and run on the phone, and <b>it gives back too much screen</b> —
+        five sets buy five lines, an 8-set day ~130px of mostly <em>+ Note</em>,
+        and the set you are working on sits that much further down.
       </div>
       <div class="phone tall">
         <div class="status"><span>9:41</span><span>▮▮▮</span></div>
@@ -488,10 +502,10 @@
     <div class="half">
       <div class="cap good">C · From the tick onward · shipped</div>
       <div class="sub">
-        The line appears the moment a set is logged, and stays for good. <b>A set
-        you have lifted is a set you have an opinion about</b>; set 4 is a plan,
-        and a plan has nothing to say yet. The live row's <em>Last time</em>
-        line is drawn here as it was — §2 moves it.
+        The line appears the moment a set is logged, and stays. <b>The tick is
+        where the two things coincide</b> — a set you have lifted is a set you
+        have an opinion about, and it is also the only set you could be writing
+        about. Row 4 is a plan and has nothing to say yet.
       </div>
       <div class="phone tall">
         <div class="status"><span>9:41</span><span>▮▮▮</span></div>
@@ -580,14 +594,11 @@
 
   <div class="notes">
     <ul>
-      <li><strong>One slot, three tenants, one precedence.</strong> The line
-        under a row can be last time's advice, this set's own words, or the way
-        in — never two of them. <em>Own words win, then last time's, then the
-        affordance</em>: once you have written something, your own sentence is
-        the live fact and the ghost of last week is spent. That is the rule the
-        current code already implies by rendering both; making the slot single
-        is what stops a live row growing to four lines when the rest countdown
-        is under it too.</li>
+      <li><strong>One slot, two tenants.</strong> Own words when there are
+        any, else the way in on a ticked set, else nothing. Last time's advice
+        was the third tenant and has left the row entirely (§2), which is what
+        stops a live row growing to four lines when the rest countdown is under
+        it too.</li>
       <li><strong>The empty line is the quietest thing on the screen</strong> —
         <code>neutral700</code>, 11px, the <code>note</code> glyph the mark sheet
         already uses. It is dimmer than the ghost figures beside it, which is
@@ -603,15 +614,19 @@
   </div>
 
   <div class="settled warn">
-    <div class="h">The cost of B, stated</div>
+    <div class="h">Why B came back off the phone</div>
     <ul>
-      <li>An 8-set exercise: <strong>8 × ~16px = 130px</strong> of vertical, six
-        or seven lines of it reading <em>+ Note</em>. The set you are on gets
-        pushed further from the thumb every set you finish, and the ledger stops
-        scanning as a column of numbers.</li>
+      <li>An 8-set exercise: <strong>8 × ~16px = 130px</strong> of vertical,
+        most of it reading <em>+ Note</em>. Dimming it to <code>neutral700</code>
+        was the mitigation and it was not enough — the pixels are spent whatever
+        colour they are, and the set you are working on is what moves down.</li>
       <li>C pays the same 16px only where a set has been performed, so the cost
-        grows exactly as fast as the reason for it does — and an exercise you have
-        just started still opens as a clean ledger.</li>
+        grows exactly as fast as the reason for it does, and an exercise you
+        have just started opens as a clean ledger.</li>
+      <li><strong>What C gives up, stated:</strong> the way in arrives rather
+        than being always there. What it keeps is that it arrives on every set
+        you could possibly use it on — which is the part the index digit never
+        managed, and the whole complaint.</li>
     </ul>
   </div>
 
@@ -767,7 +782,146 @@
 
   <hr class="fade">
 
-  <h2 class="sec">3 · The mark sheet stays exactly as it is</h2>
+  <h2 class="sec">3 · The tutorial — one tip, re-aimed</h2>
+  <p class="lede wide">
+    The catalogue is closed on purpose, and it already holds <code>mark</code> —
+    <em>the set number opens a verdict</em>. It doesn't get a second tip; it gets
+    the right one. Its old copy was honest while the index digit was the only way
+    in, and <strong>the shipped <code>+ Note</code> line makes that sentence
+    point at the wrong thing.</strong>
+  </p>
+
+  <div class="pair">
+    <div class="half">
+      <div class="cap bad">Before · pointing at a control that is no longer hidden</div>
+      <div class="sub">
+        <b>Tap the set number</b> — a 16px target nobody was told about, which is
+        exactly what a tip is for. Since this session it's the <em>secondary</em>
+        route, and the tip is teaching the harder path to a labelled thing.
+      </div>
+      <div class="phone" style="height: 420px">
+        <div class="status"><span>9:41</span><span>▮▮▮</span></div>
+        <div class="scr">
+          <div class="exname">Bench Press</div>
+          <div class="colhead">
+            <span>#</span><span>Last time</span><span class="c">kg</span><span class="c">Reps</span><span></span>
+          </div>
+          <div class="rowwrap">
+            <div class="setrow">
+              <span class="idx">1</span><span class="prev">70 × 8</span>
+              <span class="cell">70</span><span class="cell">8</span>
+              <span class="tick on">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#b5abfc" stroke-width="2.4" stroke-linecap="round"/></svg>
+              </span>
+            </div>
+            <div class="markline">
+              <svg class="mk" width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M12 10.8v6.6M12 6.9v.01" stroke="#595d6c" stroke-width="2.2" stroke-linecap="round"/></svg>
+              <span class="t empty">+ Note</span>
+            </div>
+          </div>
+          <div class="rowwrap">
+            <div class="livebox">
+              <div class="setrow">
+                <span class="idx live">2</span><span class="prev">70 × 8</span>
+                <span class="cell big ghost">70</span><span class="cell big ghost">8</span>
+                <span class="tick live"></span>
+              </div>
+            </div>
+            <div class="tip">
+              <span class="dot"></span>
+              <span class="body">
+                <div class="tt">Tap the set number</div>
+                <div class="ts">Heavier, lighter, just right — or a few words for next time.</div>
+              </span>
+              <span class="x">×</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="half">
+      <div class="cap good">After · what the labelled line is <em>for</em></div>
+      <div class="sub">
+        <code>+ Note</code> says <em>note</em> and says nothing about a verdict,
+        and nothing on the screen says it comes back. <b>That's the part still
+        invisible</b> — so that's what the tip now teaches, from the first logged
+        set rather than the second.
+      </div>
+      <div class="phone" style="height: 420px">
+        <div class="status"><span>9:41</span><span>▮▮▮</span></div>
+        <div class="scr">
+          <div class="exname">Bench Press</div>
+          <div class="colhead">
+            <span>#</span><span>Last time</span><span class="c">kg</span><span class="c">Reps</span><span></span>
+          </div>
+          <div class="rowwrap">
+            <div class="setrow">
+              <span class="idx">1</span><span class="prev">70 × 8</span>
+              <span class="cell">70</span><span class="cell">8</span>
+              <span class="tick on">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#b5abfc" stroke-width="2.4" stroke-linecap="round"/></svg>
+              </span>
+            </div>
+            <div class="markline">
+              <svg class="mk" width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M12 10.8v6.6M12 6.9v.01" stroke="#595d6c" stroke-width="2.2" stroke-linecap="round"/></svg>
+              <span class="t empty">+ Note</span>
+            </div>
+          </div>
+          <div class="rowwrap">
+            <div class="livebox">
+              <div class="setrow">
+                <span class="idx live">2</span><span class="prev">70 × 8</span>
+                <span class="cell big ghost">70</span><span class="cell big ghost">8</span>
+                <span class="tick live"></span>
+              </div>
+            </div>
+            <div class="tip">
+              <span class="dot"></span>
+              <span class="body">
+                <div class="tt">Say how the set went</div>
+                <div class="ts">Tap + Note under the set — heavier, lighter, just right, or a few words. It’s there next time.</div>
+              </span>
+              <span class="x">×</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <ul>
+      <li><strong>Not a second tip.</strong> Two hints on one feature is what
+        <code>pickTip</code> exists to make impossible — it returns at most one,
+        and the session holds its pick for the whole visit so a first workout
+        can't become a slideshow. A new id would have sat in
+        <code>TIP_ORDER</code> competing with the one already about this.</li>
+      <li><strong>Armed from the first tick, not the second.</strong> The line
+        it names is on screen from the moment the exercise opens, so what the
+        tip waits on is the other half: a set having actually happened, because
+        judging one you haven't lifted is not a thing and the tip says
+        <em>say how the set went</em>. <code>doneN &gt;= 2</code> was right when
+        there was nothing on the glass to point at and the tip had to conjure
+        the control out of the digit.</li>
+      <li><strong>Doing the thing is still the dismissal.</strong>
+        <code>tipDone('mark')</code> fires from <code>onMark</code>, which every
+        way in already funnels through — the <code>+ Note</code> line, your own
+        note line, and the index cell. No new wiring.</li>
+      <li><strong>Three showings, then never</strong> (<code>MAX_SHOWS</code>),
+        and only after the two-second dwell in <code>&lt;Tip&gt;</code>. Unchanged
+        — this is a copy and arming change, not a new mechanism.</li>
+      <li><strong>The tour is untouched.</strong> <code>features()</code> reads
+        <code>tipTick</code> / <code>tipDrag</code> / <code>tipRest</code>, and
+        <code>mark</code> was never one of its cards. Adding it there would put
+        a minute-zero rundown in front of a gesture you can't perform until
+        you've logged a set.</li>
+    </ul>
+  </div>
+
+  <hr class="fade">
+
+  <h2 class="sec">4 · The mark sheet stays exactly as it is</h2>
   <p class="lede wide">
     Nothing in this change touches the sheet — it is still four verdicts and a
     words field, still the one screen with room to read a note in full. What
@@ -831,10 +985,10 @@
     <div class="half">
       <div class="cap good">And it comes back, a week later</div>
       <div class="sub">
-        The payoff that already exists and is worth restating: what you wrote
-        lands on <em>next</em> week's matching row as advice, out of
-        <code>lastMarks</code>. <b>That path is untouched.</b> This change adds
-        the diary, it does not replace the ghost.
+        The payoff, in its new place: what you wrote lands at the <em>top</em>
+        of the exercise next session, out of <code>lastMarks</code>. <b>The row
+        it was written on no longer carries it</b> — that is what §2 moved, and
+        it is why the live row below is clear.
       </div>
       <div class="phone" style="height: 520px">
         <div class="status"><span>9:41</span><span>▮▮▮</span></div>
@@ -844,6 +998,12 @@
           </div>
           <div class="exname">Bench Press</div>
           <div class="exmeta">Chest · Barbell</div>
+          <div class="lastnotes">
+            <div class="lastnote">
+              <svg class="mk" width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M12 19.2V5.2M5.8 11.4l6.2-6.2 6.2 6.2" stroke="#9397ab" stroke-width="2.2" stroke-linecap="round"/></svg>
+              <span class="t">Last time · Set 1 · bar felt light — try 75 next</span>
+            </div>
+          </div>
           <div class="colhead">
             <span>#</span><span>Last time</span><span class="c">kg</span><span class="c">Reps</span><span></span>
           </div>
@@ -853,10 +1013,6 @@
                 <span class="idx live">1</span><span class="prev">70 × 8</span>
                 <span class="cell big ghost">70</span><span class="cell big ghost">8</span>
                 <span class="tick live"></span>
-              </div>
-              <div class="markline">
-                <svg class="mk" width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M12 19.2V5.2M5.8 11.4l6.2-6.2 6.2 6.2" stroke="#9397ab" stroke-width="2.2" stroke-linecap="round"/></svg>
-                <span class="t">Last time · bar felt light — try 75 next</span>
               </div>
             </div>
           </div>
@@ -879,7 +1035,7 @@
 
   <hr class="fade">
 
-  <h2 class="sec">4 · The diary — Plan's day panel</h2>
+  <h2 class="sec">5 · The diary — Plan's day panel</h2>
   <p class="lede wide">
     This is the half that does not exist at all today. The day panel reads
     <code>h.list</code> back through <code>loggedLine</code> and prints a loose
@@ -1053,7 +1209,7 @@
 
   <hr class="fade">
 
-  <h2 class="sec">5 · The shape</h2>
+  <h2 class="sec">6 · The shape</h2>
   <p class="lede wide">
     One optional field, index for index with the sets it describes — the same
     relationship <code>lastMarks</code> already has to <code>lastLog</code>, and
@@ -1101,7 +1257,7 @@
 
   <hr class="fade">
 
-  <h2 class="sec">6 · Copy</h2>
+  <h2 class="sec">7 · Copy</h2>
   <p class="lede">
     One new string, in both languages. German written rather than translated:
     the plus and a noun, matching <code>+ Übung</code> and <code>+ Als Routine
@@ -1133,15 +1289,16 @@
 
   <hr class="fade">
 
-  <h2 class="sec">7 · What was settled</h2>
+  <h2 class="sec">8 · What was settled</h2>
 
   <div class="ask">
     <div class="h">Built as drawn</div>
     <ol>
-      <li><strong>C, not B.</strong> The line arrives with the tick and stays
-        for good. B is one boolean away if the offer turns out to be wanted on
-        rows you haven't reached yet — but an 8-set exercise pays 130px for it,
-        six lines of which say <em>+ Note</em>.</li>
+      <li><strong>C, after building B and running it.</strong> The line
+        arrives with the tick. B (under every row, always) is the literal
+        reading of the ask and was shipped first; on the phone it gave back too
+        much screen, so the offer now lands where it is usable — on a set that
+        has happened. The index digit stays tappable and stays unadvertised.</li>
       <li><strong>One slot, not a stack.</strong> Own words, else the way in on
         a lifted set, else nothing. Last time's advice left the row entirely
         (§2) rather than sharing the slot — the live box can already be carrying

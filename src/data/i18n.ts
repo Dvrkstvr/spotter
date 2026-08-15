@@ -81,6 +81,15 @@ export const DICT = {
     addNote: '+ Note',
     holdAddSet: 'Hold to add a set', startNow: 'Start now', restLeftLabel: 'Rest · {t}',
     holdNext: 'Hold for the next exercise',
+    // Two sets that share one rest — see `data/superset.ts`. `dropAfter` and
+    // `noRestFrom` stand where a countdown would have been, which is what
+    // makes them explanations rather than furniture: they leave with the row.
+    holdAddDrop: 'Hold to add a drop set', addDrop: '+ Drop set',
+    dropAfter: 'Drop from set {n} — no rest',
+    linkLabel: 'Straight after set {n}', linkSub: 'No rest between them.',
+    superset: 'Superset', supersetRound: 'Superset · round {n} of {m}',
+    noRestFrom: 'No rest — straight from {name}',
+    pairNext: 'Superset with the next exercise', unpair: 'Unpair',
     emptySessionNote: 'No exercises yet — add the first one and log as you go.',
     removeExercise: 'Remove exercise',
     buddyLeftNote: '{name} disconnected — finishing on your own.',
@@ -133,16 +142,23 @@ export const DICT = {
        consequence. Three of them are also the welcome tour's rundown cards,
        read from here by `onboarding-overlay.tsx`, so the tour and the tips can
        never phrase one feature two ways. */
-    tipDrag: 'Hold a cell, then drag up or down',
-    tipDragSub: '0.5 kg or one rep per notch, and you’ll feel each one. Most sets never need the keyboard.',
+    tipDrag: 'Slide a cell up or down',
+    // The notch is the slow speed, which is the one a first drag is made at —
+    // and the sweep is the half nobody would go looking for, so it's the half
+    // the line spends its aside on.
+    tipDragSub: '0.5 kg or one rep per notch — drag faster and it steps in bigger jumps. Most sets never need the keyboard.',
     tipTick: 'The box is the whole button',
     tipTickSub: 'One tap logs the set. Tap it again to take it back.',
     tipGhost: 'Tap last time’s numbers',
     tipGhostSub: 'They land in the fields — still yours to change.',
     tipRest: 'The rest is already running',
     tipRestSub: 'It’s drawn on the set you’re on next. Start now cuts it short.',
-    tipMark: 'Tap the set number',
-    tipMarkSub: 'Heavier, lighter, just right — or a few words for next time.',
+    // Re-aimed when the note line shipped: the set number is no longer the only
+    // way in, so the tip stopped being "here is a hidden button" and became
+    // what the labelled one is for. `+ Note` says note and nothing about a
+    // verdict, and nothing on the screen says it comes back.
+    tipMark: 'Say how the set went',
+    tipMarkSub: 'Tap + Note under a logged set — heavier, lighter, just right, or a few words. It’s there next time.',
     tipSwipe: 'Swipe for the next exercise',
     tipSwipeSub: 'Or open the chip up top and jump to any of them.',
     tipChip: 'The whole workout is behind the chip',
@@ -508,6 +524,14 @@ export const DICT = {
     addNote: '+ Notiz',
     holdAddSet: 'Für einen neuen Satz halten', startNow: 'Jetzt starten', restLeftLabel: 'Pause · {t}',
     holdNext: 'Für die nächste Übung halten',
+    // Satz durchgehend, wie überall sonst: Dropsatz, Supersatz, „Direkt nach
+    // Satz 3“. Reduktionssatz wäre korrekter und sagt niemand.
+    holdAddDrop: 'Für einen Dropsatz halten', addDrop: '+ Dropsatz',
+    dropAfter: 'Drop aus Satz {n} — keine Pause',
+    linkLabel: 'Direkt nach Satz {n}', linkSub: 'Keine Pause dazwischen.',
+    superset: 'Supersatz', supersetRound: 'Supersatz · Runde {n} von {m}',
+    noRestFrom: 'Keine Pause — direkt von {name}',
+    pairNext: 'Supersatz mit der nächsten Übung', unpair: 'Koppelung lösen',
     emptySessionNote: 'Noch keine Übungen — füg die erste hinzu und trag ein, was du machst.',
     removeExercise: 'Übung entfernen',
     buddyLeftNote: '{name} hat die Verbindung getrennt — du machst allein weiter.',
@@ -545,16 +569,16 @@ export const DICT = {
     // where German needs one — 'heute' and 'gestern' take none
     daysAgo: 'vor {n} Tagen', oneDayAgo: 'gestern',
     /* — die Hinweise — siehe den englischen Block */
-    tipDrag: 'Halt ein Feld, dann zieh hoch oder runter',
-    tipDragSub: '0,5 kg oder eine Wdh. pro Raste — du spürst jede. Die meisten Sätze brauchen nie die Tastatur.',
+    tipDrag: 'Zieh ein Feld hoch oder runter',
+    tipDragSub: '0,5 kg oder eine Wdh. pro Raste — je schneller du ziehst, desto größer die Sprünge. Die meisten Sätze brauchen nie die Tastatur.',
     tipTick: 'Die Box ist der ganze Knopf',
     tipTickSub: 'Ein Fingertipp hakt den Satz ab. Nochmal tippen nimmt ihn zurück.',
     tipGhost: 'Tipp die Zahlen von letztem Mal an',
     tipGhostSub: 'Sie landen in den Feldern — ändern kannst du sie weiterhin.',
     tipRest: 'Die Pause läuft schon',
     tipRestSub: 'Sie steht auf dem Satz, der als Nächstes dran ist. „Jetzt starten“ kürzt sie ab.',
-    tipMark: 'Tipp die Satznummer an',
-    tipMarkSub: 'Schwerer, leichter, passt — oder ein paar Worte fürs nächste Mal.',
+    tipMark: 'Sag, wie der Satz war',
+    tipMarkSub: 'Tipp + Notiz unter einem abgehakten Satz an — schwerer, leichter, passt, oder ein paar Worte. Nächstes Mal steht’s da.',
     tipSwipe: 'Wisch zur nächsten Übung',
     tipSwipeSub: 'Oder öffne den Chip oben und spring zu jeder beliebigen.',
     tipChip: 'Hinter dem Chip liegt das ganze Training',

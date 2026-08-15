@@ -12,10 +12,11 @@
  * in place of the plain start button. Structure syncs both ways; the sets
  * column is the shared one, reps and kg stay per-person.
  */
-import { useState } from 'react';
+import React, { useState } from 'react';
 import {
   Animated,
   PanResponder,
+  Pressable,
   ScrollView,
   StyleProp,
   Text,
@@ -161,8 +162,14 @@ export function RoutineOverlay() {
             {r.items.map((item, n) => {
               const e = ex(item.ex);
               const name = e ? exInfo(e) : null;
+              // A superset, and the only place in the app one is made: the
+              // routine holds *which two exercises*, and a running session
+              // only ever reads it. Adjacency, so the gap between two rows is
+              // literally where the question lives.
+              const paired = item.with === 'next' && n + 1 < r.items.length;
               return (
-                <View key={`${item.ex}-${n}`} style={styles.row}>
+                <React.Fragment key={`${item.ex}-${n}`}>
+                <View style={styles.row}>
                   <View style={styles.rowText}>
                     {/* One line, like the co-draft rows below and every other
                         list — a long custom name must not break the grid. */}
@@ -215,11 +222,43 @@ export function RoutineOverlay() {
                     label="×"
                     accessibilityLabel={L.removeExercise}
                     hitSlop={slop}
-                    onConfirm={() => mutRoutine(r.id, (copy) => { copy.items.splice(n, 1); })}
+                    onConfirm={() =>
+                      mutRoutine(r.id, (copy) => {
+                        copy.items.splice(n, 1);
+                        // A pair needs two rows. Deleting one leaves the other
+                        // pointing at whatever slid up into its place, which
+                        // would silently superset two exercises nobody joined.
+                        if (n > 0) delete copy.items[n - 1].with;
+                      })
+                    }
                     style={styles.colDel}
                     labelStyle={styles.delGlyph}
                   />
                 </View>
+                {/* The gutter between two rows, and the whole of the pairing
+                    UI. Tapped, not held: joining two exercises throws nothing
+                    away, and it is undone by the same tap. */}
+                {n + 1 < r.items.length && (
+                  <Pressable
+                    accessibilityRole="switch"
+                    accessibilityState={{ checked: paired }}
+                    accessibilityLabel={L.pairNext}
+                    hitSlop={slop}
+                    onPress={() =>
+                      mutRoutine(r.id, (copy) => {
+                        if (copy.items[n].with) delete copy.items[n].with;
+                        else copy.items[n].with = 'next';
+                      })
+                    }
+                    style={styles.pairGap}
+                  >
+                    <View style={styles.pairGlyph}>
+                      <View style={[styles.pairRule, paired && styles.pairRuleOn]} />
+                    </View>
+                    {paired && <Text style={styles.pairLabel}>{L.superset}</Text>}
+                  </Pressable>
+                )}
+                </React.Fragment>
               );
             })}
           </View>
@@ -534,6 +573,30 @@ const sheet = themed(() => ({
     backgroundColor: wash.accent(8),
   },
   delGlyph: { fontFamily: font.regular, fontSize: 15, color: color.neutral600 },
+
+  /* The pairing gutter. Its height is `t.gap` back out again, so an unpaired
+     list measures exactly as it always did and only the tap target is new. */
+  pairGap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    height: 18,
+    marginVertical: -t.gap,
+    paddingLeft: t.rowPadH,
+  },
+  pairGlyph: { width: 20, height: 18, alignItems: 'center', justifyContent: 'center' },
+  /* A hairline through the gap rather than a glyph beside it: the same thing
+     the session draws between two joined rows, and the same thing again one
+     level down between a set and its drop. */
+  pairRule: { width: 1, height: 18, backgroundColor: color.neutral800 },
+  pairRuleOn: { backgroundColor: color.accent700 },
+  pairLabel: {
+    fontFamily: font.regular,
+    fontSize: 9.5,
+    letterSpacing: tracking(9.5, 0.06),
+    textTransform: 'uppercase',
+    color: color.accent400,
+  },
 
   grip: { width: 20, height: 26, alignItems: 'center', justifyContent: 'center' },
   chip: {

@@ -644,6 +644,11 @@ const cleanRoutineItem = (v: unknown): RoutineItem | null => {
     w: Math.max(0, finite(v.w, 0)),
   };
   if (v.planned === true) it.planned = true;
+  // The superset travels, because it is structure — the same half of a routine
+  // `mergeRoutine` takes from the sender along with the order and the set
+  // counts, where reps and weight stay this phone's. A build that predates it
+  // sends nothing and the routine simply arrives unpaired.
+  if (v.with === 'next') it.with = 'next';
   return it;
 };
 

@@ -27,13 +27,22 @@
  * The two clearing calls at the bottom are what the laziness costs: they run at
  * mount and on every return to the app, so neither of them may load the module.
  *
- * One limitation worth knowing: expo-notifications only gets an *exact* alarm
- * where `canScheduleExactAlarms()` is true, which on Android 14+ means a
- * permission the user has to grant by hand. Without it the alarm is
- * `setAndAllowWhileIdle` — it still fires while the phone is idle, but Doze can
- * batch it late. A phone being carried round a gym rarely reaches deep Doze; if
- * this ever lands minutes late in practice, the fix is SCHEDULE_EXACT_ALARM and
- * a prompt, not a workaround here.
+ * **The alarm is exact, and that is a manifest declaration rather than anything
+ * in this file.** expo-notifications picks its own branch —
+ * `setExactAndAllowWhileIdle` where `canScheduleExactAlarms()` is true and
+ * `setAndAllowWhileIdle` otherwise — and the package's own manifest declares
+ * neither exact-alarm permission, so for a year every rest took the inexact
+ * branch. Inexact means batched with whatever else wakes the phone, and a rest
+ * is exactly the shape that reaches Doze: screen off, phone stationary on a
+ * bench, three minutes. In Doze the inexact call is rate-limited to about once
+ * per nine minutes, which is a ninety-second rest announced four minutes late —
+ * by which time you have already done the set. So `app.json` declares
+ * `USE_EXACT_ALARM` (Android 13+, granted at install, no prompt and no trip to
+ * settings) and `SCHEDULE_EXACT_ALARM` for 12 and 13, where declaring it is
+ * itself the grant. Two things follow: this is a native change, so it needs a
+ * prebuild and a fresh build on both phones; and `USE_EXACT_ALARM` is a
+ * Play-restricted permission, which costs nothing while Spotter is sideloaded
+ * and would become `SCHEDULE_EXACT_ALARM` plus a prompt if it ever shipped.
  */
 import { LogBox, Platform } from 'react-native';
 

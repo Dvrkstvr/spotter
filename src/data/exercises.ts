@@ -509,8 +509,25 @@ export const infoFor = (id: string, lang: Lang): ExerciseInfo | undefined =>
  * see `sessionFrom` in the store. Absent means "just the default", so nothing
  * already on a phone has to be touched, and the seeded routines below stay
  * unmarked on purpose: their figures are the design's, not this user's.
+ *
+ * `with` is a superset: this row is taken together with the one after it, one
+ * rest at the end of the round rather than one between the halves. Adjacency
+ * rather than a group id, because the editor already *is* a flat reorderable
+ * list — a drag out of a pair breaks it with no bookkeeping, and a third
+ * exercise joined on is two links in a row. An orphan (last row, or a
+ * neighbour deleted since) resolves to no pair where it is read, never swept;
+ * see `data/superset.ts`, which owns every answer that follows from it. The
+ * seeded routines carry none: a superset is a choice about how you like to
+ * train, and shipping one inside Chest A would be the library making it.
  */
-export type RoutineItem = { ex: string; sets: number; reps: number; w: number; planned?: true };
+export type RoutineItem = {
+  ex: string;
+  sets: number;
+  reps: number;
+  w: number;
+  planned?: true;
+  with?: 'next';
+};
 export type Routine = { id: string; names: LangMap; items: RoutineItem[] };
 
 export const DEFAULT_ROUTINES: Routine[] = [
