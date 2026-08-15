@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BalanceRadar } from '@/components/balance-radar';
 import { FullScreen } from '@/components/sheet';
+import { Tip } from '@/components/tip';
 import type { Strings } from '@/data/i18n';
 import {
   EVEN_SHARE,
@@ -31,6 +32,7 @@ import {
   trainingStats,
   volumeSeries,
 } from '@/data/stats';
+import { pickTip } from '@/data/tips';
 import { useBackClose } from '@/hooks/use-back-close';
 import { themed, useColors, useThemed } from '@/design/theme';
 import { color, font, radius, t, tracking, wash } from '@/design/tokens';
@@ -98,6 +100,15 @@ export function InsightsOverlay() {
         <Text style={styles.sub}>
           {L.insightsSub.replace('{days}', String(st.days)).replace('{n}', String(st.sessions))}
         </Text>
+
+        {/* The second and last card tip. What it teaches is the property that
+            makes this whole screen free — it only ever reads — which no chart
+            on it can say about itself, and which is the answer to the question
+            a statistics screen usually raises: what do I have to keep up to
+            date for this to stay true? Nothing. */}
+        {pickTip(s.tips, ['stats']) === 'stats' && (
+          <Tip card id="stats" title={L.tipStats} sub={L.tipStatsSub} style={styles.statsTip} />
+        )}
 
         <Seg
           style={styles.seg}
@@ -284,6 +295,7 @@ const sheet = themed(() => ({
   tight: { letterSpacing: tracking(t.h2, -0.02) },
   sub: { fontFamily: font.regular, fontSize: 12.5, color: color.neutral500, marginTop: 3 },
   seg: { marginTop: 12 },
+  statsTip: { marginTop: 12, marginBottom: 0 },
   empty: { fontFamily: font.regular, fontSize: 13.5, color: color.neutral500, marginTop: 22 },
 
   card: {

@@ -20,15 +20,16 @@ import { ReactNode, useState } from 'react';
 import { Animated, Pressable, ScrollView, Switch, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { HoldBtn } from '@/components/hold-btn';
 import { RiseIn } from '@/components/motion';
 import { ReorderRows } from '@/components/reorder-rows';
-import { FullScreen, Sheet } from '@/components/sheet';
+import { RestoreSheet, restoreLine } from '@/components/overlays/restore-sheet';
+import { FullScreen } from '@/components/sheet';
 import { Envelope, pickAndRead, saveAndShare } from '@/data/backup';
 import { hasRadio, isSimRadio, sayGoodbye } from '@/data/buddy-radio';
 import { FIRST_UPS } from '@/data/buddy-sync';
 import { DEFAULT_GROUPS, DEFAULT_KINDS } from '@/data/exercises';
 import { dismissRestAlarms, ensureAlarmPermission } from '@/data/rest-alarm';
+import { TIP_COUNT, tipsRetired } from '@/data/tips';
 import { useBackClose } from '@/hooks/use-back-close';
 import { themed, useColors, useDark, useThemed } from '@/design/theme';
 import {
@@ -43,7 +44,7 @@ import {
   themeSwatch,
   tracking,
 } from '@/design/tokens';
-import { Btn, H2, H4, H6, Seg } from '@/design/ui';
+import { Btn, H2, H6, Seg } from '@/design/ui';
 import { resolveNames, STORAGE_VERSION, useStore } from '@/store/workout-store';
 
 /** Rest lengths worth a tap. 0 is the timer off — see `restSeconds`. */
@@ -71,7 +72,7 @@ const themeKey = (n: ThemeName) =>
 export function SettingsOverlay() {
   const styles = useThemed(sheet);
   const c = useColors();
-  const { s, L, patch, allEx, reorder, endPairing, exportState, importState } = useStore();
+  const { s, L, patch, allEx, reorder, endPairing, exportState, resetTips } = useStore();
   const insets = useSafeAreaInsets();
   const dark = useDark();
   const close = () => patch({ settingsOpen: false });
@@ -314,6 +315,24 @@ export function SettingsOverlay() {
           />
         </Fold>
 
+        {/* The door back into the tips — and unlike the tour's own row (hidden
+            below, in the danger corner) this one can live in the ordinary part
+            of Settings: it writes `tips: {}` and nothing else. Nothing is
+            re-applied, nothing is overwritten, and the count on the right
+            going back to zero is the whole confirmation it needs. */}
+        <H6 style={styles.head}>{L.tips}</H6>
+        <Pressable onPress={resetTips} style={styles.actionRow}>
+          <View style={styles.tipsRow}>
+            <Text style={styles.actionLabel}>{L.tipsAgain}</Text>
+            <Text style={styles.tipsCount}>
+              {L.tipsSeen
+                .replace('{n}', String(tipsRetired(s.tips)))
+                .replace('{m}', String(TIP_COUNT))}
+            </Text>
+          </View>
+          <Text style={styles.hint}>{L.tipsAgainHint}</Text>
+        </Pressable>
+
         <H6 style={styles.head}>{L.data}</H6>
         <Pressable onPress={doExport} style={styles.actionRow}>
           <Text style={styles.actionLabel}>{L.exportBackup}</Text>
@@ -325,10 +344,14 @@ export function SettingsOverlay() {
         </Pressable>
         {note && <Text style={styles.note}>{note}</Text>}
 
-        {/* The danger corner: next to restore-from-backup in spirit, past
-            everything people come here weekly for. Reopening the tour is safe
-            in itself — it drafts locally — but *finishing* it re-applies the
-            routine picks, which is why it lives down here and says so. */}
+        {/* The danger corner — hidden, not removed. It was the only door back
+            into the tour from inside the app; the tour itself, its strings and
+            `onboardingOpen` are all untouched, so restoring the section is
+            uncommenting the block below. Reopening the tour is safe in itself
+            (it drafts locally) but *finishing* it re-applies the routine picks,
+            which is why it lived down here and why it is the one thing on this
+            screen worth being able to take away. */}
+        {/*
         <H6 style={styles.head}>{L.dangerHead}</H6>
         <Pressable
           onPress={() => patch({ onboardingOpen: true, settingsOpen: false })}
@@ -337,6 +360,7 @@ export function SettingsOverlay() {
           <Text style={styles.actionLabel}>{L.rerunSetup}</Text>
           <Text style={styles.hint}>{L.rerunSetupHint}</Text>
         </Pressable>
+        */}
 
         <H6 style={styles.head}>{L.about}</H6>
         {aboutRows.map(([label, value]) => (
@@ -353,35 +377,16 @@ export function SettingsOverlay() {
       </ScrollView>
 
       {pendingRestore && (
-        <RestoreConfirm
-          onConfirm={() => {
-            const n = importState(pendingRestore);
-            setNote(n === null ? L.restoreNewer : L.restoreDone.replace('{n}', String(n)));
+        <RestoreSheet
+          env={pendingRestore}
+          onDone={(o) => {
+            setNote(restoreLine(o, L));
             setPendingRestore(null);
           }}
           onClose={() => setPendingRestore(null)}
         />
       )}
     </FullScreen>
-  );
-}
-
-/**
- * The hold-to-restore confirm. Its own component so `useBackClose` mounts
- * with it — registered last, so Android back closes the question before it
- * closes Settings.
- */
-function RestoreConfirm({ onConfirm, onClose }: { onConfirm: () => void; onClose: () => void }) {
-  const styles = useThemed(sheet);
-  const { L } = useStore();
-  useBackClose(onClose);
-  return (
-    <Sheet zIndex={5} onClose={onClose}>
-      <H4>{L.restoreTitle}</H4>
-      <Text style={styles.confirmBody}>{L.restoreBody}</Text>
-      <HoldBtn variant="primary" label={L.holdRestore} onConfirm={onConfirm} style={styles.confirmHold} />
-      <Btn variant="secondary" block label={L.cancel} onPress={onClose} />
-    </Sheet>
   );
 }
 
@@ -523,14 +528,6 @@ function ToggleRow({
 }
 
 const sheet = themed(() => ({
-  confirmBody: {
-    fontFamily: font.regular,
-    fontSize: 13,
-    lineHeight: 13 * 1.5,
-    color: color.neutral400,
-    marginTop: 8,
-  },
-  confirmHold: { marginTop: 16, height: 42, marginBottom: 8 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -612,6 +609,8 @@ const sheet = themed(() => ({
   toggleText: { flex: 1 },
 
   actionRow: { paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: t.rule },
+  tipsRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 },
+  tipsCount: { fontFamily: font.regular, fontSize: 12, color: color.neutral500 },
   actionLabel: { fontFamily: font.regular, fontSize: 14, color: color.accent },
   note: { fontFamily: font.regular, fontSize: 12, color: color.accent400, marginTop: 10 },
 

@@ -28,6 +28,7 @@ export default function YouScreen() {
     exInfo,
     turnMode,
     toggleTurnMode,
+    adoptBuddyEx,
     endPairing,
     forgetBuddy,
     requestSession,
@@ -302,6 +303,14 @@ export default function YouScreen() {
                   label={L.jumpTo.replace('{ex}', buddyLive.jump.name)}
                   labelStyle={styles.jumpLabel}
                   onPress={() => patch({ active: buddyLive.jump!.index })}
+                />
+              )}
+              {buddyLive.add && (
+                <Btn
+                  variant="ghost"
+                  label={L.addTheirs.replace('{ex}', buddyLive.add.name)}
+                  labelStyle={styles.jumpLabel}
+                  onPress={() => adoptBuddyEx(buddyLive.add!.ex)}
                 />
               )}
             </View>

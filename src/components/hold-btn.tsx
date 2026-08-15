@@ -14,12 +14,17 @@
  * `destructive` is the buzz, and nothing else — no colour, no label, no second
  * confirm. Every deletion in the app already leaves through a hold, so this is
  * the one place that knows a hold destroyed something rather than committing
- * something, and firing `buzz.gone` from the six call sites instead would be
+ * something, and firing the haptics from the six call sites instead would be
  * six chances for them to drift apart. The buzz is deliberately exclusive to
  * deletion (Calvin's call): a hold that completes is silent everywhere else,
  * which is what makes a phone that buzzes mean exactly one thing.
+ *
+ * It is two moments, not one. `buzz.winding` runs *with* the fill — the same
+ * report the bar is making, through the finger that is covering the bar — and
+ * `buzz.gone` lands as its final beat. Both are the fill's, so both are torn
+ * down wherever the fill is: on release, and on unmount.
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Pressable,
@@ -77,6 +82,18 @@ export function HoldBtn({
   const [fillV] = useState(() => new Animated.Value(0));
   const [scale] = useState(() => new Animated.Value(1));
 
+  /** `buzz.winding`'s cancel while a destructive fill is running. */
+  const winding = useRef<(() => void) | null>(null);
+  const unwind = () => {
+    winding.current?.();
+    winding.current = null;
+  };
+
+  // A button can lose its screen mid-hold — a row deleted under your thumb by
+  // a buddy's edit — and a ramp counting down from a button that no longer
+  // exists would arrive as a buzz about nothing.
+  useEffect(() => () => winding.current?.(), []);
+
   const press = (to: number) =>
     Animated.timing(scale, { toValue: to, ...motion.tap, useNativeDriver: true }).start();
 
@@ -85,6 +102,7 @@ export function HoldBtn({
   // the other. The buzz goes first: it should land with the row leaving rather
   // than a frame behind it.
   const commit = () => {
+    unwind();
     if (destructive && s.haptics) buzz.gone();
     onConfirm();
   };
@@ -92,6 +110,11 @@ export function HoldBtn({
   const start = () => {
     press(0.965);
     if (!hold) return;
+    // Off the fill's own duration, so the ramp is measuring the same 700ms the
+    // bar is. `unwind` first: a second press-in without a release in between
+    // would otherwise orphan the first ramp's cancel and leave it ticking.
+    unwind();
+    if (destructive && s.haptics) winding.current = buzz.winding(motion.hold.duration);
     Animated.timing(fillV, { toValue: 1, ...motion.hold, useNativeDriver: true }).start(
       ({ finished }) => {
         // `finished` is false whenever the rewind interrupted the fill, so a
@@ -106,6 +129,10 @@ export function HoldBtn({
 
   const release = () => {
     press(1);
+    // Silent on the frame the fill starts rewinding. A released hold has
+    // already committed if it got that far, so this only ever cancels ticks
+    // for a gesture that has been abandoned.
+    unwind();
     if (hold) {
       Animated.timing(fillV, {
         toValue: 0,
@@ -160,6 +187,13 @@ const sheet = themed(() => ({
     justifyContent: 'center',
     backgroundColor: 'transparent',
     borderWidth: 1,
+    // Stated, never left absent. Android's border drawable recomputes its path
+    // effect inside a `borderStyle?.let` (BorderDrawable.updatePathEffect), so
+    // *removing* the style is a no-op and the last dash effect stays on the
+    // paint: the session CTA kept its dashes after the final set was ticked,
+    // with its label and its tap already gone solid. Naming solid here makes
+    // every flip a value change, which is the case that clears the effect.
+    borderStyle: 'solid',
     paddingVertical: space[2],
     paddingHorizontal: space[3] * 1.2,
     borderRadius: radius.md,

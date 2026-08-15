@@ -17,7 +17,7 @@ import { myName, useStore } from '@/store/workout-store';
 export function PickerOverlay() {
   const styles = useThemed(sheet);
   const c = useColors();
-  const { s, L, patch, allEx, gInfo, kInfo, exInfo, lastFor } = useStore();
+  const { s, L, patch, allEx, gInfo, kInfo, exInfo, addSessionEx } = useStore();
   const insets = useSafeAreaInsets();
   const close = () => patch({ picker: null });
   useBackClose(close);
@@ -56,40 +56,9 @@ export function PickerOverlay() {
           : {}),
       }));
     } else {
-      const last = lastFor(e.id);
-      patch((st) => {
-        const fresh = {
-          ex: e.id,
-          sets: Array.from({ length: 3 }, (_, k) => {
-            // Three fresh sets where last time may have had fewer: the ghost
-            // falls back to the first one, and its verdict falls back with it.
-            const src = last.sets[k] ? k : 0;
-            return {
-              w: '',
-              reps: '',
-              done: false,
-              prev: last.sets[src] || '—',
-              prevMark: last.marks[src] ?? null,
-            };
-          }),
-        };
-        // Adding from a screen with no session open starts one. The clock
-        // restarts, so the rest goes with it — a stamp from the previous
-        // session against a zeroed clock reads as a half-hour countdown.
-        if (!st.session) {
-          return {
-            session: { rid: null, name: L.freeSession, list: [fresh] },
-            active: 0,
-            elapsed: 0,
-            rest: null,
-            summary: null,
-          };
-        }
-        return {
-          session: { ...st.session, list: [...st.session.list, fresh] },
-          active: st.session.list.length,
-        };
-      });
+      // The row literal lives in the store — the buddy's offer builds one too,
+      // and an exercise taken from them must be shaped like one picked here.
+      addSessionEx(e.id);
     }
     close();
   };

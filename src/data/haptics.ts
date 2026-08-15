@@ -37,15 +37,36 @@
  */
 import * as Haptics from 'expo-haptics';
 
+const impact = (style: Haptics.ImpactFeedbackStyle) => {
+  Haptics.impactAsync(style).catch(() => {});
+};
+
+/**
+ * `winding`'s ramp: where each tick falls as a fraction of the hold's own
+ * duration, and the weight it lands at.
+ *
+ * The gaps shorten the whole way down — 30, 25, 20, 15% of the fill, then 10%
+ * of silence into the payoff — which is what makes it read as approaching
+ * something rather than as a metronome. Two constraints fix the numbers:
+ * no gap may be shorter than the pulse before it (Android's vibrator replaces
+ * whatever is running, so a tighter one would eat its own predecessor — 15% of
+ * 700ms is 105, against a 43ms Medium), and the last gap has to be the
+ * shortest in the run, or the deletion arrives after the ramp has already
+ * finished instead of as its final beat.
+ */
+const WIND: [number, Haptics.ImpactFeedbackStyle][] = [
+  [0, Haptics.ImpactFeedbackStyle.Light],
+  [0.3, Haptics.ImpactFeedbackStyle.Light],
+  [0.55, Haptics.ImpactFeedbackStyle.Light],
+  [0.75, Haptics.ImpactFeedbackStyle.Medium],
+  [0.9, Haptics.ImpactFeedbackStyle.Medium],
+];
+
 export const buzz = {
   /** A set ticked off. */
-  set: () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-  },
+  set: () => impact(Haptics.ImpactFeedbackStyle.Light),
   /** A number cell taken by a hold — the drag is yours now. */
-  grab: () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-  },
+  grab: () => impact(Haptics.ImpactFeedbackStyle.Light),
   /** One 0.5 kg / one rep gone by under the thumb. */
   step: () => {
     Haptics.performAndroidHapticsAsync(Haptics.AndroidHaptics.Segment_Frequent_Tick)
@@ -56,8 +77,31 @@ export const buzz = {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
   },
   /**
+   * A destructive hold winding up — the ticks that say an action is running
+   * before it has run. Handed the fill's own duration, so the two can never
+   * drift apart; see `WIND` for where they fall.
+   *
+   * The filling bar is the visual answer to "is something happening?", and it
+   * is exactly the answer you can't see, because your thumb is on top of it.
+   * This is the same report through the same finger, and it accelerates for the
+   * same reason the bar fills left to right: it has to say *how far in* you
+   * are, not merely that you are.
+   *
+   * Returns its own cancel and the caller must hold it. A hold released halfway
+   * has to fall silent on the frame the fill starts rewinding — a phone still
+   * counting down to something that is no longer going to happen is worse than
+   * one that never counted.
+   */
+  winding: (ms: number) => {
+    const timers = WIND.map(([at, style]) => setTimeout(() => impact(style), at * ms));
+    return () => timers.forEach(clearTimeout);
+  },
+  /**
    * Something deleted, at the far end of a hold — the one negative in the
-   * vocabulary, and the only thing here that isn't a confirmation.
+   * vocabulary, and the only thing here that isn't a confirmation. Lands as the
+   * final beat of `winding`'s ramp rather than as a separate event: the Heavy
+   * arrives one gap after the last Medium, and that gap is the shortest in the
+   * run.
    *
    * Heavy, then Light 120ms behind it: the weight of the thing dropping off.
    * `NotificationFeedbackType.Error` is the obvious reach and is wrong — its
@@ -68,13 +112,10 @@ export const buzz = {
    *
    * Two calls rather than one pattern because Android's vibrator *replaces*
    * whatever is running — the gap has to outlast the 60ms first pulse or the
-   * second hit swallows it. The deferred call catches separately: an unhandled
-   * rejection out of a timer is a red box, not a missed buzz.
+   * second hit swallows it.
    */
   gone: () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
-    setTimeout(() => {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    }, 120);
+    impact(Haptics.ImpactFeedbackStyle.Heavy);
+    setTimeout(() => impact(Haptics.ImpactFeedbackStyle.Light), 120);
   },
 };

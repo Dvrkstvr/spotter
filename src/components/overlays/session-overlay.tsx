@@ -29,6 +29,7 @@ import { ReactNode, RefObject, useEffect, useRef, useState } from 'react';
 import {
   Animated,
   AppState,
+  Keyboard,
   PanResponder,
   Pressable,
   ScrollView,
@@ -47,11 +48,13 @@ import Svg, { Path } from 'react-native-svg';
 import { HoldBtn } from '@/components/hold-btn';
 import { CHECK_D, Icon, MARK_D } from '@/components/icon';
 import { FullScreen, Sheet } from '@/components/sheet';
+import { Tip } from '@/components/tip';
 import type { Bid } from '@/data/buddy-sync';
 import { FIRST_UPS } from '@/data/buddy-sync';
-import { isSingle, Measure, measureOf, SET_MARKS, SetMark } from '@/data/exercises';
+import { isSingle, MarkNote, Measure, measureOf, SET_MARKS, SetMark } from '@/data/exercises';
 import { buzz } from '@/data/haptics';
 import { Strings } from '@/data/i18n';
+import { pickTip, tipLive, type TipId } from '@/data/tips';
 import { useBackClose } from '@/hooks/use-back-close';
 import { useBuddyLive } from '@/hooks/use-buddy-live';
 import { themed, useColors, useThemed } from '@/design/theme';
@@ -59,17 +62,25 @@ import {
   color, fill as absFill, font, linger, motion, radius, slop, t, tracking, wash,
 } from '@/design/tokens';
 import { Btn, CardKicker, Field, H3, H4, Input, missingName, Seg, Tag } from '@/design/ui';
-import { fmt, LoggedSet, markLabel, num, prevNums, useStore } from '@/store/workout-store';
+import { fmt, LoggedSet, markLabel, num, prevNums, restLeftOf, useStore } from '@/store/workout-store';
 
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 
 /** CHECK_D's path length in its 24×24 viewBox — the draw-on dash budget. */
 const CHECK_LEN = 25;
 
-/** How long a set is still to be before a drag on it counts as an edit. */
-const HOLD_MS = 220;
+/**
+ * How long a finger has to be still on a number before a drag on it steps the
+ * figure instead of scrolling the list. Only long enough to prove it isn't a
+ * scroll — gesture-handler fails the pan outright the moment the finger moves
+ * before this elapses, so the delay is a stillness test rather than a wait, and
+ * a press that outlasts it and lifts without moving is handed back as a tap.
+ */
+const HOLD_MS = 120;
 /** Vertical travel per step while dragging a number. */
 const PX_PER_STEP = 12;
+/** How many steps the drag demo travels — three, so its figure moves three times. */
+const DEMO_STEPS = 3;
 
 const mmss = (total: number) =>
   `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
@@ -105,8 +116,10 @@ const prevLabel = (prev: string, single: boolean) => {
 export function SessionOverlay() {
   const styles = useThemed(sheet);
   const c = useColors();
-  const { s, L, patch, ex, gInfo, kInfo, exInfo, setup, mutSession, totals, finishSession, bidFirst } =
-    useStore();
+  const {
+    s, L, patch, ex, gInfo, kInfo, exInfo, setup, mutSession, totals, finishSession, bidFirst,
+    tipDone,
+  } = useStore();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const buddyLive = useBuddyLive();
@@ -115,6 +128,21 @@ export function SessionOverlay() {
   const [markAt, setMarkAt] = useState<number | null>(null);
   // A number being dragged owns the gesture; the list must not scroll under it.
   const [scrubbing, setScrubbing] = useState(false);
+  // Whether the keyboard is up. Only the tips read it: someone typing has
+  // already chosen, and interrupting to recommend the other way is the app
+  // arguing with a decision it just watched being made.
+  const [typing, setTyping] = useState(false);
+  // Which tip this visit is carrying, if any — picked once, below.
+  const [tip, setTip] = useState<TipId | null>(null);
+
+  useEffect(() => {
+    const up = Keyboard.addListener('keyboardDidShow', () => setTyping(true));
+    const down = Keyboard.addListener('keyboardDidHide', () => setTyping(false));
+    return () => {
+      up.remove();
+      down.remove();
+    };
+  }, []);
 
   // Gym phones lock constantly, and a lock kills the Nearby link — keep the
   // screen on while a session is open. Also just right for a logging screen.
@@ -140,12 +168,12 @@ export function SessionOverlay() {
    * `restSeconds` of 0 is the setting turned off, and collapses this to a
    * constant 0.
    */
-  const restLeft =
-    s.rest && !s.rest.skipped ? Math.max(0, s.restSeconds - (s.elapsed - s.rest.at)) : 0;
+  const restLeft = restLeftOf(s);
 
-  // The rest running out, announced to a pocket. Only for a rest you earned:
-  // a turn coming back is the buddy's business and already on screen.
-  const restRunning = restLeft > 0 && !!s.rest?.own;
+  // `rest` is only ever a rest of your own (see the store), so this is the
+  // whole of "a clock is running": a turn coming back is the buddy's business
+  // and has no clock behind it.
+  const restRunning = restLeft > 0;
   const wasResting = useRef(restRunning);
   useEffect(() => {
     // Only in the hand. A rest that ran out during a lock transitions on the
@@ -178,30 +206,17 @@ export function SessionOverlay() {
     // rest is measured from, so it starts the same way whether anyone else is
     // training with you. It runs to the end even once a buddy is done and the
     // turn has come back round, which is the whole point of resting.
-    patch((st) =>
-      st.restSeconds > 0 ? { rest: { at: st.elapsed, skipped: false, own: true } } : null
-    );
+    patch((st) => (st.restSeconds > 0 ? { rest: { at: st.elapsed, skipped: false } } : null));
   }, [doneCount, tick, patch, s.haptics]);
-
-  const theirTurn = !!buddyLive?.turn && !buddyLive.mine;
 
   // The first wait of a shared exercise has no set behind it: the buddy simply
   // goes first (whoever the first-up policy hands the level score to — see
-  // `leaderOf`). Give it the same shape, so the phone that isn't leading sees
-  // "their set" rather than a screen that looks like their own — but mark it
-  // `own: false`, so it lets go the moment the turn comes back. A rest of your
-  // own outranks it and is left alone.
-  useEffect(() => {
-    patch((st) => {
-      if (!theirTurn) return null;
-      // Any wait still running keeps its stamp — this effect also runs when
-      // the screen is restored from the tab bar, and restarting a countdown
-      // because someone checked their Profile would be a lie.
-      const r = st.rest;
-      if (r && (r.own || st.elapsed - r.at < st.restSeconds)) return null;
-      return { rest: { at: st.elapsed, skipped: false, own: false } };
-    });
-  }, [theirTurn, patch]);
+  // `leaderOf`). It holds the row on its own, below — deliberately without
+  // stamping a rest, because there is no clock to run down. Doing so gave the
+  // phone that isn't leading a three-minute countdown before either of them
+  // had lifted anything, and the number was fiction: the wait ends when the
+  // other phone ticks.
+  const theirTurn = !!buddyLive?.turn && !buddyLive.mine;
 
   // Changing exercise deliberately does NOT clear a running rest any more: a
   // swipe forward to peek at what's next and a swipe straight back was
@@ -210,13 +225,14 @@ export function SessionOverlay() {
   // — it draws on whatever set is next wherever you land, and "start now" is
   // still one tap if you disagree.
 
-  if (!session) return null;
-
-  const count = session.list.length;
+  // Everything from here down tolerates having no session, so that the tip
+  // pick below it can be an effect — hooks cannot live under an early return,
+  // and what a tip is armed by is the same state the screen is drawn from.
+  const count = session ? session.list.length : 0;
   // A freeform session starts empty; everything below tolerates having no
   // exercise to show, which is the state the "add your first one" screen is.
   const i = count ? Math.min(s.active, count - 1) : -1;
-  const entry = i >= 0 ? session.list[i] : null;
+  const entry = session && i >= 0 ? session.list[i] : null;
   const meta = entry ? ex(entry.ex) : undefined;
   const units = unitsFor(measureOf(meta), L);
 
@@ -226,13 +242,73 @@ export function SessionOverlay() {
   const doneN = entry ? entry.sets.filter((x) => x.done).length : 0;
   /** The set you're on: the first one not ticked off. */
   const liveIdx = entry ? entry.sets.findIndex((x) => !x.done) : -1;
+  const liveSet = entry && liveIdx >= 0 ? entry.sets[liveIdx] : null;
   const sealed = !!entry && entry.sets.length > 0 && liveIdx < 0;
   const isLast = i === count - 1;
+  /** Whether the bottom button is currently a held gesture — see the footer. */
+  const ctaHeld = !!entry && (isLast ? tot.done < tot.all : !sealed);
 
-  const go = (to: number) => patch({ active: Math.max(0, Math.min(to, count - 1)) });
+  /* ── tips ──────────────────────────────────────────────────────────────
+   *
+   * Which hints this screen *could* show right now. The conditions live here
+   * rather than in `data/tips.ts` because they are this screen's own state —
+   * a copy of them over there would be a second reading of the session, kept
+   * in step by hand. `pickTip` turns the list into at most one, by priority,
+   * so "never two on one screen" is structural.
+   *
+   * The pick is then **held for the visit**: once a tip has been chosen it is
+   * the only one this mounting of the session will ever show, so a first
+   * workout cannot become a slideshow of eight hints. Minimising and coming
+   * back is a new visit, which is the natural pace — one thing learned per
+   * time you look at the screen.
+   */
+  const armed: TipId[] = [];
+  if (entry) {
+    if (liveSet) {
+      armed.push('drag');
+      const g = prevNums(liveSet.prev);
+      // Filled fields and no tick is the moment the box is the answer; empty
+      // fields with a ghost behind them is the moment the ghost is.
+      if (liveSet.w || liveSet.reps) armed.push('tick');
+      else if (g.w || g.r) armed.push('ghost');
+    }
+    // A rest with under a minute on it is about to answer the question itself.
+    if (restRunning && restLeft > 60) armed.push('rest');
+    if (doneN >= 2) armed.push('mark');
+    if (count > 1 && sealed) armed.push('swipe');
+    if (count > 1) armed.push('chip');
+    if (ctaHeld) armed.push('hold');
+  }
+  /**
+   * Nothing new is *offered* over an open keyboard or a running drag: someone
+   * typing has already chosen, and recommending the other way mid-word is the
+   * app arguing with a decision it just watched being made.
+   *
+   * The gate is on the pick rather than on the arming, and deliberately: a tip
+   * already on screen stays there while the keyboard is up. Unmounting it and
+   * bringing it back would be a second showing charged against a budget of
+   * three, for a hint nobody looked away from.
+   */
+  const pick = typing || scrubbing ? null : pickTip(s.tips, armed);
+  useEffect(() => {
+    if (pick) setTip((cur) => cur ?? pick);
+  }, [pick]);
+  /** The visit's tip, while it is still live and its own moment still holds. */
+  const showTip = tip && armed.includes(tip) && tipLive(s.tips, tip) ? tip : null;
+
+  if (!session) return null;
+
+  // Every way of reaching another exercise answers the swipe hint — the chip's
+  // list is one of them, so finding the list the other way is just as good a
+  // reason for the tip to stop asking.
+  const go = (to: number) => {
+    tipDone('swipe');
+    patch({ active: Math.max(0, Math.min(to, count - 1)) });
+  };
 
   /** Tick a set, filling an untouched one from last time — as the box does. */
-  const logSet = (j: number) =>
+  const logSet = (j: number) => {
+    tipDone('tick');
     mutSession(i, (e) => {
       const cur = e.sets[j];
       if (!cur.w && !cur.reps) {
@@ -245,31 +321,77 @@ export function SessionOverlay() {
       }
       cur.done = true;
     });
+  };
+
+  /**
+   * Their rest, run down against this phone's clock — see `buddyRest`.
+   * Deliberately not gated on whose turn it is: `buddyLive.rest` is already 0
+   * unless you are both on the same exercise, and a buddy resting through a
+   * turn of *yours* is exactly the wait this screen used to keep to itself.
+   */
+  const theirRestLeft = buddyLive?.rest ?? 0;
+
+  /** What they're doing, when it's worth a line: resting, or mid-set. */
+  const theirLine =
+    theirRestLeft > 0
+      ? L.theirRest.replace('{name}', s.buddy ?? '').replace('{t}', mmss(theirRestLeft))
+      : theirTurn && buddyLive?.turn
+        ? buddyLive.turn
+        : null;
 
   /**
    * A set that isn't yours yet — dashed, unhighlighted, with whatever it is
-   * you're waiting on written across it. Two things can hold it: your own
-   * rest, and the buddy being mid-set. Both are advisory, both are one tap to
-   * override, and either alone is enough — the rest doesn't end because they
-   * got quicker, and their turn doesn't end because your clock ran out.
+   * you're waiting on written across it. Two things can hold it, and they are
+   * not the same shape: your own rest, which runs a clock you may cut short,
+   * and the buddy's set, which ends when they tick rather than when a timer
+   * says so. That is the first set of a shared exercise on the phone that
+   * isn't leading.
    *
-   * `skipped` silences only the countdown it was a tap on: the buddy's turn
-   * is a different fact, usually one that hadn't happened yet when you
-   * skipped, so it still holds the row.
+   * Both are advisory and either alone is enough: the rest doesn't end because
+   * they got quicker, and their turn doesn't end because your clock ran out.
+   * `skipped` silences only the countdown it was a tap on — the buddy's turn is
+   * a different fact, usually one that hadn't happened yet when you skipped, so
+   * it still holds the row.
+   *
+   * **Every wait that is running is drawn, and each one says whose it is.**
+   * Their remainder used to be drawn *in place of* your own countdown, on the
+   * grounds that two descending numbers in one 12.5px line can't be told
+   * apart. They can't — but the fix for that is to name them, not to hide one:
+   * with your clock replaced by theirs the commonest question in a shared
+   * session ("whose pause is that?") had no answer on the screen at all. So
+   * yours is a line and theirs is a line under it, and while there are two of
+   * them yours reads `myRest` rather than the bare `restLeftLabel` — the owner
+   * is added exactly when there is somebody else to be told apart from.
+   *
+   * `held` is the separate question of whether the row is *yours* yet, and only
+   * your own rest or their turn answers it. A buddy resting through a set of
+   * yours is information, not a reason to dash the box you're about to lift
+   * into.
    */
-  const held = (restRunning && !s.rest?.skipped) || theirTurn;
-  const waiting = held
-    ? {
-        label:
-          theirTurn && buddyLive?.turn
-            ? restLeft > 0
-              ? `${buddyLive.turn} · ${mmss(restLeft)}`
-              : buddyLive.turn
-            : L.restLeftLabel.replace('{t}', mmss(restLeft)),
-        startLabel: L.startNow,
-        onStart: () => patch((st) => (st.rest ? { rest: { ...st.rest, skipped: true } } : null)),
-      }
-    : null;
+  const held = restRunning || theirTurn;
+  const waiting =
+    held || theirLine
+      ? {
+          held,
+          mine: restRunning
+            ? (theirLine ? L.myRest : L.restLeftLabel).replace('{t}', mmss(restLeft))
+            : null,
+          theirs: theirLine,
+          // Your own clock is the only one anybody can jump, and now that it is
+          // on the row whenever it runs, so is the way out of it. It cuts your
+          // countdown short and nothing else: under a turn of theirs the row
+          // stays held, which the line below says in their name.
+          start: restRunning
+            ? {
+                label: L.startNow,
+                onPress: () => {
+                  tipDone('rest');
+                  patch((st) => (st.rest ? { rest: { ...st.rest, skipped: true } } : null));
+                },
+              }
+            : null,
+        }
+      : null;
 
   /**
    * The same slot, asking instead of telling: under the `ask` policy, while
@@ -282,7 +404,7 @@ export function SessionOverlay() {
   const asking =
     buddyLive?.asking && entry
       ? {
-          label: restLeft > 0 ? `${L.whosUp} · ${mmss(restLeft)}` : L.whosUp,
+          label: restRunning ? `${L.whosUp} · ${mmss(restLeft)}` : L.whosUp,
           mine: L.bidMine,
           theirs: L.bidTheirs,
           onBid: (b: Bid) => bidFirst(entry.ex, b),
@@ -340,7 +462,10 @@ export function SessionOverlay() {
           {/* The whole list lives behind this chip — jump, add, discard, finish. */}
           <Pressable
             accessibilityRole="button"
-            onPress={() => setOverview(true)}
+            onPress={() => {
+              tipDone('chip');
+              setOverview(true);
+            }}
             style={styles.posChip}
           >
             <Text style={styles.posText}>
@@ -349,6 +474,11 @@ export function SessionOverlay() {
             <Text style={styles.posCaret}>▾</Text>
           </Pressable>
         </View>
+        {/* Directly under what they point at — the chip, and the exercise the
+            swipe leaves. In flow, so they scroll and shift with the header
+            rather than needing to be re-anchored to it. */}
+        {showTip === 'chip' && <Tip id="chip" title={L.tipChip} sub={L.tipChipSub} />}
+        {showTip === 'swipe' && <Tip id="swipe" title={L.tipSwipe} sub={L.tipSwipeSub} />}
       </View>
 
       <Animated.View style={{ flex: 1, transform: [{ translateX: endNudge }] }}>
@@ -411,8 +541,10 @@ export function SessionOverlay() {
                   native responder blocked, which gesture-handler answers by
                   cancelling every handler it owns. That would leave the number
                   cells' hold-and-drag working only while the keyboard is
-                  down, which is precisely when you don't need it. Nothing is
-                  lost: Enter on reps still blurs and closes it. */}
+                  down, which is precisely when you don't need it. What it
+                  costs is tap-away-to-dismiss, so the cell carries its own
+                  way out: a second tap on a focused cell blurs it. Enter on
+                  reps still closes it too, by logging the set. */}
               <ScrollView
                 style={styles.scroll}
                 contentContainerStyle={styles.body}
@@ -420,6 +552,10 @@ export function SessionOverlay() {
                 showsVerticalScrollIndicator={false}
                 scrollEnabled={!scrubbing}
               >
+                {/* Above the ledger, so it is read on the way in and scrolls
+                    away once you are working. */}
+                <LastNotes id={meta.id} />
+
                 <View style={styles.colHead}>
                   <Text style={[styles.colLabel, styles.colIndex]}>#</Text>
                   <Text style={[styles.colLabel, styles.colPrev]}>{L.lastTime}</Text>
@@ -442,18 +578,43 @@ export function SessionOverlay() {
                     live={j === liveIdx}
                     waiting={j === liveIdx ? waiting : null}
                     asking={j === liveIdx ? asking : null}
+                    // Every tip about a set row draws under the live one, and
+                    // the drag's demo draws on its left-hand cell.
+                    demo={j === liveIdx && showTip === 'drag'}
+                    tip={
+                      j === liveIdx ? (
+                        showTip === 'drag' ? (
+                          <Tip id="drag" title={L.tipDrag} sub={L.tipDragSub} />
+                        ) : showTip === 'tick' ? (
+                          <Tip id="tick" title={L.tipTick} sub={L.tipTickSub} />
+                        ) : showTip === 'ghost' ? (
+                          <Tip id="ghost" title={L.tipGhost} sub={L.tipGhostSub} />
+                        ) : showTip === 'rest' ? (
+                          <Tip id="rest" title={L.tipRest} sub={L.tipRestSub} />
+                        ) : showTip === 'mark' ? (
+                          <Tip id="mark" title={L.tipMark} sub={L.tipMarkSub} />
+                        ) : null
+                      ) : null
+                    }
                     onLog={() => logSet(j)}
                     onScrub={setScrubbing}
-                    onMark={() => setMarkAt(j)}
-                    onCopy={(w, r) =>
+                    // Finding the control is the whole of what the tip was
+                    // for; what you then decide about the set is your business.
+                    onMark={() => {
+                      tipDone('mark');
+                      setMarkAt(j);
+                    }}
+                    onCopy={(w, r) => {
+                      tipDone('ghost');
                       mutSession(i, (e) => {
                         e.sets[j].w = w;
                         e.sets[j].reps = r;
-                      })
-                    }
+                      });
+                    }}
                     onW={(v) => mutSession(i, (e) => { e.sets[j].w = v; })}
                     onReps={(v) => mutSession(i, (e) => { e.sets[j].reps = v; })}
-                    onToggle={(w, r) =>
+                    onToggle={(w, r) => {
+                      tipDone('tick');
                       mutSession(i, (e) => {
                         const cur = e.sets[j];
                         // Ticking an untouched set logs last time's numbers —
@@ -465,10 +626,22 @@ export function SessionOverlay() {
                           cur.reps = r;
                         }
                         cur.done = !cur.done;
-                      })
-                    }
+                      });
+                    }}
                   />
                 ))}
+
+                {/* Nothing left to draw the wait on: the exercise is sealed
+                    (or has no sets yet), so the set your rest is for lives on
+                    another one. The clock still belongs on this screen, so the
+                    lines stand on their own under the last row. The `ask` is
+                    deliberately not repeated here — who takes the next set of
+                    an exercise you have finished is not your question. */}
+                {liveIdx < 0 && waiting ? (
+                  <View style={styles.waitLoose}>
+                    <WaitLines waiting={waiting} asking={null} />
+                  </View>
+                ) : null}
 
                 {/* Held, not tapped: this row sits right under the last set,
                     where a thumb reaching for the tick can find it. */}
@@ -503,6 +676,9 @@ export function SessionOverlay() {
       </Animated.View>
 
       <View style={[styles.footer, { paddingBottom: 10 + insets.bottom }]}>
+        {showTip === 'hold' && (
+          <Tip id="hold" title={L.tipHold} sub={L.tipHoldSub} style={styles.footerTip} />
+        )}
         {/* The exercise just sealed and this is where you're going next — the
             pop is the nudge, since the button itself doesn't change. */}
         <PopOnFlip on={sealed}>
@@ -524,7 +700,12 @@ export function SessionOverlay() {
               hold={!sealed}
               dashed={!sealed}
               label={sealed ? `${L.nextExercise} ›` : L.holdNext}
-              onConfirm={() => go(i + 1)}
+              onConfirm={() => {
+                // A hold that completed is the tip's whole lesson. Only from
+                // the held variant: a tap on the solid one proves nothing.
+                if (!sealed) tipDone('hold');
+                go(i + 1);
+              }}
               style={styles.cta}
               labelStyle={styles.ctaLabel}
             />
@@ -542,6 +723,15 @@ export function SessionOverlay() {
             />
           )}
         </PopOnFlip>
+        {/* The way out, said before the press rather than after it.
+            `finishSession` writes no history entry when nothing was ticked —
+            that is what Discard used to be for — but nobody hunting for a way
+            to cancel a workout they started by mistake is going to try a
+            button labelled Finish. Deliberately not a tip: a tip teaches
+            something invisible three times and then gives up, where this is a
+            permanent statement of what the button will do, shown exactly
+            while it is true. It is `savedEmpty` in the other tense. */}
+        {isLast && tot.done === 0 && <Text style={styles.ctaHint}>{L.finishLogsNothing}</Text>}
       </View>
 
       {overview && <Overview onClose={() => setOverview(false)} onJump={go} />}
@@ -689,6 +879,64 @@ function MarkSheet({
   );
 }
 
+/* ── last session's verdicts ─────────────────────────────────────────────── */
+
+/**
+ * What you told yourself last time about this exercise, at the top of it.
+ *
+ * These lines used to be drawn one per row, on the live set, out of
+ * `prevMark`. That put each one exactly where it was written — and exactly two
+ * sets too late to act on. "Shoulder, drop to 60" is advice about the exercise
+ * you are walking up to, and reading it when you reach set 3 is reading it
+ * after you have already loaded the bar twice.
+ *
+ * So it is hoisted, and it is hoisted **whole**: every mark last session left
+ * on this exercise, each naming its set, which is what keeps "try 75 next"
+ * attached to the 70 it was about. The row-level copy is gone rather than kept
+ * alongside — the same sentence in two places is two readings of one fact, and
+ * the set row's single note slot is now its own words or nothing.
+ *
+ * Read from `lastMarks` rather than off `entry.sets[].prevMark`: that map is
+ * the complete list for the exercise, where the session's copy is truncated to
+ * however many sets today's routine asks for. Four notes last week and three
+ * sets today would silently drop the fourth.
+ *
+ * In the scroll rather than the fixed header on purpose — it is read once, on
+ * the way in, and then it should get out of the way of the ledger.
+ */
+function LastNotes({ id }: { id: string }) {
+  const styles = useThemed(sheet);
+  const c = useColors();
+  const { s, L } = useStore();
+
+  const rows = (s.lastMarks[id] ?? [])
+    .map((m, i) => ({ m, i }))
+    .filter((r): r is { m: MarkNote; i: number } => !!r.m);
+  if (!rows.length) return null;
+
+  return (
+    <View style={styles.lastNotes}>
+      {rows.map(({ m, i }) => (
+        <View key={i} style={styles.lastNote}>
+          <Icon d={MARK_D[m.mark]} size={12} color={c.neutral500} strokeWidth={2.2} />
+          {/* "Last time · Set 2 · bar felt light". Three segments and no new
+              string: `markLastTime` already carries the tense and `setLabel`
+              the number, and a mark with no words reads as its own label —
+              the same fallback the mark sheet prints. */}
+          <Text style={styles.lastNoteText} numberOfLines={2}>
+            {L.markLastTime.replace(
+              '{t}',
+              `${L.setLabel.replace('{n}', String(i + 1))} · ${
+                m.note?.trim() || markLabel(m.mark, L)
+              }`
+            )}
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 /* ── the overview sheet ──────────────────────────────────────────────────── */
 
 /**
@@ -699,13 +947,46 @@ function MarkSheet({
 function Overview({ onClose, onJump }: { onClose: () => void; onJump: (to: number) => void }) {
   const styles = useThemed(sheet);
   const c = useColors();
-  const { s, L, patch, ex, exInfo, totals, clock, finishSession, setFirstUp, removeSessionEx } =
-    useStore();
+  const {
+    s,
+    L,
+    patch,
+    ex,
+    exInfo,
+    totals,
+    clock,
+    finishSession,
+    setFirstUp,
+    removeSessionEx,
+    adoptBuddyEx,
+  } = useStore();
   useBackClose(onClose);
 
   const session = s.session;
   if (!session) return null;
   const tot = totals();
+
+  // Where the two lists have drifted apart — the same diff the buddy line
+  // reads, over the whole of their session rather than the one exercise they
+  // are on. A row that can't be named is left out rather than shown as an id.
+  // Gated on the link being up for the same reason the buddy line answers a
+  // dropped one with `stLost` rather than the last thing it heard: an offer
+  // read off a phone that is no longer there is a reading, not a fact.
+  const bp = s.sessionShared && s.buddyEndpoint ? s.buddyProgress : null;
+  const theirsOnly = (bp?.finished ? [] : (bp?.list ?? []))
+    .filter((e) => !session.list.some((m) => m.ex === e.ex))
+    .flatMap((e) => {
+      const meta = ex(e.ex) ?? bp?.deps?.custom.find((x) => x.id === e.ex);
+      if (!meta) return [];
+      return [
+        {
+          ex: e.ex,
+          name: exInfo(meta).text,
+          done: e.done.filter(Boolean).length,
+          sets: e.done.length,
+        },
+      ];
+    });
 
   return (
     <Sheet zIndex={82} maxHeight="80%" onClose={onClose}>
@@ -767,6 +1048,39 @@ function Overview({ onClose, onJump }: { onClose: () => void; onJump: (to: numbe
         })}
       </View>
 
+      {/* The ledger version of the buddy line's offer: everything in their
+          session that isn't in yours, not just whatever they happen to be
+          standing at. This is where you'd come to reconcile anyway — the
+          list, the jump and the × already live here — and it catches the
+          three things they added while your phone was in a pocket. Adding
+          from here doesn't jump: you may be taking on several, and the sheet
+          is not the place to be yanked out of. */}
+      {theirsOnly.length > 0 && (
+        <>
+          <Text style={styles.ovSetting}>
+            {L.ovTheirsOnly.replace('{name}', s.buddy ?? '')}
+          </Text>
+          <View style={styles.ovTheirs}>
+            {theirsOnly.map((e) => (
+              <Pressable
+                key={e.ex}
+                onPress={() => adoptBuddyEx(e.ex, false)}
+                accessibilityLabel={L.addTheirs.replace('{ex}', e.name)}
+                style={styles.ovRow}
+              >
+                <Text style={styles.ovName} numberOfLines={1}>
+                  {e.name}
+                </Text>
+                <Text style={styles.ovCount}>
+                  {e.done}/{e.sets}
+                </Text>
+                <Text style={styles.ovPlus}>+</Text>
+              </Pressable>
+            ))}
+          </View>
+        </>
+      )}
+
       {/* Only while there is somebody to go first ahead of. Changing it here
           changes it on both phones — one register, last writer wins — and the
           new seed re-rolls every exercise you haven't reached. */}
@@ -798,7 +1112,7 @@ function Overview({ onClose, onJump }: { onClose: () => void; onJump: (to: numbe
 
       {/* The only way out of a session. Held while sets are still open, and a
           session with nothing ticked writes no history — which is what Discard
-          used to be for. */}
+          used to be for, and what the line under it says out loud. */}
       <HoldBtn
         variant="primary"
         hold={tot.done < tot.all}
@@ -808,6 +1122,7 @@ function Overview({ onClose, onJump }: { onClose: () => void; onJump: (to: numbe
         style={styles.ovFinish}
         labelStyle={styles.ovFinishLabel}
       />
+      {tot.done === 0 && <Text style={styles.ovFinishHint}>{L.finishLogsNothing}</Text>}
     </Sheet>
   );
 }
@@ -823,7 +1138,7 @@ function Overview({ onClose, onJump }: { onClose: () => void; onJump: (to: numbe
  */
 function BuddySlot({ onOpenProfile }: { onOpenProfile: () => void }) {
   const styles = useThemed(sheet);
-  const { s, L, patch, turnMode, toggleTurnMode } = useStore();
+  const { s, L, patch, turnMode, toggleTurnMode, adoptBuddyEx } = useStore();
   const buddyLive = useBuddyLive();
 
   if (s.buddyLeft) {
@@ -885,6 +1200,18 @@ function BuddySlot({ onOpenProfile }: { onOpenProfile: () => void }) {
           onPress={() => patch({ active: buddyLive.jump!.index })}
         />
       )}
+      {/* Same slot as the jump, because it is the same errand: they are on
+          something you are not. One tap takes it on — nothing crosses on its
+          own. */}
+      {buddyLive.add && (
+        <Btn
+          variant="ghost"
+          label={L.addTheirs.replace('{ex}', buddyLive.add.name)}
+          labelStyle={styles.jumpLabel}
+          style={styles.jumpBtn}
+          onPress={() => adoptBuddyEx(buddyLive.add!.ex)}
+        />
+      )}
       {buddyLive.modeEx && (
         <Pressable onPress={() => toggleTurnMode(buddyLive.modeEx!)} style={styles.modeChip}>
           <Text style={styles.modeChipLabel}>
@@ -929,9 +1256,10 @@ function ExerciseSlide({ index, children }: { index: number; children: ReactNode
 }
 
 /**
- * One number cell. A tap focuses it and types; a press-and-hold followed by a
- * vertical drag steps the value instead — 0.5 kg or one rep per 12px, up to
- * add — which is how most sets get entered without the keyboard ever opening.
+ * One number cell. A tap opens the keyboard on it and a second tap closes it
+ * again; a brief press followed by a vertical drag steps the value instead —
+ * 0.5 kg or one rep per 12px, up to add — which is how most sets get entered
+ * without the keyboard ever opening.
  *
  * **The finger must never land on the `TextInput`, or there is no gesture at
  * all.** Android's `ReactEditText.onTouchEvent` answers every ACTION_DOWN with
@@ -943,15 +1271,22 @@ function ExerciseSlide({ index, children }: { index: number; children: ReactNode
  * this lost, one it was never entered into. (It is also why a `PanResponder`
  * can't do the job either — same disallow, one layer up.)
  *
- * So the cell is `box-only` until it is focused: `ReactViewGroup` intercepts
- * the touch natively, the editor below never sees a DOWN, and nothing cancels
- * anything. What the input loses that way is the tap, so the tap is given back
- * as a gesture — `Gesture.Tap` racing the pan, focusing the field itself.
- * Once focused the cell goes back to `auto`, so placing the caret inside a
- * figure still works normally; the drag is the unfocused cell's gesture, which
- * is the state it is in every time you reach for it.
+ * So the cell is `box-only` **always**, focused or not: `ReactViewGroup`
+ * intercepts the touch natively, the editor below never sees a DOWN, and
+ * nothing cancels anything. It used to go back to `auto` once focused, so that
+ * a tap could still place the caret inside a figure — and that quietly cost the
+ * drag on every cell the keyboard had ever been opened on, which after one set
+ * is most of them. Four characters of numeral do not need a caret you can aim;
+ * the drag is what this cell is for.
  *
- * `activateAfterLongPress` is what still separates the two from the list's own
+ * What the input gives up either way is the tap, so the tap is handed back as a
+ * gesture — `Gesture.Tap` racing the pan, focusing the field, and blurring it
+ * when it already has focus. That second tap is also the way out of the
+ * keyboard that doesn't log a set: the list is `keyboardShouldPersistTaps`
+ * `"always"` (see its note), so tapping away from a field is deliberately
+ * inert, and Android's back key is eaten by the IME before any of this sees it.
+ *
+ * `activateAfterLongPress` is what still separates the drag from the list's own
  * scroll: the pan claims the touch only after the finger has been down and
  * still, so a straight drag scrolls. Activation cancels the native touch,
  * which also means the long-press text selection menu never gets to fire.
@@ -978,19 +1313,36 @@ function NumCell({
   inputRef?: RefObject<TextInput | null>;
 } & TextInputProps) {
   const styles = useThemed(sheet);
-  const { s } = useStore();
+  const { s, tipDone } = useStore();
   const [dragging, setDragging] = useState(false);
-  // Whether the editor is focused, which is the whole of whether this cell is
-  // open to touches — see the note above.
+  // Whether the editor is focused. Not what opens this cell to touches any
+  // more — nothing does, see the note above — but what the tap toggles.
   const [editing, setEditing] = useState(false);
   // Where the drag started from, and the last figure it put in the cell. Both
   // touched only from gesture callbacks, never while rendering.
   const base = useRef(0);
   const last = useRef('');
+  // Whether the drag under way has ever moved the figure.
+  const stepped = useRef(false);
   // The row walks Enter from weight to reps through `inputRef`; a cell nobody
   // walks to still needs a handle of its own to focus on a tap.
   const own = useRef<TextInput>(null);
   const ref = inputRef ?? own;
+
+  // The IME swallows Android's back key, so the keyboard goes down without the
+  // app hearing about it and the field keeps focus — leaving a cell that draws
+  // itself as being typed into while the next tap on it would only blur it.
+  // Only the focused cell subscribes, so there is never more than one listener.
+  useEffect(() => {
+    if (!editing) return;
+    const sub = Keyboard.addListener('keyboardDidHide', () => ref.current?.blur());
+    return () => sub.remove();
+  }, [editing, ref]);
+
+  const toggleFocus = () => {
+    if (editing) ref.current?.blur();
+    else ref.current?.focus();
+  };
 
   // `runOnJS` because every callback here talks to React state and the store —
   // none of them are worklets, and babel-preset-expo would otherwise hand them
@@ -1003,6 +1355,7 @@ function NumCell({
       // showing as its placeholder.
       base.current = num(value, num(ghost, 0));
       last.current = fmt(base.current);
+      stepped.current = false;
       setDragging(true);
       onScrub(true);
       if (s.haptics) buzz.grab();
@@ -1016,8 +1369,23 @@ function NumCell({
       // and it also stops a drag writing to the store sixty times a second.
       if (next === last.current) return;
       last.current = next;
+      stepped.current = true;
       onText(next);
+      // You have done the thing, so the hint about it is finished — from the
+      // gesture rather than from a button, which is the whole dismissal model.
+      // Idempotent, so firing it on every step of every drag forever is free.
+      tipDone('drag');
       if (s.haptics) buzz.step();
+    })
+    // A press that took the cell, went nowhere and was released is a tap that
+    // took its time, and gets what a tap gets. This is what lets `HOLD_MS` be
+    // as short as it is: overshooting it costs you nothing. `onEnd` rather
+    // than `onFinalize` — a cancelled gesture is not a tap — and the travel
+    // test as well as `stepped`, because a long drag down against the clamp at
+    // zero emits no step either.
+    .onEnd((g, success) => {
+      if (!success || stepped.current) return;
+      if (Math.abs(g.translationY) < PX_PER_STEP) toggleFocus();
     })
     // Fires on release and on cancellation alike, so the list can never be
     // left unscrollable.
@@ -1026,16 +1394,18 @@ function NumCell({
       onScrub(false);
     });
 
-  // Racing rather than waiting on the pan: a tap is over in about a tenth of
-  // the hold, so whichever the finger meant has already been decided by the
-  // time either could fire.
+  // Racing rather than waiting on the pan: a tap is over well inside the hold,
+  // so whichever the finger meant has already been decided by the time either
+  // could fire.
   const tap = Gesture.Tap()
     .runOnJS(true)
-    .onEnd(() => ref.current?.focus());
+    .onEnd(() => toggleFocus());
 
   return (
     <GestureDetector gesture={Gesture.Race(drag, tap)}>
-      <View style={style} pointerEvents={editing ? 'auto' : 'box-only'}>
+      {/* Never `auto`, focused or not: the editor must not see an ACTION_DOWN
+          or the drag is cancelled before it starts. */}
+      <View style={style} pointerEvents="box-only">
         <Input
           ref={ref}
           style={[
@@ -1061,6 +1431,82 @@ function NumCell({
   );
 }
 
+/** Whatever is standing between you and this set — see `waiting` above. */
+type Waiting = {
+  /** the set isn't yours yet: your own rest, or their turn. Dashes the box. */
+  held: boolean;
+  /** your countdown, named while theirs is on screen too */
+  mine: string | null;
+  /** their rest, or their set while it holds the row */
+  theirs: string | null;
+  /** the way out of your own countdown; null when there isn't one running */
+  start: { label: string; onPress: () => void } | null;
+};
+
+/** The `ask` policy, open — see `asking` above. */
+type Asking = { label: string; mine: string; theirs: string; onBid: (b: Bid) => void };
+
+/**
+ * The wait, written out: at most one line about you and at most one about the
+ * buddy, in that order.
+ *
+ * Yours goes first and carries the tap — it is your screen and the only clock
+ * you can do anything about — with theirs a step back under it, context rather
+ * than a second thing to act on. Whichever of them lands first keeps the
+ * hairline that separates the lines from the set above.
+ *
+ * Its own component because a sealed exercise has no live row to hang it under
+ * and still has your rest running on it.
+ */
+function WaitLines({ waiting, asking }: { waiting: Waiting | null; asking: Asking | null }) {
+  const styles = useThemed(sheet);
+  if (!waiting && !asking) return null;
+
+  // A row with nothing to tap is a line, not a Pressable — the ripple and the
+  // chevron are what promise the tap does something.
+  const own = asking ? (
+    <View style={styles.waitRow}>
+      <Text style={styles.waitLabel} numberOfLines={1}>
+        {asking.label}
+      </Text>
+      <Pressable onPress={() => asking.onBid('me')} style={styles.bidBtn}>
+        <Text style={styles.bidMine}>{asking.mine}</Text>
+      </Pressable>
+      <Pressable onPress={() => asking.onBid('you')} style={styles.bidBtn}>
+        <Text style={styles.bidTheirs}>{asking.theirs}</Text>
+      </Pressable>
+    </View>
+  ) : waiting?.mine ? (
+    waiting.start ? (
+      <Pressable onPress={waiting.start.onPress} style={styles.waitRow}>
+        <Text style={styles.waitLabel} numberOfLines={1}>
+          {waiting.mine}
+        </Text>
+        <Text style={styles.waitStart}>{waiting.start.label} ›</Text>
+      </Pressable>
+    ) : (
+      <View style={styles.waitRow}>
+        <Text style={styles.waitLabel} numberOfLines={1}>
+          {waiting.mine}
+        </Text>
+      </View>
+    )
+  ) : null;
+
+  return (
+    <>
+      {own}
+      {waiting?.theirs ? (
+        <View style={[styles.waitRow, !!own && styles.waitRowUnder]}>
+          <Text style={[styles.waitLabel, styles.waitLabelTheirs]} numberOfLines={1}>
+            {waiting.theirs}
+          </Text>
+        </View>
+      ) : null}
+    </>
+  );
+}
+
 /** One set row: dim on done, accent flash on tick, ghost figures that fly. */
 function SetRow({
   index,
@@ -1069,6 +1515,8 @@ function SetRow({
   live,
   waiting,
   asking,
+  demo,
+  tip,
   onCopy,
   onW,
   onReps,
@@ -1083,14 +1531,19 @@ function SetRow({
   single: boolean;
   /** the set you're on — raised, with numbers at thumb size */
   live: boolean;
-  /** the buddy is mid-set: this one is yours but not yet */
-  waiting: { label: string; startLabel: string; onStart: () => void } | null;
+  /** What is being waited on, whose it is, and the way out of your own half. */
+  waiting: Waiting | null;
   /**
-   * Nobody has said who takes this one yet. Same slot as `waiting` and wins it
-   * — an open question outranks a countdown — but never gates the row: the
-   * fields and the tick above it keep working whether it is answered or not.
+   * Nobody has said who takes this one yet. Takes your own line's place and
+   * wins it — an open question outranks a countdown, and carries the same
+   * clock — but never gates the row: the fields and the tick above it keep
+   * working whether it is answered or not.
    */
-  asking: { label: string; mine: string; theirs: string; onBid: (b: Bid) => void } | null;
+  asking: Asking | null;
+  /** Play the taught hold-and-drag over this row's left cell — see `DragDemo`. */
+  demo?: boolean;
+  /** The one tip this screen is carrying, when it belongs under this row. */
+  tip?: ReactNode;
   onCopy: (w: string, r: string) => void;
   onW: (v: string) => void;
   onReps: (v: string) => void;
@@ -1164,7 +1617,7 @@ function SetRow({
   return (
     <View style={styles.rowWrap}>
       <View
-        style={[live && styles.liveBox, live && (waiting || asking) && styles.liveBoxWaiting]}
+        style={[live && styles.liveBox, live && (waiting?.held || asking) && styles.liveBoxWaiting]}
       >
         <View onLayout={(e) => setRowW(e.nativeEvent.layout.width)}>
           <Animated.View pointerEvents="none" style={[styles.rowFlash, { opacity: flash }]} />
@@ -1187,7 +1640,9 @@ function SetRow({
               {set.mark ? (
                 <Icon d={MARK_D[set.mark]} size={15} color={c.accent400} strokeWidth={2.2} />
               ) : (
-                <Text style={[styles.setIndex, live && !waiting && !asking && styles.setIndexLive]}>
+                <Text
+                  style={[styles.setIndex, live && !waiting?.held && !asking && styles.setIndexLive]}
+                >
                   {index + 1}
                 </Text>
               )}
@@ -1233,6 +1688,20 @@ function SetRow({
             />
           </Animated.View>
           <Animated.View pointerEvents="none" style={[styles.inputCatch, { opacity: catchV }]} />
+          {/* Drawn over the left-hand number cell, and writing nothing: the
+              `TextInput` under it is untouched and still typeable throughout.
+              A demo that actually drove the gesture would have to put a figure
+              into your set and then take it back, and an app that types into
+              a workout to show off a feature is one that loses a set. */}
+          {demo && rowW > 0 && (
+            <DragDemo
+              width={inputW}
+              step={single ? 1 : 0.5}
+              // The same expression `NumCell`'s own `onStart` uses, so the
+              // demo scrubs from exactly where a real finger would.
+              base={single ? num(set.reps, num(ghost.r, 0)) : num(set.w, num(ghost.w, 0))}
+            />
+          )}
           {flying && (
             <View pointerEvents="none" style={styles.flyerLane}>
               <Animated.Text
@@ -1257,27 +1726,22 @@ function SetRow({
           )}
         </View>
 
-        {/* What you told yourself last time, on the row you are deciding on —
-            which is the entire reason a mark is worth writing. Only while the
-            set is still open: once it is ticked the advice has been taken or
-            ignored, and the row's own mark is the live one. */}
-        {/* Pressable like the own-note line below: answering last time's
-            advice is the natural moment to mark this set, and this line is
-            also the only mark affordance a new user ever gets shown. */}
-        {live && !set.done && set.prevMark && (
-          <Pressable onPress={onMark} style={styles.markLine}>
-            <Icon d={MARK_D[set.prevMark.mark]} size={12} color={c.neutral500} strokeWidth={2.2} />
-            <Text style={styles.markLineText} numberOfLines={1}>
-              {L.markLastTime.replace(
-                '{t}',
-                set.prevMark.note?.trim() || markLabel(set.prevMark.mark, L)
-              )}
-            </Text>
-          </Pressable>
-        )}
+        {/* The row's one note line, and it is deliberately one.
 
-        {/* Your own words, where you wrote them. The glyph in the index cell
-            says the set has something to say; this is the saying. */}
+            Your own words when there are any; otherwise, on a set you have
+            actually lifted, the way in. Nothing on a set still ahead of you —
+            a set you have performed is a set you have an opinion about, where
+            row 4 is a plan and has nothing to say yet, and an offer standing
+            on every unlifted row is 16px of furniture eight times over on the
+            screen working hardest not to become furniture.
+
+            What used to sit here as well was last time's verdict, drawn on
+            the live row. It has moved to `LastNotes` at the top of the
+            exercise, where it arrives *before* set 1 rather than on the row it
+            happened to be written on last week — see that component. Leaving
+            a copy here would put the same sentence on screen twice, and this
+            row can already be carrying a rest countdown or the buddy's turn
+            underneath. */}
         {set.mark && set.note?.trim() ? (
           <Pressable onPress={onMark} style={styles.markLine}>
             <Icon d={MARK_D[set.mark]} size={12} color={c.accent400} strokeWidth={2.2} />
@@ -1285,33 +1749,118 @@ function SetRow({
               {set.note.trim()}
             </Text>
           </Pressable>
+        ) : set.done ? (
+          // The quietest thing on the screen — dimmer than the ghost figures
+          // beside it, because it is an offer and everything else on the row
+          // is the workout. No fill and above all no dash: dashed means *this
+          // one is held* at three sites, and a hint drawn as a control you
+          // must press and hold is the exact confusion it exists to end.
+          <Pressable onPress={onMark} style={styles.markLine}>
+            <Icon d={MARK_D.note} size={12} color={c.neutral700} strokeWidth={2.2} />
+            <Text style={[styles.markLineText, styles.markLineAdd]} numberOfLines={1}>
+              {L.addNote}
+            </Text>
+          </Pressable>
         ) : null}
 
-        {live && asking ? (
-          <View style={styles.waitRow}>
-            <Text style={styles.waitLabel} numberOfLines={1}>
-              {asking.label}
-            </Text>
-            <Pressable onPress={() => asking.onBid('me')} style={styles.bidBtn}>
-              <Text style={styles.bidMine}>{asking.mine}</Text>
-            </Pressable>
-            <Pressable onPress={() => asking.onBid('you')} style={styles.bidBtn}>
-              <Text style={styles.bidTheirs}>{asking.theirs}</Text>
-            </Pressable>
-          </View>
-        ) : (
-          live &&
-          waiting && (
-            <Pressable onPress={waiting.onStart} style={styles.waitRow}>
-              <Text style={styles.waitLabel} numberOfLines={1}>
-                {waiting.label}
-              </Text>
-              <Text style={styles.waitStart}>{waiting.startLabel} ›</Text>
-            </Pressable>
-          )
-        )}
+        {live && <WaitLines waiting={waiting} asking={asking} />}
       </View>
+      {/* Under the live box, never over anything: the tick, the fields and the
+          CTA all stay exactly where they were, and the tip costs one row of a
+          list that on a fresh exercise is empty rows anyway. */}
+      {live && tip}
     </View>
+  );
+}
+
+/**
+ * The hold-and-drag, performed on the cell it is about.
+ *
+ * The one tip in the app that needs more than words: a sentence can teach a
+ * tap and cannot teach hold-then-drag. It draws a pointer and a figure on an
+ * overlay above the cell — `pointerEvents: 'none'`, no synthetic touches, and
+ * nothing written to the store — so what it costs the session is nothing.
+ *
+ * **Every number in it is the real one.** The travel is three times
+ * `PX_PER_STEP`, so the figure steps three times; the pause before the pointer
+ * moves is `HOLD_MS`, which is 120ms and is a stillness test rather than a
+ * wait. A demo that swept 60 to 100 in one gesture, or that pressed
+ * deliberately for a second first, would be teaching a gesture this app does
+ * not have — and the second one would have people holding until the list
+ * scrolled out from under them.
+ *
+ * Deliberately **not** on the native driver: the figure is text, which no
+ * driver can animate, so the pointer and the number it is dragging share one
+ * JS-side clock instead of drifting apart on two. It is two small views for
+ * two passes, which is what makes that affordable.
+ *
+ * It does not buzz. `buzz.grab` reports that your finger took the cell, and
+ * firing it because a picture of a finger did would make the buzz mean two
+ * things. The ring is that moment drawn instead, so the real one is expected
+ * rather than surprising.
+ */
+function DragDemo({ width, step, base }: { width: number; step: number; base: number }) {
+  const styles = useThemed(sheet);
+  const [fade] = useState(() => new Animated.Value(0));
+  const [travel] = useState(() => new Animated.Value(0));
+  const [ring] = useState(() => new Animated.Value(0));
+  const [steps, setSteps] = useState(0);
+
+  useEffect(() => {
+    const id = travel.addListener(({ value }) => {
+      const n = Math.min(DEMO_STEPS, Math.max(0, Math.round(-value / PX_PER_STEP)));
+      setSteps((cur) => (cur === n ? cur : n));
+    });
+    const pass = Animated.sequence([
+      Animated.timing(travel, { toValue: 0, duration: 0, useNativeDriver: false }),
+      Animated.timing(ring, { toValue: 0, duration: 0, useNativeDriver: false }),
+      Animated.timing(fade, { toValue: 1, duration: 240, easing: motion.quick.easing, useNativeDriver: false }),
+      Animated.delay(HOLD_MS),
+      Animated.timing(ring, { toValue: 1, duration: 340, easing: motion.tap.easing, useNativeDriver: false }),
+      Animated.timing(travel, {
+        toValue: -DEMO_STEPS * PX_PER_STEP,
+        duration: 900,
+        easing: motion.move.easing,
+        useNativeDriver: false,
+      }),
+      Animated.delay(700),
+      Animated.timing(fade, { toValue: 0, duration: 260, easing: motion.quick.easing, useNativeDriver: false }),
+      Animated.delay(600),
+    ]);
+    // Twice and then done. A hint that loops for the length of a workout is
+    // the furniture this whole feature is trying not to become.
+    const loop = Animated.loop(pass, { iterations: 2 });
+    loop.start();
+    return () => {
+      loop.stop();
+      travel.removeListener(id);
+    };
+  }, [fade, travel, ring]);
+
+  return (
+    <Animated.View pointerEvents="none" style={[styles.demoLane, { width, opacity: fade }]}>
+      {/* The cell, mid-drag. Opaque and clipped, so the figure it is scrubbing
+          reads as the cell's own rather than doubled over the real value. */}
+      <View style={styles.demoBox}>
+        <Text style={styles.demoNum}>{fmt(base + steps * step)}</Text>
+      </View>
+      {/* The finger, and a sibling of the box rather than a child of it: a
+          real drag carries it up out of the cell, and clipping it at the
+          border would draw a gesture that stops where the control does. */}
+      <Animated.View style={[styles.demoPtr, { transform: [{ translateY: travel }] }]}>
+        <Animated.View
+          style={[
+            styles.demoRing,
+            {
+              opacity: ring.interpolate({ inputRange: [0, 0.25, 1], outputRange: [0, 0.9, 0] }),
+              transform: [
+                { scale: ring.interpolate({ inputRange: [0, 0.25, 1], outputRange: [1.7, 1, 1.6] }) },
+              ],
+            },
+          ]}
+        />
+      </Animated.View>
+    </Animated.View>
   );
 }
 
@@ -1651,6 +2200,10 @@ const sheet = themed(() => ({
     paddingHorizontal: 8,
     borderWidth: 1,
     borderColor: color.accent700,
+    // Stated for the reason hold-btn's is: a removed `borderStyle` leaves the
+    // dashes on Android's paint, so the row that stops waiting has to be told
+    // it is solid again rather than simply dropping `liveBoxWaiting`.
+    borderStyle: 'solid',
     borderRadius: radius.lg * 0.72,
     backgroundColor: wash.accent(7),
   },
@@ -1676,6 +2229,17 @@ const sheet = themed(() => ({
     color: color.neutral500,
     fontVariant: ['tabular-nums'],
   },
+  /** The second line of a wait — under the first, without a rule between. */
+  waitRowUnder: { marginTop: 4, paddingTop: 0, borderTopWidth: 0 },
+  /** Theirs, a step back from yours: the same line, read second. */
+  waitLabelTheirs: { color: color.neutral600 },
+  /**
+   * The same lines with no live row to hang under — a sealed exercise still
+   * has your rest running on it, and a countdown that vanishes for the length
+   * of the rest is the opacity this is here to end. Matches the live box's own
+   * horizontal padding so the two read as one column.
+   */
+  waitLoose: { paddingHorizontal: 8 },
   waitStart: { fontFamily: font.regular, fontSize: 11.5, color: color.accent },
   /**
    * The two answers to "who's up?". Same line and same weight as "start now"
@@ -1699,6 +2263,56 @@ const sheet = themed(() => ({
     borderColor: color.accent,
     borderRadius: radius.md,
   },
+  /**
+   * The drag demo's lane — the left-hand number cell exactly, using the same
+   * 98px offset `inputCatch` above is written against (16 + 66 plus the two
+   * 8px gaps to its left). A `duration` row drops the kg cell and its gap, so
+   * the one field it keeps starts here too.
+   */
+  demoLane: { position: 'absolute', left: 98, top: 0, bottom: 0 },
+  /** Wearing `setInputDragging`'s own accent edge, because that is the state
+      being demonstrated: this is what the cell looks like under a finger. */
+  demoBox: {
+    ...absFill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: color.bg,
+    borderWidth: 1,
+    borderColor: color.accent,
+    borderRadius: radius.md,
+    overflow: 'hidden',
+  },
+  /** The scrubbed figure, at the live cell's own size so it reads as the cell. */
+  demoNum: {
+    fontFamily: font.regular,
+    fontSize: 22,
+    color: color.text,
+    fontVariant: ['tabular-nums'],
+  },
+  demoPtr: {
+    position: 'absolute',
+    bottom: 2,
+    alignSelf: 'center',
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: wash.text(34),
+    backgroundColor: wash.text(14),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  /** `buzz.grab`, drawn: the moment the cell is taken and the number is yours. */
+  demoRing: {
+    position: 'absolute',
+    left: -6,
+    right: -6,
+    top: -6,
+    bottom: -6,
+    borderRadius: 21,
+    borderWidth: 1.5,
+    borderColor: color.accent,
+  },
   flyerLane: { ...absFill, justifyContent: 'center', paddingLeft: 24 },
   flyerText: {
     fontFamily: font.regular,
@@ -1715,6 +2329,17 @@ const sheet = themed(() => ({
   markLine: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 5, paddingLeft: 2 },
   markLineText: { flex: 1, fontFamily: font.regular, fontSize: 11, color: color.neutral500 },
   markLineOwn: { color: color.neutral400 },
+  markLineAdd: { color: color.neutral700 },
+
+  /**
+   * Last session's verdicts, hoisted to the top of the exercise.
+   *
+   * Read before set 1, which is the only time "drop to 60" can still change
+   * what you do — on the row it was written on it arrives two sets late.
+   */
+  lastNotes: { gap: 4, marginBottom: 10, paddingHorizontal: 2 },
+  lastNote: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  lastNoteText: { flex: 1, fontFamily: font.regular, fontSize: 11, color: color.neutral500 },
   prevText: {
     fontFamily: font.regular,
     fontSize: 11.5,
@@ -1820,6 +2445,16 @@ const sheet = themed(() => ({
   },
   cta: { height: 50, marginTop: 0, backgroundColor: wash.accent(10) },
   ctaLabel: { fontSize: 15, fontFamily: font.heading, color: color.accent },
+  /** The tip's own margin is meant for a list; above the CTA it wants less. */
+  footerTip: { marginTop: 0, marginBottom: 9 },
+  /** What Finish is about to do, while it is about to do nothing. */
+  ctaHint: {
+    fontFamily: font.regular,
+    fontSize: 11.5,
+    color: color.neutral500,
+    textAlign: 'center',
+    marginTop: 7,
+  },
 
   ovSub: { fontFamily: font.regular, fontSize: 11.5, color: color.neutral500, marginTop: 3 },
   ovList: { marginTop: 12 },
@@ -1858,11 +2493,22 @@ const sheet = themed(() => ({
     marginBottom: 6,
     letterSpacing: tracking(11.5, 0.02),
   },
+  /** Their rows, drawn without the current-row dot or the tick — nothing here
+      is yours yet, and the + is the whole of what a row can do. */
+  ovTheirs: { marginBottom: 2 },
+  ovPlus: { fontFamily: font.regular, fontSize: 16, color: color.accent },
   ovSeg: { marginBottom: 2 },
   ovAdd: { alignSelf: 'flex-start', marginTop: 8 },
   ovAddLabel: { fontSize: 12.5 },
   ovFinish: { width: '100%', height: 46, marginTop: 16 },
   ovFinishLabel: { fontSize: 15 },
+  ovFinishHint: {
+    fontFamily: font.regular,
+    fontSize: 11.5,
+    color: color.neutral500,
+    textAlign: 'center',
+    marginTop: 7,
+  },
 
   markSub: { fontFamily: font.regular, fontSize: 11.5, color: color.neutral500, marginTop: 3 },
   markPrev: {

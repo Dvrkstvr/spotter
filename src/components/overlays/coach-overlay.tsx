@@ -8,8 +8,15 @@
  * The prompt is shown in full on the way out. That is the point: it is exactly
  * what leaves the phone, which is what makes the switches on the first step
  * mean something rather than being a promise.
+ *
+ * The last step has two ways in: pasted, or handed over by `<Intake>` when the
+ * reply arrived as a file that was tapped in another app (`coachIntake`). Both
+ * land in the same place holding the same text, because the answer is text
+ * either way — `parsePlan` is what reads it, and it does not care which door it
+ * came through.
  */
-import { useState } from 'react';
+import { router } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, Share, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -69,10 +76,33 @@ export function CoachOverlay() {
 
   const [step, setStep] = useState<Step>('goal');
   const [reply, setReply] = useState('');
-  /** Which routines of the parsed plan are still ticked. */
-  const [picked, setPicked] = useState<boolean[]>([]);
-  /** Set once the write happened, so the screen can say so and stop offering. */
-  const [imported, setImported] = useState<{ r: number; e: number } | null>(null);
+  /** Whether the raw reply is unfolded again after a plan was read out of it. */
+  const [showReply, setShowReply] = useState(false);
+  /**
+   * Which routines of the parsed plan are ticked. Sparse on purpose — an entry
+   * is only written once you touch that row, so everything else follows the
+   * default `takes` computes rather than a value frozen at parse time.
+   */
+  const [picked, setPicked] = useState<(boolean | undefined)[]>([]);
+
+  /**
+   * A reply that arrived whole rather than through the paste box — a file
+   * tapped in a chat app, or the message itself shared into Spotter, routed
+   * here by `<Intake>`. It lands on the import step with the text already read:
+   * the preview, the folded reply, and Import still the only thing that writes.
+   *
+   * An effect rather than lazy initial state because the coach may already be
+   * open when it arrives — this is the one path that covers both, and clearing
+   * the key is what stops it re-seeding over a reply being edited.
+   */
+  useEffect(() => {
+    if (!s.coachIntake) return;
+    setReply(s.coachIntake);
+    setPicked([]);
+    setShowReply(false);
+    setStep('import');
+    patch({ coachIntake: null });
+  }, [s.coachIntake, patch]);
 
   const close = () => patch({ coachOpen: false });
   // Back walks the steps. Losing a pasted answer to a stray back press would
@@ -133,16 +163,47 @@ export function CoachOverlay() {
         )
       : null;
 
-  const chosen = plan ? plan.routines.filter((_, i) => picked[i] !== false) : [];
+  /**
+   * Whether routine `i` is ticked, and what it defaults to.
+   *
+   * A routine this phone already has a name for starts **off** — the same rule
+   * a backup merge follows: what is here wins, and the import fills gaps. It
+   * used to start on, which meant the one thing the preview warned about was
+   * also the one thing it did by default, and you left with two routines called
+   * Push A.
+   *
+   * Unlike the restore sheet's empty rows it stays *tickable*, and that
+   * difference is the point: an empty row has nothing to add, where the AI's
+   * "Push A" may be a genuinely different workout that happens to share a name.
+   * The tag says which case you're in and the tick is how you overrule it.
+   */
+  const takes = (i: number) => picked[i] ?? (plan ? !plan.routines[i].duplicate : true);
+
+  const chosen = plan ? plan.routines.filter((_, i) => takes(i)) : [];
   const chosenRefs = new Set(chosen.flatMap((r) => r.items.map((it) => it.ref)));
   const chosenNew = plan
     ? plan.exercises.filter((e, i) => !e.existingId && chosenRefs.has(i)).length
     : 0;
 
+  /**
+   * Import, then leave — onto the Routines tab, where what you just accepted
+   * actually is.
+   *
+   * The confirmation line this used to show ("Imported. 2 routines added.") was
+   * a dead end: it left you on the import screen, holding a reply you were done
+   * with, one back press from a prompt step you had no reason to revisit. The
+   * list is the better answer to "did that work?" — the app's own habit of
+   * showing the thing rather than announcing it.
+   *
+   * Insights closes with the coach, because it is what the coach was opened
+   * over and dropping back onto it would put a screen between you and the
+   * routines you came for.
+   */
   const doImport = () => {
     if (!plan) return;
-    importPlan(plan, plan.routines.map((_, i) => picked[i] !== false));
-    setImported({ r: chosen.length, e: chosenNew });
+    importPlan(plan, plan.routines.map((_, i) => takes(i)));
+    patch({ coachOpen: false, statsOpen: false });
+    router.push('/routines');
   };
 
   /* — chrome — */
@@ -314,23 +375,35 @@ export function CoachOverlay() {
             <H2 size={t.h2} style={styles.tight}>
               {L.importTitle}
             </H2>
-            <Text style={styles.sub}>{L.importPasteHint}</Text>
+            {!plan && <Text style={styles.sub}>{L.importPasteHint}</Text>}
 
-            <TextInput
-              multiline
-              value={reply}
-              onChangeText={(v) => {
-                setReply(v);
-                setPicked([]);
-                setImported(null);
-              }}
-              placeholder={L.importPaste}
-              placeholderTextColor={c.neutral600}
-              cursorColor={c.accent}
-              selectionColor={c.accent}
-              style={styles.paste}
-              textAlignVertical="top"
-            />
+            {/* Once a plan has been read the box has done its job, and what
+                matters is the routines under it — so it folds away to a link
+                rather than sitting there as the largest thing on the screen.
+                It stays reachable, because a reply whose JSON needs a nudge is
+                exactly the case where you want the raw text back. A parse that
+                *failed* keeps the box open: that is the one time editing it is
+                the whole point. */}
+            {plan && !showReply ? (
+              <Pressable hitSlop={slop} onPress={() => setShowReply(true)}>
+                <Text style={styles.reveal}>{L.importShowReply}</Text>
+              </Pressable>
+            ) : (
+              <TextInput
+                multiline
+                value={reply}
+                onChangeText={(v) => {
+                  setReply(v);
+                  setPicked([]);
+                }}
+                placeholder={L.importPaste}
+                placeholderTextColor={c.neutral600}
+                cursorColor={c.accent}
+                selectionColor={c.accent}
+                style={styles.paste}
+                textAlignVertical="top"
+              />
+            )}
 
             {parsed && !parsed.ok && (
               <Text style={styles.error}>
@@ -357,7 +430,7 @@ export function CoachOverlay() {
                 </Text>
 
                 {plan.routines.map((r, i) => {
-                  const on = picked[i] !== false;
+                  const on = takes(i);
                   return (
                     <View key={`${r.name}-${i}`} style={[styles.card, !on && styles.cardOff]}>
                       <Pressable
@@ -366,7 +439,10 @@ export function CoachOverlay() {
                         hitSlop={slop}
                         onPress={() =>
                           setPicked((p) => {
-                            const next = plan.routines.map((_, k) => p[k] !== false);
+                            // Normalised against the same defaults, or the
+                            // rows nobody has touched would flip to `true` the
+                            // moment a neighbour is tapped.
+                            const next = plan.routines.map((_, k) => p[k] ?? !plan.routines[k].duplicate);
                             next[i] = !on;
                             return next;
                           })
@@ -431,28 +507,41 @@ export function CoachOverlay() {
                   </Text>
                 )}
 
-                {imported ? (
-                  <Text style={styles.done}>
-                    {L.importDone
-                      .replace('{r}', nRoutines(imported.r, L))
-                      .replace('{e}', nExercises(imported.e, L))}
-                  </Text>
-                ) : (
-                  <Btn
-                    variant="primary"
-                    block
-                    disabled={chosen.length === 0}
-                    label={
-                      chosen.length === 0
-                        ? L.importDoNothing
-                        : L.importDo
-                            .replace('{r}', nRoutines(chosen.length, L))
-                            .replace('{e}', nExercises(chosenNew, L))
-                    }
-                    style={styles.cta}
-                    onPress={doImport}
-                  />
-                )}
+                <Btn
+                  variant="primary"
+                  block
+                  disabled={chosen.length === 0}
+                  label={
+                    chosen.length === 0
+                      ? L.importDoNothing
+                      : L.importDo
+                          .replace('{r}', nRoutines(chosen.length, L))
+                          .replace('{e}', nExercises(chosenNew, L))
+                  }
+                  style={styles.cta}
+                  onPress={doImport}
+                />
+                {/* Said out loud now that a duplicate arrives unticked: the
+                    promise is the same one the restore sheet makes, in the
+                    same words, because it is the same rule. */}
+                <Text style={styles.hint}>{L.addOnlyMissing}</Text>
+
+                {/* Saying no is an act, not the absence of one. Without it the
+                    only way out of a plan you don't want is the back arrow,
+                    which for a reply that arrived from outside the app means
+                    backing into a prompt step you never asked to see. */}
+                <Btn
+                  variant="secondary"
+                  block
+                  label={L.importDiscard}
+                  style={styles.cta}
+                  onPress={() => {
+                    setReply('');
+                    setPicked([]);
+                    setShowReply(false);
+                    setStep('goal');
+                  }}
+                />
               </>
             )}
           </>
@@ -538,6 +627,13 @@ const sheet = themed(() => ({
     fontSize: 12.5,
     color: color.text,
   },
+  /** The folded reply's way back open — the app's ghost-link grammar. */
+  reveal: {
+    marginTop: 12,
+    fontFamily: font.regular,
+    fontSize: 12.5,
+    color: color.accent,
+  },
   error: {
     fontFamily: font.regular,
     fontSize: 12.5,
@@ -556,6 +652,9 @@ const sheet = themed(() => ({
     backgroundColor: color.surface,
     borderWidth: 1,
     borderColor: color.neutral800,
+    // Stated for the reason hold-btn's is — a re-ticked card has to be told it
+    // is solid again, or it keeps the dashes `cardOff` put on the paint.
+    borderStyle: 'solid',
   },
   cardOff: { opacity: 0.5, borderStyle: 'dashed' },
   cardHead: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingBottom: 4 },
@@ -578,11 +677,5 @@ const sheet = themed(() => ({
     lineHeight: 11 * 1.45,
     color: color.neutral600,
     marginTop: 12,
-  },
-  done: {
-    fontFamily: font.regular,
-    fontSize: 13.5,
-    color: color.accent200,
-    marginTop: 18,
   },
 }));

@@ -58,11 +58,23 @@ const FEAT_BUDDY_D =
   'M9 11.5a3.4 3.4 0 1 0 0-6.8 3.4 3.4 0 0 0 0 6.8M2.8 19.6a6.6 6.6 0 0 1 12.4 0M16.5 5.2a3.4 3.4 0 0 1 0 6.6M17.5 13.4a6.6 6.6 0 0 1 3.7 6.2';
 const BELL_D = 'M18 8.5a6 6 0 1 0-12 0c0 5.2-2 6.5-2 6.5h16s-2-1.3-2-6.5M13.7 19a2 2 0 0 1-3.4 0';
 
-/** The features the rundown teaches. Takes `L` so nothing here gets hoisted. */
+/**
+ * The features the rundown teaches. Takes `L` so nothing here gets hoisted.
+ *
+ * The first three read the **tip** strings rather than a set of their own —
+ * they are the same three features `data/tips.ts` teaches in place, and two
+ * wordings for one gesture is exactly the drift this pre-empts. The rundown
+ * still earns its screen: it is what the app is, said before there is an app
+ * to point at. What it cannot do is be present at minute forty, in a gym,
+ * which is the half the tips carry.
+ *
+ * The buddy card keeps its own copy — there is no buddy tip, because the
+ * button that opens it has a label on it.
+ */
 const features = (L: Strings) => [
-  { d: FEAT_TICK_D, title: L.obFeatTick, sub: L.obFeatTickSub },
-  { d: FEAT_DRAG_D, title: L.obFeatDrag, sub: L.obFeatDragSub },
-  { d: FEAT_REST_D, title: L.obFeatRest, sub: L.obFeatRestSub },
+  { d: FEAT_TICK_D, title: L.tipTick, sub: L.tipTickSub },
+  { d: FEAT_DRAG_D, title: L.tipDrag, sub: L.tipDragSub },
+  { d: FEAT_REST_D, title: L.tipRest, sub: L.tipRestSub },
   { d: FEAT_BUDDY_D, title: L.obFeatBuddy, sub: L.obFeatBuddySub },
 ];
 

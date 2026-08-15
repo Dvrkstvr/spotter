@@ -75,6 +75,10 @@ export const DICT = {
     setLabel: 'Set {n}', markUp: 'Heavier', markDown: 'Lighter', markOk: 'Just right', markNote: 'Note',
     markNoteLabel: 'Note to yourself', markNotePlaceholder: 'What to remember for next time',
     markLastTime: 'Last time · {t}', markClear: 'Tap the mark again to clear it',
+    // The way in, on a set that has been lifted and has nothing written on it
+    // yet. `+ ` because that is how this app writes an action that adds a
+    // thing — `+ Add exercise`, `+ Save as routine`.
+    addNote: '+ Note',
     holdAddSet: 'Hold to add a set', startNow: 'Start now', restLeftLabel: 'Rest · {t}',
     holdNext: 'Hold for the next exercise',
     emptySessionNote: 'No exercises yet — add the first one and log as you go.',
@@ -116,7 +120,48 @@ export const DICT = {
     planPickFirst: 'Pick a workout', alsoToday: 'Also today:',
     savedNote: 'Saved to {date}. Next time these numbers show up as “last time”.',
     savedEmpty: 'Nothing was ticked off — nothing logged.', ok: 'Done',
+    // Under the Finish button, only while it is true. Not a tip: a tip teaches
+    // something invisible once and retires, where this is a permanent
+    // statement of what a button is about to do. It is `savedEmpty` in the
+    // other tense on purpose — two phrasings of "nothing happened" would read
+    // as two different rules — and it is the answer to "how do I cancel this",
+    // which nobody finds behind a button labelled Finish.
+    finishLogsNothing: 'Nothing ticked off — finishing now logs nothing.',
     daysAgo: '{n} days ago', oneDayAgo: 'yesterday',
+    /* — the in-place tips —
+       One pair per `TipId` (see `data/tips.ts`): the mechanism, then the
+       consequence. Three of them are also the welcome tour's rundown cards,
+       read from here by `onboarding-overlay.tsx`, so the tour and the tips can
+       never phrase one feature two ways. */
+    tipDrag: 'Hold a cell, then drag up or down',
+    tipDragSub: '0.5 kg or one rep per notch, and you’ll feel each one. Most sets never need the keyboard.',
+    tipTick: 'The box is the whole button',
+    tipTickSub: 'One tap logs the set. Tap it again to take it back.',
+    tipGhost: 'Tap last time’s numbers',
+    tipGhostSub: 'They land in the fields — still yours to change.',
+    tipRest: 'The rest is already running',
+    tipRestSub: 'It’s drawn on the set you’re on next. Start now cuts it short.',
+    tipMark: 'Tap the set number',
+    tipMarkSub: 'Heavier, lighter, just right — or a few words for next time.',
+    tipSwipe: 'Swipe for the next exercise',
+    tipSwipeSub: 'Or open the chip up top and jump to any of them.',
+    tipChip: 'The whole workout is behind the chip',
+    tipChipSub: 'Jump to any exercise, add one, or finish up.',
+    tipHold: 'Dashed means hold',
+    tipHoldSub: 'A tap won’t do it here. Let go early and nothing happens.',
+    tipStrip: 'Tap a day',
+    tipStripSub: 'Plan it, move it, or take it off.',
+    tipSearch: 'Search muscles, not just names',
+    tipSearchSub: '“Back” finds the Deadlift’s routines too.',
+    tipPlan: 'The calendar is the plan',
+    tipPlanSub: 'Tap any day to plan it, move it, or take it off. A rule repeats until you change it.',
+    tipStats: 'Everything here is read, never stored',
+    tipStatsSub: 'It’s your logged sessions, counted. Nothing to set up and nothing to keep up to date.',
+    dismissTip: 'I know this',
+    tips: 'Tips',
+    tipsAgain: 'Show tips again',
+    tipsAgainHint: 'The short hints that point out gestures the first time you meet them.',
+    tipsSeen: '{n} of {m} seen',
     /* — statistics & coach —
        The six regions are named here rather than read out of `groups`,
        because a region is an analysis this app performs, not an entry in the
@@ -201,14 +246,18 @@ export const DICT = {
     promptRuleGroup: 'group must be one of: {list}',
     promptRuleKind: 'equipment must be one of: {list}',
     promptRuleReuse: 'Prefer exercises I already have: {list}',
+    promptRuleFile:
+      'If you can attach files, attach the block as plan.json as well — tapping it in a chat opens Spotter with the plan ready. Send the block in the message either way.',
     promptRule3: '3. After the block, close with exactly these steps:',
-    promptStep1: '   1. Copy this entire message.',
-    promptStep2: '   2. Open Spotter › Profile › Statistics & Coach › Import.',
-    promptStep3: '   3. Paste. Spotter finds the plan and shows a preview.',
+    promptStep1: '   1. Hold this message, tap Share, choose Spotter.',
+    promptStep2: '   2. Spotter opens on the plan and shows a preview.',
+    promptStep3: '   3. No share sheet? Copy the message instead and paste it into Spotter › Profile › Statistics & Coach › Import.',
     importTitle: 'Import', importPaste: 'Paste the AI\u2019s whole answer here',
     importPasteHint: 'Paste the entire message — Spotter finds the plan inside it.',
     countRoutine: '{n} routine', countRoutines: '{n} routines',
     countExercise: '{n} exercise', countExercises: '{n} exercises',
+    countSession: '{n} session', countSessions: '{n} sessions',
+    countRule: '{n} rule', countRules: '{n} rules',
     importFound: 'Found {r} · {e}',
     importNew: '{n} new', importInLibrary: 'in library', importNewTag: 'new',
     importNoBlock: 'No plan found in that text. Make sure you copied the AI\u2019s whole answer, code block included.',
@@ -216,7 +265,8 @@ export const DICT = {
     importBadShape: 'That block isn\u2019t a Spotter plan. Ask the AI to follow the format in the prompt.',
     importDo: 'Import {r} · {e}',
     importDoNothing: 'Nothing selected',
-    importDone: 'Imported. {r} and {e} added.',
+    importShowReply: 'Show the AI’s reply ›',
+    importDiscard: 'Discard this plan',
     importDropped: 'Skipped {n}: named an exercise that isn\u2019t here and wasn\u2019t defined.',
     importGuessed: 'The AI named a muscle group or equipment you don\u2019t have — those are filed under {group} / {kind}.',
     importDuplicate: 'you already have one by this name',
@@ -273,18 +323,28 @@ export const DICT = {
     stWaiting: '{name} is waiting for you', stAhead: '{name} is ahead', stBehind: '{name} is behind',
     stBothDone: 'Both done — ready for the next exercise',
     yourTurn: 'Your set', theirTurn: "{name}'s set", together: 'Lift together',
+    // Their set is next but they're still resting — same slot as theirTurn,
+    // and named so the clock can't be read as your own.
+    theirRest: "{name}'s rest · {t}",
+    // `restLeftLabel` with an owner on it, used exactly while their line is on
+    // the row too: one clock needs no name, two do.
+    myRest: 'Your rest · {t}',
     modeAlternate: 'Take turns', modeParallel: 'Parallel',
     whoFirst: 'Who goes first', firstHost: 'Starter', firstRandom: 'Random', firstAsk: 'Ask',
     whoFirstHint:
       "Breaks the tie when you're level on an exercise. Random flips once per exercise; Ask puts it to you both and falls back to the coin.",
     whosUp: "Who's up?", bidMine: "I'll go", bidTheirs: 'You go',
     jumpTo: 'Go to {ex}',
+    // The other half of jumpTo — same slot, and the same one tap. Their list
+    // never writes to yours on its own, so this is how an exercise crosses.
+    addTheirs: 'Add {ex}',
+    ovTheirsOnly: "In {name}'s session, not yours",
     planSynced: 'In sync with {name}', planDiffers: "Differs on {name}'s phone",
     planMissing: "Not on {name}'s phone yet",
     backToWorkout: 'Back to workout', workoutRunning: 'Workout running',
     liveSession: 'Live session', me: 'You',
     about: 'About', version: 'Version', buildKind: 'Build',
-    buildStandalone: 'Standalone · real buddy radio', buildSim: 'Expo Go · sim radio',
+    buildStandalone: 'Standalone · full routine import', buildSim: 'Expo Go · sim radio',
     buildDemo: 'Expo Go · demo transport', expoSdk: 'Expo SDK',
     sessionsLogged: 'Sessions logged', copyright: '© {year} calkoh',
     buildTogether: 'Build one together', buildTogetherSub: 'with {name} — you both add exercises',
@@ -321,10 +381,29 @@ export const DICT = {
     restoreFailed: 'That file is not a Spotter backup.',
     restoreNewer: 'That backup is from a newer Spotter than this one — update the app, then restore.',
     restoreDone: 'Restored — {n} sessions logged.',
-    restoreTitle: 'Replace everything?',
     restoreBody:
-      'Restoring overwrites the routines, exercises and logged sessions on this phone. It cannot be undone.',
+      'Replacing overwrites the routines, exercises and logged sessions on this phone. It cannot be undone.',
     restoreGo: 'Restore',
+    // The restore sheet asks what should come back, rather than only offering
+    // to replace the lot — see `RestoreSheet`.
+    restoreAskTitle: 'What should come back?',
+    restoreFrom: 'Backup from {date}.',
+    restorePartSessions: 'Logged sessions',
+    restorePartLibrary: 'Routines & exercises',
+    restorePartPlan: 'Plan',
+    restoreNoneNew: 'nothing new',
+    restoreAdd: 'Add what’s missing',
+    addOnlyMissing: 'Adds only what this phone doesn’t have. Nothing here is overwritten.',
+    restoreAllHere: 'Everything in this backup is already on this phone.',
+    holdReplace: 'Hold to replace everything',
+    mergeDone: 'Added {s}, {r} and {e}.',
+    mergeNothing: 'Nothing to add — it was all here already.',
+    // A Spotter file tapped in another app — see <Intake>. The heading names
+    // where it came from rather than repeating what the line below already says.
+    intakeDoneTitle: 'From your backup',
+    intakeTitle: 'Nothing to import',
+    intakeUnknown: 'That file holds neither a Spotter backup nor a training plan.',
+    intakeUnreadable: 'That file could not be read. If it came from a chat, open it again from there.',
 
     /* — onboarding — */
     obWelcomeKicker: 'Welcome', obAppName: 'Spotter',
@@ -334,12 +413,11 @@ export const DICT = {
     obAndMore: '…and two more.',
     obHowTitle: 'How it works',
     obHowSub: "Four things you wouldn't guess by looking at a screen.",
-    obFeatTick: 'One tap logs a set',
-    obFeatTickSub: 'The tick box is the whole button. Tap it again to take the set back.',
-    obFeatDrag: 'Numbers are a gesture',
-    obFeatDragSub: 'Hold a kg or reps cell, then drag up or down. Most sets never need the keyboard.',
-    obFeatRest: 'Rest runs itself',
-    obFeatRestSub: 'Every set you tick starts the clock, drawn on the set you are on next.',
+    // The first three cards of the rundown are the `tip*` strings above, read
+    // from there rather than restated — one list, two surfaces, so the tour and
+    // the in-place tips cannot phrase one feature two ways. The buddy card has
+    // no tip twin on purpose: the button that opens it carries a label, so it
+    // fails the tips' admission test in the right direction.
     obFeatBuddy: 'Bring a training partner',
     obFeatBuddySub: 'Two phones, one session, side by side. No account and no internet.',
     obYouTitle: 'You',
@@ -396,7 +474,6 @@ export const DICT = {
     rerunSetup: 'Run the first-run setup again',
     rerunSetupHint:
       'The welcome tour: profile, permissions, workout style and the starter routines. Saving its routine picks replaces the built-in routines on this phone — ones you made and everything you have logged are never touched.',
-    holdRestore: 'Hold to restore',
   },
   de: {
     today: 'Heute', plan: 'Plan', routines: 'Routinen', exercises: 'Übungen', you: 'Profil', settings: 'Einstellungen',
@@ -428,6 +505,7 @@ export const DICT = {
     setLabel: 'Satz {n}', markUp: 'Schwerer', markDown: 'Leichter', markOk: 'Genau richtig', markNote: 'Notiz',
     markNoteLabel: 'Notiz an dich selbst', markNotePlaceholder: 'Was du dir fürs nächste Mal merken willst',
     markLastTime: 'Letztes Mal · {t}', markClear: 'Nochmal tippen entfernt die Markierung',
+    addNote: '+ Notiz',
     holdAddSet: 'Für einen neuen Satz halten', startNow: 'Jetzt starten', restLeftLabel: 'Pause · {t}',
     holdNext: 'Für die nächste Übung halten',
     emptySessionNote: 'Noch keine Übungen — füg die erste hinzu und trag ein, was du machst.',
@@ -461,9 +539,41 @@ export const DICT = {
     planPickFirst: 'Wähl ein Training', alsoToday: 'Heute außerdem:',
     savedNote: 'Für {date} gespeichert. Beim nächsten Mal stehen diese Zahlen unter „letztes Mal“.',
     savedEmpty: 'Nichts abgehakt — nichts gespeichert.', ok: 'Fertig',
+    // Zwilling zu savedEmpty, im anderen Tempus — siehe den englischen Block
+    finishLogsNothing: 'Nichts abgehakt — beenden speichert nichts.',
     // composed after lastDone ('zuletzt …'), so each carries its own 'vor'
     // where German needs one — 'heute' and 'gestern' take none
     daysAgo: 'vor {n} Tagen', oneDayAgo: 'gestern',
+    /* — die Hinweise — siehe den englischen Block */
+    tipDrag: 'Halt ein Feld, dann zieh hoch oder runter',
+    tipDragSub: '0,5 kg oder eine Wdh. pro Raste — du spürst jede. Die meisten Sätze brauchen nie die Tastatur.',
+    tipTick: 'Die Box ist der ganze Knopf',
+    tipTickSub: 'Ein Fingertipp hakt den Satz ab. Nochmal tippen nimmt ihn zurück.',
+    tipGhost: 'Tipp die Zahlen von letztem Mal an',
+    tipGhostSub: 'Sie landen in den Feldern — ändern kannst du sie weiterhin.',
+    tipRest: 'Die Pause läuft schon',
+    tipRestSub: 'Sie steht auf dem Satz, der als Nächstes dran ist. „Jetzt starten“ kürzt sie ab.',
+    tipMark: 'Tipp die Satznummer an',
+    tipMarkSub: 'Schwerer, leichter, passt — oder ein paar Worte fürs nächste Mal.',
+    tipSwipe: 'Wisch zur nächsten Übung',
+    tipSwipeSub: 'Oder öffne den Chip oben und spring zu jeder beliebigen.',
+    tipChip: 'Hinter dem Chip liegt das ganze Training',
+    tipChipSub: 'Spring zu jeder Übung, füg eine dazu oder beende das Training.',
+    tipHold: 'Gestrichelt heißt halten',
+    tipHoldSub: 'Ein Fingertipp reicht hier nicht. Lässt du früh los, passiert nichts.',
+    tipStrip: 'Tipp einen Tag an',
+    tipStripSub: 'Planen, verschieben oder freinehmen.',
+    tipSearch: 'Such nach Muskeln, nicht nur nach Namen',
+    tipSearchSub: '„Rücken“ findet auch die Routinen mit Kreuzheben.',
+    tipPlan: 'Der Kalender ist der Plan',
+    tipPlanSub: 'Tipp einen Tag an: planen, verschieben oder freinehmen. Eine Regel läuft, bis du sie änderst.',
+    tipStats: 'Alles hier wird nur gelesen',
+    tipStatsSub: 'Es sind deine aufgezeichneten Einheiten, ausgezählt. Nichts einzurichten, nichts zu pflegen.',
+    dismissTip: 'Weiß ich schon',
+    tips: 'Hinweise',
+    tipsAgain: 'Hinweise wieder anzeigen',
+    tipsAgainHint: 'Die kurzen Hinweise, die Gesten zeigen, wenn du ihnen zum ersten Mal begegnest.',
+    tipsSeen: '{n} von {m} gesehen',
     /* — Statistik & Coach — siehe den englischen Block */
     statsTitle: 'Statistik & Coach',
     regionChest: 'Brust', regionBack: 'Rücken', regionShoulders: 'Schultern',
@@ -536,14 +646,18 @@ export const DICT = {
     promptRuleGroup: 'group muss eines davon sein: {list}',
     promptRuleKind: 'equipment muss eines davon sein: {list}',
     promptRuleReuse: 'Bevorzuge Übungen, die ich schon habe: {list}',
+    promptRuleFile:
+      'Wenn du Dateien anhängen kannst, hänge den Block zusätzlich als plan.json an — ein Fingertipp darauf öffnet Spotter mit dem fertigen Plan. Schicke den Block auf jeden Fall auch in der Nachricht.',
     promptRule3: '3. Schließe nach dem Block mit genau diesen Schritten ab:',
-    promptStep1: '   1. Kopiere diese gesamte Nachricht.',
-    promptStep2: '   2. Öffne Spotter › Profil › Statistik & Coach › Import.',
-    promptStep3: '   3. Einfügen. Spotter findet den Plan und zeigt eine Vorschau.',
+    promptStep1: '   1. Halte diese Nachricht gedrückt, tippe auf Teilen und wähle Spotter.',
+    promptStep2: '   2. Spotter öffnet sich mit dem Plan und zeigt eine Vorschau.',
+    promptStep3: '   3. Kein Teilen-Menü? Kopiere die Nachricht und füge sie in Spotter › Profil › Statistik & Coach › Import ein.',
     importTitle: 'Import', importPaste: 'Die ganze Antwort der KI hier einfügen',
     importPasteHint: 'Füge die gesamte Nachricht ein — Spotter findet den Plan darin.',
     countRoutine: '{n} Routine', countRoutines: '{n} Routinen',
     countExercise: '{n} Übung', countExercises: '{n} Übungen',
+    countSession: '{n} Einheit', countSessions: '{n} Einheiten',
+    countRule: '{n} Regel', countRules: '{n} Regeln',
     importFound: '{r} · {e} gefunden',
     importNew: '{n} neu', importInLibrary: 'vorhanden', importNewTag: 'neu',
     importNoBlock: 'In diesem Text ist kein Plan. Achte darauf, die ganze Antwort der KI zu kopieren, samt Codeblock.',
@@ -551,7 +665,8 @@ export const DICT = {
     importBadShape: 'Dieser Block ist kein Spotter-Plan. Bitte die KI, das Format aus dem Prompt einzuhalten.',
     importDo: '{r} · {e} importieren',
     importDoNothing: 'Nichts ausgewählt',
-    importDone: 'Importiert. {r} und {e} hinzugefügt.',
+    importShowReply: 'Antwort der KI zeigen ›',
+    importDiscard: 'Plan verwerfen',
     importDropped: '{n} übersprungen — dort steht eine Übung, die es hier nicht gibt und die nirgends definiert ist.',
     importGuessed: 'Die KI nennt eine Muskelgruppe oder ein Gerät, das es hier nicht gibt — einsortiert unter {group} / {kind}.',
     importDuplicate: 'du hast schon eine mit diesem Namen',
@@ -608,6 +723,8 @@ export const DICT = {
     stWaiting: '{name} wartet auf dich', stAhead: '{name} ist weiter', stBehind: '{name} hängt hinterher',
     stBothDone: 'Beide fertig — bereit für die nächste Übung',
     yourTurn: 'Dein Satz', theirTurn: 'Satz von {name}', together: 'Macht ihn zusammen',
+    theirRest: 'Pause von {name} · {t}',
+    myRest: 'Deine Pause · {t}',
     modeAlternate: 'Abwechselnd', modeParallel: 'Parallel',
     whoFirst: 'Wer fängt an', firstHost: 'Starter', firstRandom: 'Zufall', firstAsk: 'Fragen',
     whoFirstHint:
@@ -615,12 +732,14 @@ export const DICT = {
     // Not 'Wer fängt an?' — that is the *setting* above; this is the live question.
     whosUp: 'Wer ist dran?', bidMine: 'Ich', bidTheirs: 'Du',
     jumpTo: 'Zu {ex}',
+    addTheirs: '{ex} hinzufügen',
+    ovTheirsOnly: 'In {name}s Session, nicht in deiner',
     planSynced: 'Synchron mit {name}', planDiffers: 'Auf {name}s Handy anders',
     planMissing: 'Noch nicht auf {name}s Handy',
     backToWorkout: 'Zurück zum Training', workoutRunning: 'Training läuft',
     liveSession: 'Live-Session', me: 'Du',
     about: 'Über die App', version: 'Version', buildKind: 'Variante',
-    buildStandalone: 'Standalone · echtes Partner-Radio', buildSim: 'Expo Go · Sim-Radio',
+    buildStandalone: 'Standalone · voller Routine-Import', buildSim: 'Expo Go · Sim-Radio',
     buildDemo: 'Expo Go · Demo-Übertragung', expoSdk: 'Expo SDK',
     sessionsLogged: 'Aufgezeichnete Einheiten', copyright: '© {year} calkoh',
     buildTogether: 'Zusammen erstellen', buildTogetherSub: 'mit {name} — ihr fügt beide Übungen hinzu',
@@ -654,10 +773,27 @@ export const DICT = {
     restoreFailed: 'Diese Datei ist kein Spotter-Backup.',
     restoreNewer: 'Dieses Backup stammt aus einem neueren Spotter — aktualisier erst die App, dann stell es wieder her.',
     restoreDone: 'Wiederhergestellt — {n} Einheiten aufgezeichnet.',
-    restoreTitle: 'Alles ersetzen?',
     restoreBody:
-      'Beim Wiederherstellen werden Routinen, Übungen und aufgezeichnete Einheiten auf diesem Handy überschrieben. Das lässt sich nicht rückgängig machen.',
+      'Beim Ersetzen werden Routinen, Übungen und aufgezeichnete Einheiten auf diesem Handy überschrieben. Das lässt sich nicht rückgängig machen.',
     restoreGo: 'Wiederherstellen',
+    restoreAskTitle: 'Was soll zurückkommen?',
+    restoreFrom: 'Backup vom {date}.',
+    restorePartSessions: 'Aufgezeichnete Einheiten',
+    restorePartLibrary: 'Routinen & Übungen',
+    restorePartPlan: 'Plan',
+    restoreNoneNew: 'nichts Neues',
+    restoreAdd: 'Ergänzen, was fehlt',
+    addOnlyMissing:
+      'Ergänzt nur, was auf diesem Handy fehlt. Nichts davon wird hier überschrieben.',
+    restoreAllHere: 'Alles aus diesem Backup ist schon auf diesem Handy.',
+    holdReplace: 'Zum Ersetzen halten',
+    mergeDone: 'Ergänzt: {s}, {r} und {e}.',
+    mergeNothing: 'Nichts zu ergänzen — es war schon alles da.',
+    intakeDoneTitle: 'Aus deinem Backup',
+    intakeTitle: 'Nichts zu importieren',
+    intakeUnknown: 'Diese Datei enthält weder ein Spotter-Backup noch einen Trainingsplan.',
+    intakeUnreadable:
+      'Diese Datei konnte nicht gelesen werden. Wenn sie aus einem Chat kam, öffne sie dort noch einmal.',
 
     /* — Onboarding — */
     obWelcomeKicker: 'Willkommen', obAppName: 'Spotter',
@@ -667,12 +803,7 @@ export const DICT = {
     obAndMore: '… und zwei mehr.',
     obHowTitle: 'So funktioniert’s',
     obHowSub: 'Vier Dinge, die man einem Bildschirm nicht ansieht.',
-    obFeatTick: 'Ein Fingertipp hakt den Satz ab',
-    obFeatTickSub: 'Die Box ist der ganze Knopf. Nochmal tippen nimmt den Satz zurück.',
-    obFeatDrag: 'Zahlen sind eine Geste',
-    obFeatDragSub: 'Kg- oder Wdh.-Feld halten, dann hoch oder runter ziehen. Die meisten Sätze brauchen nie die Tastatur.',
-    obFeatRest: 'Die Pause läuft von selbst',
-    obFeatRestSub: 'Jeder abgehakte Satz startet die Uhr — angezeigt auf dem Satz, der als Nächstes dran ist.',
+    // die ersten drei Karten sind die tip*-Strings — siehe den englischen Block
     obFeatBuddy: 'Trainiere zu zweit',
     obFeatBuddySub: 'Zwei Handys, eine Session, nebeneinander. Kein Konto, kein Internet.',
     obYouTitle: 'Du',
@@ -729,7 +860,6 @@ export const DICT = {
     rerunSetup: 'Ersteinrichtung noch einmal ausführen',
     rerunSetupHint:
       'Die Willkommenstour: Profil, Berechtigungen, Trainingsstil und die Start-Routinen. Speicherst du dort eine Routinen-Auswahl, ersetzt sie die mitgelieferten Routinen auf diesem Handy — selbst erstellte und alles Aufgezeichnete bleiben unberührt.',
-    holdRestore: 'Zum Wiederherstellen halten',
   },
 } as const;
 
@@ -777,6 +907,19 @@ export const fmtDayLong = (lang: Lang, d: Date) =>
   lang === 'de'
     ? `${DAYS_LONG.de[dowOf(d)]}, ${d.getDate()}. ${MONTHS.de[d.getMonth()]}`
     : `${DAYS_LONG.en[dowOf(d)]} ${d.getDate()} ${MONTHS.en[d.getMonth()]}`;
+
+/**
+ * '13 August 2026' / '13. August 2026' — a backup's date.
+ *
+ * The year is in and the weekday is out, which is the opposite of every other
+ * formatter here: the others date something that happened this week, where a
+ * backup can be two years old and which Tuesday it was written on is nothing
+ * anybody needs.
+ */
+export const fmtDateYear = (lang: Lang, d: Date) =>
+  lang === 'de'
+    ? `${d.getDate()}. ${MONTHS.de[d.getMonth()]} ${d.getFullYear()}`
+    : `${d.getDate()} ${MONTHS.en[d.getMonth()]} ${d.getFullYear()}`;
 
 /** '5 Aug' / '5. Aug' — compact, for the last-session rows. */
 export const fmtDayTiny = (lang: Lang, d: Date) =>

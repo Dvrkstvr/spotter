@@ -24,6 +24,7 @@ import { Animated, Pressable, Text, View } from 'react-native';
 import { CHECK_D, Icon } from '@/components/icon';
 import { RiseIn } from '@/components/motion';
 import { Screen } from '@/components/screen';
+import { Tip } from '@/components/tip';
 import { radio } from '@/data/buddy-radio';
 import {
   DEFAULT_ROUTINES,
@@ -35,6 +36,7 @@ import {
 } from '@/data/exercises';
 import { countN, repeatLabel, Strings } from '@/data/i18n';
 import { nextDays, rulesFor } from '@/data/plan';
+import { pickTip } from '@/data/tips';
 import { themed, useColors, useThemed } from '@/design/theme';
 import { color, font, motion, radius, slop, t, tracking, wash } from '@/design/tokens';
 import { Btn, Chip, H2, H6, Input, missingName, Seg } from '@/design/ui';
@@ -66,8 +68,9 @@ const NO_DAY = 9999;
 export default function RoutinesScreen() {
   const styles = useThemed(sheet);
   const c = useColors();
-  const { s, L, patch, ex, rInfo, exInfo, gInfo, start, startCoDraft, addSeedRoutine, clock } =
-    useStore();
+  const {
+    s, L, patch, ex, rInfo, exInfo, gInfo, start, startCoDraft, addSeedRoutine, clock, tipDone,
+  } = useStore();
 
   /**
    * A workout is running, so nothing on this tab can start one — the guard in
@@ -361,8 +364,19 @@ export default function RoutinesScreen() {
             style={styles.search}
             placeholder={L.searchRoutines}
             value={s.routineQuery}
-            onChangeText={(v) => patch({ routineQuery: v })}
+            onChangeText={(v) => {
+              tipDone('search');
+              patch({ routineQuery: v });
+            }}
           />
+          {/* Matching a muscle group is the most useful thing about this field
+              and the least guessable — the placeholder can only say "Search
+              routines", which is the half people already assume. Retired the
+              moment a query is typed: whatever you were looking for, you have
+              met the field, and the results teach the rest. */}
+          {!searching && pickTip(s.tips, ['search']) === 'search' && (
+            <Tip id="search" title={L.tipSearch} sub={L.tipSearchSub} />
+          )}
           {/* While a query is live the seg steps aside — results order by
               where the match is, which is relevance without a score. */}
           {!searching && (

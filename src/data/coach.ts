@@ -189,9 +189,27 @@ export function buildPrompt(i: PromptInput): string {
   // join key on the way back — see `parsePlan`.
   out.push(`- ${L.promptRuleReuse.replace('{list}', i.library.map(i.exName).join(', '))}`);
 
+  // The second way home, offered to the AI rather than printed for the user:
+  // Spotter answers a tapped file now, so a reply that *can* arrive as one saves
+  // the copy and the paste. Belt and braces on purpose — the block still goes in
+  // the message, because most chat AIs cannot attach anything and a delivery
+  // route that replaced the working one with an unproven one would be a
+  // downgrade.
+  //
+  // `.json` rather than this app's own `.sptr` (`EXT` in backup.ts), and that is
+  // the one place the two disagree on purpose: the export is a file we write and
+  // name, while this one is written by a stranger and has to survive a chat app's
+  // attachment rules — where a type nothing recognises is the thing most likely
+  // to be refused. The filter claims json anyway, so nothing is lost by asking
+  // for the format the far end can actually send.
+  out.push('', L.promptRuleFile);
+
   // Rule 3 is what makes the answer carry its own way home. Whoever wandered
   // into a chat app has no reason to remember this flow, so the reply ends by
-  // walking them back to the Import screen.
+  // walking them back — now by *sharing* the message rather than copying it,
+  // which is one gesture and no clipboard. Paste survives as the third step
+  // rather than the first: it is what an Expo Go build and any chat app without
+  // a share sheet still have, and `parsePlan` reads both the same way.
   out.push('', L.promptRule3);
   out.push(L.promptStep1, L.promptStep2, L.promptStep3);
 

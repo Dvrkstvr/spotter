@@ -1,0 +1,1179 @@
+<title>Spotter — A note is a fact about the set (mockup)</title>
+<style>
+  /* ── Nocturne, verbatim from src/design/tokens.ts ─────────────────────
+     Single-theme on purpose: this mocks the app's default (blurple · dark),
+     which is byte-identical to the ported design palette. */
+  :root {
+    --bg: #161826;          /* app page */
+    --surface: #232532;
+    --text: #e9e9ed;
+    --accent: #9184d9;
+    --accent2: #a7a1db;
+    --a100: #f5f4ff; --a200: #e7e5fe; --a300: #d2cefd; --a400: #b5abfc;
+    --a500: #968ae0; --a600: #796cbf; --a700: #5d5294; --a800: #423a6a; --a900: #2b2741;
+    --n100: #f3f5fe; --n300: #cfd3e5; --n400: #b2b6ca; --n500: #9397ab; --n600: #75798c;
+    --n700: #595d6c; --n800: #3f424d; --n900: #292b31;
+    --scrim: #0b0c14;
+    --divider: rgba(233, 233, 237, 0.16);
+    --rule: rgba(233, 233, 237, 0.09);
+    --wash-t8: rgba(233, 233, 237, 0.08);
+    --wash-t5: rgba(233, 233, 237, 0.05);
+    --wash-a16: rgba(145, 132, 217, 0.16);
+    --wash-a12: rgba(145, 132, 217, 0.12);
+    --wash-a7: rgba(145, 132, 217, 0.07);
+    --sans: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--scrim);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 1180px; margin: 0 auto; padding: 56px 28px 96px; }
+
+  .kicker {
+    font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--accent); font-weight: 400;
+  }
+  h1 {
+    font-weight: 500; font-size: 40px; line-height: 1.12;
+    letter-spacing: -0.015em; margin: 10px 0 14px; text-wrap: balance;
+  }
+  h2.sec { font-weight: 500; font-size: 24px; letter-spacing: -0.015em; margin: 0 0 6px; }
+  .lede { color: var(--n400); max-width: 68ch; }
+  .lede.wide { max-width: 84ch; }
+  .lede strong { color: var(--text); font-weight: 500; }
+  .lede code, .notes code, .settled code, td code, .ask code {
+    font-family: var(--mono); font-size: 12.5px; color: var(--a300);
+    background: var(--n900); border-radius: 4px; padding: 1px 5px;
+  }
+
+  .settled {
+    margin: 26px 0 0; border: 1px solid var(--divider); border-left: 2px solid var(--accent);
+    border-radius: 8px; padding: 13px 16px; max-width: 84ch;
+  }
+  .settled .h { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); }
+  .settled ul { margin: 9px 0 0; padding-left: 18px; color: var(--n400); font-size: 13.5px; display: grid; gap: 7px; }
+  .settled li::marker { color: var(--n700); }
+  .settled strong { color: var(--text); font-weight: 500; }
+  .settled.warn { border-left-color: var(--n600); }
+  .settled.warn .h { color: var(--n400); }
+
+  hr.fade {
+    border: 0; height: 1px; margin: 52px 0;
+    background: linear-gradient(90deg, transparent, var(--divider) 48px, var(--divider) calc(100% - 48px), transparent);
+  }
+
+  /* ── frames laid out side by side ── */
+  .trio { display: grid; grid-template-columns: repeat(3, 348px); gap: 26px; margin-top: 26px; align-items: start; }
+  .pair { display: grid; grid-template-columns: 348px 348px; gap: 32px; margin-top: 26px; align-items: start; }
+  .half .cap { font-size: 13px; font-weight: 500; margin-bottom: 3px; }
+  .half .cap.bad { color: var(--n400); }
+  .half .cap.good { color: var(--accent); }
+  .half .cap.mid { color: var(--n300); }
+  .half .sub { font-size: 12px; color: var(--n500); margin-bottom: 12px; max-width: 42ch; min-height: 72px; }
+  .half .sub b { color: var(--n300); font-weight: 500; }
+  .notes { margin-top: 24px; max-width: 80ch; }
+  .notes ul { margin: 10px 0 0; padding-left: 18px; color: var(--n400); font-size: 14px; display: grid; gap: 9px; }
+  .notes li::marker { color: var(--n700); }
+  .notes strong { color: var(--text); font-weight: 500; }
+  @media (max-width: 1140px) { .trio { grid-template-columns: 1fr; } .pair { grid-template-columns: 1fr; } }
+
+  /* ── phone frame ── */
+  .phone {
+    width: 348px; background: var(--bg);
+    border: 1px solid var(--n800); border-radius: 30px;
+    padding: 12px 12px 0; overflow: hidden; position: relative;
+  }
+  .phone.tall { height: 700px; }
+  .phone .status {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 10px; color: var(--n700); padding: 2px 6px 8px;
+  }
+  .scr { padding: 0 4px; }
+
+  /* ── the session's exercise screen ── */
+  .topbar { display: flex; align-items: center; gap: 10px; padding: 2px 0 10px; }
+  .topbar .back { font-size: 17px; color: var(--n400); }
+  .chip {
+    font-size: 11.5px; color: var(--a300); border: 1px solid var(--a700);
+    background: var(--wash-a7); border-radius: 999px; padding: 2px 9px;
+    font-variant-numeric: tabular-nums;
+  }
+  .topbar .clock { margin-left: auto; font-size: 12px; color: var(--n500); font-variant-numeric: tabular-nums; }
+  .exname { font-size: 19px; font-weight: 500; letter-spacing: -0.01em; }
+  .exmeta { font-size: 11px; color: var(--n600); margin-top: 2px; }
+  .setup { display: flex; gap: 6px; margin-top: 8px; }
+  .setup span {
+    font-size: 10px; color: var(--a300); border: 1px solid var(--a800);
+    background: var(--wash-a7); border-radius: 4px; padding: 2px 6px;
+  }
+
+  /* the set ledger — geometry mirrors session-overlay.tsx:
+     16px index · 8 gap · 66 last · 8 · flex · 8 · flex · 8 · 34 check */
+  .colhead, .setrow { display: grid; grid-template-columns: 16px 66px 1fr 1fr 34px; gap: 8px; align-items: center; }
+  .colhead { padding: 14px 2px 5px; }
+  .colhead span {
+    font-size: 9.5px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--n700);
+  }
+  .colhead .c { text-align: center; }
+  .rowwrap { margin-bottom: 5px; }
+  .idx { font-size: 12px; color: var(--n600); font-variant-numeric: tabular-nums; }
+  .idx.live { color: var(--a400); }
+  .prev { font-size: 11.5px; color: var(--n500); font-variant-numeric: tabular-nums; }
+  .cell {
+    text-align: center; font-size: 15px; color: var(--text);
+    border-bottom: 1px solid var(--n800); padding: 5px 0 4px;
+    font-variant-numeric: tabular-nums;
+  }
+  .cell.big { font-size: 22px; padding: 3px 0 2px; }
+  .cell.ghost { color: var(--n700); }
+  .tick {
+    width: 22px; height: 22px; border-radius: 6px; border: 1px solid var(--n700);
+    justify-self: center; display: grid; place-items: center;
+  }
+  .tick.on { border-color: var(--accent); background: var(--wash-a16); }
+  .tick.live { border-color: var(--a600); }
+  .livebox {
+    margin: 3px 0; padding: 8px; border: 1px solid var(--a700);
+    border-radius: 10px; background: var(--wash-a7);
+  }
+  .livebox.wait { border-style: dashed; border-color: var(--n700); background: transparent; }
+
+  /* the note line — the thing this mockup is about */
+  .markline {
+    display: flex; align-items: center; gap: 6px; margin-top: 5px; padding-left: 2px;
+  }
+  .markline .t { font-size: 11px; color: var(--n500); flex: 1; min-width: 0; }
+  .markline .t.own { color: var(--n400); }
+  .markline .t.empty { color: var(--n700); }
+  svg.mk { flex: none; }
+
+  /* last session's verdicts, hoisted to the top of the exercise */
+  .lastnotes { display: grid; gap: 4px; margin: 12px 0 10px; padding: 0 2px; }
+  .lastnote { display: flex; align-items: center; gap: 6px; }
+  .lastnote .t { font-size: 11px; color: var(--n500); flex: 1; min-width: 0; }
+
+  .waitrow {
+    display: flex; align-items: center; gap: 8px; margin-top: 8px; padding-top: 7px;
+    border-top: 1px solid var(--wash-t8);
+  }
+  .waitrow .l { flex: 1; font-size: 11.5px; color: var(--n500); font-variant-numeric: tabular-nums; }
+  .waitrow .s { font-size: 11.5px; color: var(--accent); }
+
+  .cta {
+    position: absolute; left: 16px; right: 16px; bottom: 14px;
+    border: 1px solid var(--a600); background: var(--wash-a12);
+    border-radius: 10px; padding: 12px; text-align: center;
+    font-size: 14px; color: var(--a200);
+  }
+  .cta.dashed { border-style: dashed; border-color: var(--n700); color: var(--n400); background: transparent; }
+
+  /* ── the mark sheet, for reference ── */
+  .sheet {
+    border-top: 1px solid var(--divider); background: var(--surface);
+    border-radius: 14px 14px 0 0; padding: 14px 14px 16px; margin: 0 -16px;
+    position: absolute; left: 12px; right: 12px; bottom: 0;
+  }
+  .sheet h4 { font-size: 15px; font-weight: 500; }
+  .sheet .sub { font-size: 11.5px; color: var(--n600); margin-top: 1px; }
+  .marks { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; margin-top: 12px; }
+  .marktile {
+    border: 1px solid var(--divider); border-radius: 8px; padding: 9px 4px;
+    display: grid; justify-items: center; gap: 5px;
+  }
+  .marktile.on { border-color: var(--accent); background: var(--wash-a12); }
+  .marktile span { font-size: 9.5px; color: var(--n400); text-align: center; }
+  .marktile.on span { color: var(--a200); }
+  .field { margin-top: 13px; }
+  .field .lab { font-size: 10px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--n600); }
+  .field .inp {
+    margin-top: 5px; border: 1px solid var(--n800); border-radius: 8px;
+    padding: 9px 10px; font-size: 13px; color: var(--text); min-height: 56px;
+  }
+  .field .inp.ph { color: var(--n700); }
+
+  /* ── the diary: Plan's day panel ── */
+  .daypanel { padding-top: 4px; }
+  .dayhead { font-size: 12px; color: var(--n500); }
+  .logcard {
+    margin-top: 8px; padding: 12px 13px; border-radius: 8px; background: var(--surface);
+  }
+  .logtop { display: flex; align-items: baseline; gap: 8px; }
+  .logtitle { flex: 1; font-size: 15px; font-weight: 500; }
+  .logbuddy { font-size: 11px; color: var(--a400); }
+  .logstats { font-size: 11.5px; color: var(--n500); margin-top: 3px; font-variant-numeric: tabular-nums; }
+  .logex { margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--rule); }
+  .logextop { display: flex; align-items: baseline; gap: 10px; }
+  .logexname { flex: 1; font-size: 13px; }
+  .logexcount { font-size: 10.5px; color: var(--n600); }
+  .logsets {
+    display: flex; flex-wrap: wrap; column-gap: 14px; row-gap: 2px; margin-top: 3px;
+  }
+  .logset { font-size: 12px; color: var(--n400); font-variant-numeric: tabular-nums; }
+  /* an annotated set leaves the wrap and takes its own line */
+  .logset.full { flex-basis: 100%; display: flex; align-items: center; gap: 7px; }
+  .logset.full .nt { font-size: 11px; color: var(--n500); }
+  .logset.full .num { color: var(--n400); }
+  .lognotes { margin-top: 6px; display: grid; gap: 3px; }
+  .lognotes .r { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--n500); }
+  .lognotes .r b { color: var(--n600); font-weight: 400; font-variant-numeric: tabular-nums; }
+
+  /* ── tables ── */
+  table { border-collapse: collapse; margin-top: 20px; font-size: 13.5px; width: 100%; max-width: 92ch; }
+  th, td { text-align: left; padding: 8px 14px 8px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font-size: 10px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--n600); font-weight: 400; }
+  td { color: var(--n400); }
+  td.k { color: var(--text); white-space: nowrap; }
+  td .de { color: var(--n500); }
+
+  pre {
+    margin-top: 18px; background: var(--n900); border: 1px solid var(--n800);
+    border-radius: 8px; padding: 14px 16px; overflow-x: auto;
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.7; color: var(--n300);
+  }
+  pre .c { color: var(--n600); }
+  pre .a { color: var(--a300); }
+
+  .ask { margin-top: 26px; border: 1px solid var(--divider); border-radius: 8px; padding: 4px 16px 14px; max-width: 84ch; }
+  .ask .h { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--n400); margin-top: 12px; }
+  .ask ol { margin: 10px 0 0; padding-left: 20px; color: var(--n400); font-size: 13.5px; display: grid; gap: 10px; }
+  .ask li::marker { color: var(--n700); }
+  .ask strong { color: var(--text); font-weight: 500; }
+</style>
+
+<div class="page">
+
+  <div class="kicker">Spotter · mockup</div>
+  <h1>A note is a fact about the set.<br>Keep it with the set.</h1>
+  <p class="lede wide">
+    A set mark already draws a slim line under its row — but only once words
+    exist, and only for as long as the session does. <strong>Nothing carries a
+    note into the diary.</strong> <code>HistoryEntry.list</code> stores
+    <code>"70 × 8"</code> strings and nothing else, so the one screen that is a
+    record shows the numbers and drops what you thought about them. What
+    survives is <code>lastMarks</code> — resurfaced next week as <em>Last time ·
+    grip went first</em> on the matching row, which is useful and is not the
+    same as remembering.
+  </p>
+
+  <div class="settled">
+    <div class="h">What this mockup decides</div>
+    <ul>
+      <li><strong>In the session, the line arrives with the tick.</strong> A set
+        that has been lifted can be judged; one three rows down cannot. So every
+        <em>done</em> set carries the slim line — the note when there is one, a
+        dim way in when there isn't — and untouched rows stay bare.</li>
+      <li><strong>Last time's verdicts hoist to the top of the exercise.</strong>
+        Whole, each naming its set, read before set 1 — where advice can still
+        change what you do. They leave the set row entirely rather than being
+        drawn in both places.</li>
+      <li><strong>In the diary, an annotated set leaves the wrap.</strong> Sets
+        keep flowing loose and wrapping; the one carrying words takes its own
+        full-width line, glyph then note, in order.</li>
+      <li><strong>The shape change is one optional field.</strong>
+        <code>LoggedExercise.marks?: (MarkNote | null)[]</code>, index for index
+        with <code>sets</code> — additive, so no <code>STORAGE_VERSION</code>
+        bump and no migration, exactly as <code>list</code> / <code>secs</code> /
+        <code>vol</code> were added.</li>
+      <li><strong>No new tip.</strong> The mark sheet is precisely the thing a
+        careful person could use for a month and never find — and the catalogue's
+        own rule is that the honest fix is usually the control. This is the
+        control.</li>
+    </ul>
+  </div>
+
+  <hr class="fade">
+
+  <h2 class="sec">1 · The session row</h2>
+  <p class="lede wide">
+    Three densities for the same 5-set exercise. Set 1 and 2 are done, set 3 is
+    live. The middle frame is the literal reading of <em>permanently shown</em>;
+    the right-hand one is what I'd ship.
+  </p>
+
+  <div class="trio">
+
+    <!-- ── A · today ─────────────────────────────────────────────────── -->
+    <div class="half">
+      <div class="cap bad">A · Today</div>
+      <div class="sub">
+        A line only where a note exists. Set 2's words show; set 1 has none and
+        says nothing about the fact that it could. <b>The way in is the index
+        digit</b> — a 16px tap target nobody is told about.
+      </div>
+      <div class="phone tall">
+        <div class="status"><span>9:41</span><span>▮▮▮</span></div>
+        <div class="scr">
+          <div class="topbar">
+            <span class="back">‹</span>
+            <span class="chip">3 / 5</span>
+            <span class="clock">24:18</span>
+          </div>
+          <div class="exname">Bench Press</div>
+          <div class="exmeta">Chest · Barbell</div>
+          <div class="setup"><span>Seat 4</span><span>Bar 20 kg</span></div>
+
+          <div class="colhead">
+            <span>#</span><span>Last time</span><span class="c">kg</span><span class="c">Reps</span><span></span>
+          </div>
+
+          <!-- set 1 · done, no note -->
+          <div class="rowwrap">
+            <div class="setrow">
+              <span class="idx">1</span>
+              <span class="prev">70 × 8</span>
+              <span class="cell">70</span>
+              <span class="cell">8</span>
+              <span class="tick on">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#b5abfc" stroke-width="2.4" stroke-linecap="round"/></svg>
+              </span>
+            </div>
+          </div>
+
+          <!-- set 2 · done, note -->
+          <div class="rowwrap">
+            <div class="setrow">
+              <span class="idx">
+                <svg class="mk" width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M12 19.2V5.2M5.8 11.4l6.2-6.2 6.2 6.2" stroke="#b5abfc" stroke-width="2.2" stroke-linecap="round"/></svg>
+              </span>
+              <span class="prev">70 × 8</span>
+              <span class="cell">70</span>
+              <span class="cell">8</span>
+              <span class="tick on">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#b5abfc" stroke-width="2.4" stroke-linecap="round"/></svg>
+              </span>
+            </div>
+            <div class="markline">
+              <svg class="mk" width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M12 19.2V5.2M5.8 11.4l6.2-6.2 6.2 6.2" stroke="#b5abfc" stroke-width="2.2" stroke-linecap="round"/></svg>
+              <span class="t own">bar felt light — try 75 next</span>
+            </div>
+          </div>
+
+          <!-- set 3 · live -->
+          <div class="rowwrap">
+            <div class="livebox">
+              <div class="setrow">
+                <span class="idx live">3</span>
+                <span class="prev">65 × 8</span>
+                <span class="cell big ghost">65</span>
+                <span class="cell big ghost">8</span>
+                <span class="tick live"></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- sets 4, 5 -->
+          <div class="rowwrap">
+            <div class="setrow">
+              <span class="idx">4</span><span class="prev">65 × 8</span>
+              <span class="cell ghost">65</span><span class="cell ghost">8</span>
+              <span class="tick"></span>
+            </div>
+          </div>
+          <div class="rowwrap">
+            <div class="setrow">
+              <span class="idx">5</span><span class="prev">65 × 6</span>
+              <span class="cell ghost">65</span><span class="cell ghost">6</span>
+              <span class="tick"></span>
+            </div>
+          </div>
+        </div>
+        <div class="cta">Next exercise</div>
+      </div>
+    </div>
+
+    <!-- ── B · a line under every row ─────────────────────────────────── -->
+    <div class="half">
+      <div class="cap mid">B · Under every row, always</div>
+      <div class="sub">
+        The literal reading. Every set carries the line whether or not it has
+        anything to say. <b>Five sets buy five lines</b> — and on an 8-set day
+        that is ~130px of mostly <em>+ Note</em>, which is furniture on the one
+        screen working hardest not to become it.
+      </div>
+      <div class="phone tall">
+        <div class="status"><span>9:41</span><span>▮▮▮</span></div>
+        <div class="scr">
+          <div class="topbar">
+            <span class="back">‹</span>
+            <span class="chip">3 / 5</span>
+            <span class="clock">24:18</span>
+          </div>
+          <div class="exname">Bench Press</div>
+          <div class="exmeta">Chest · Barbell</div>
+          <div class="setup"><span>Seat 4</span><span>Bar 20 kg</span></div>
+
+          <div class="colhead">
+            <span>#</span><span>Last time</span><span class="c">kg</span><span class="c">Reps</span><span></span>
+          </div>
+
+          <div class="rowwrap">
+            <div class="setrow">
+              <span class="idx">1</span><span class="prev">70 × 8</span>
+              <span class="cell">70</span><span class="cell">8</span>
+              <span class="tick on">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#b5abfc" stroke-width="2.4" stroke-linecap="round"/></svg>
+              </span>
+            </div>
+            <div class="markline">
+              <svg class="mk" width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M12 10.8v6.6M12 6.9v.01" stroke="#595d6c" stroke-width="2.2" stroke-linecap="round"/></svg>
+              <span class="t empty">+ Note</span>
+            </div>
+          </div>
+
+          <div class="rowwrap">
+            <div class="setrow">
+              <span class="idx">
+                <svg class="mk" width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M12 19.2V5.2M5.8 11.4l6.2-6.2 6.2 6.2" stroke="#b5abfc" stroke-width="2.2" stroke-linecap="round"/></svg>
+              </span>
+              <span class="prev">70 × 8</span>
+              <span class="cell">70</span><span class="cell">8</span>
+              <span class="tick on">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#b5abfc" stroke-width="2.4" stroke-linecap="round"/></svg>
+              </span>
+            </div>
+            <div class="markline">
+              <svg class="mk" width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M12 19.2V5.2M5.8 11.4l6.2-6.2 6.2 6.2" stroke="#b5abfc" stroke-width="2.2" stroke-linecap="round"/></svg>
+              <span class="t own">bar felt light — try 75 next</span>
+            </div>
+          </div>
+
+          <div class="rowwrap">
+            <div class="livebox">
+              <div class="setrow">
+                <span class="idx live">3</span><span class="prev">65 × 8</span>
+                <span class="cell big ghost">65</span><span class="cell big ghost">8</span>
+                <span class="tick live"></span>
+              </div>
+              <div class="markline">
+                <svg class="mk" width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M12 10.8v6.6M12 6.9v.01" stroke="#595d6c" stroke-width="2.2" stroke-linecap="round"/></svg>
+                <span class="t empty">+ Note</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="rowwrap">
+            <div class="setrow">
+              <span class="idx">4</span><span class="prev">65 × 8</span>
+              <span class="cell ghost">65</span><span class="cell ghost">8</span>
+              <span class="tick"></span>
+            </div>
+            <div class="markline">
+              <svg class="mk" width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M12 10.8v6.6M12 6.9v.01" stroke="#595d6c" stroke-width="2.2" stroke-linecap="round"/></svg>
+              <span class="t empty">+ Note</span>
+            </div>
+          </div>
+          <div class="rowwrap">
+            <div class="setrow">
+              <span class="idx">5</span><span class="prev">65 × 6</span>
+              <span class="cell ghost">65</span><span class="cell ghost">6</span>
+              <span class="tick"></span>
+            </div>
+            <div class="markline">
+              <svg class="mk" width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M12 10.8v6.6M12 6.9v.01" stroke="#595d6c" stroke-width="2.2" stroke-linecap="round"/></svg>
+              <span class="t empty">+ Note</span>
+            </div>
+          </div>
+        </div>
+        <div class="cta">Next exercise</div>
+      </div>
+    </div>
+
+    <!-- ── C · from the tick onward ───────────────────────────────────── -->
+    <div class="half">
+      <div class="cap good">C · From the tick onward · shipped</div>
+      <div class="sub">
+        The line appears the moment a set is logged, and stays for good. <b>A set
+        you have lifted is a set you have an opinion about</b>; set 4 is a plan,
+        and a plan has nothing to say yet. The live row's <em>Last time</em>
+        line is drawn here as it was — §2 moves it.
+      </div>
+      <div class="phone tall">
+        <div class="status"><span>9:41</span><span>▮▮▮</span></div>
+        <div class="scr">
+          <div class="topbar">
+            <span class="back">‹</span>
+            <span class="chip">3 / 5</span>
+            <span class="clock">24:18</span>
+          </div>
+          <div class="exname">Bench Press</div>
+          <div class="exmeta">Chest · Barbell</div>
+          <div class="setup"><span>Seat 4</span><span>Bar 20 kg</span></div>
+
+          <div class="colhead">
+            <span>#</span><span>Last time</span><span class="c">kg</span><span class="c">Reps</span><span></span>
+          </div>
+
+          <!-- done, empty → the way in -->
+          <div class="rowwrap">
+            <div class="setrow">
+              <span class="idx">1</span><span class="prev">70 × 8</span>
+              <span class="cell">70</span><span class="cell">8</span>
+              <span class="tick on">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#b5abfc" stroke-width="2.4" stroke-linecap="round"/></svg>
+              </span>
+            </div>
+            <div class="markline">
+              <svg class="mk" width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M12 10.8v6.6M12 6.9v.01" stroke="#595d6c" stroke-width="2.2" stroke-linecap="round"/></svg>
+              <span class="t empty">+ Note</span>
+            </div>
+          </div>
+
+          <!-- done, note -->
+          <div class="rowwrap">
+            <div class="setrow">
+              <span class="idx">
+                <svg class="mk" width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M12 19.2V5.2M5.8 11.4l6.2-6.2 6.2 6.2" stroke="#b5abfc" stroke-width="2.2" stroke-linecap="round"/></svg>
+              </span>
+              <span class="prev">70 × 8</span>
+              <span class="cell">70</span><span class="cell">8</span>
+              <span class="tick on">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#b5abfc" stroke-width="2.4" stroke-linecap="round"/></svg>
+              </span>
+            </div>
+            <div class="markline">
+              <svg class="mk" width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M12 19.2V5.2M5.8 11.4l6.2-6.2 6.2 6.2" stroke="#b5abfc" stroke-width="2.2" stroke-linecap="round"/></svg>
+              <span class="t own">bar felt light — try 75 next</span>
+            </div>
+          </div>
+
+          <!-- live · last time's advice keeps the slot -->
+          <div class="rowwrap">
+            <div class="livebox">
+              <div class="setrow">
+                <span class="idx live">3</span><span class="prev">65 × 8</span>
+                <span class="cell big ghost">65</span><span class="cell big ghost">8</span>
+                <span class="tick live"></span>
+              </div>
+              <div class="markline">
+                <svg class="mk" width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M12 4.8v14M5.8 12.6l6.2 6.2 6.2-6.2" stroke="#9397ab" stroke-width="2.2" stroke-linecap="round"/></svg>
+                <span class="t">Last time · shoulder, drop to 60</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- untouched -->
+          <div class="rowwrap">
+            <div class="setrow">
+              <span class="idx">4</span><span class="prev">65 × 8</span>
+              <span class="cell ghost">65</span><span class="cell ghost">8</span>
+              <span class="tick"></span>
+            </div>
+          </div>
+          <div class="rowwrap">
+            <div class="setrow">
+              <span class="idx">5</span><span class="prev">65 × 6</span>
+              <span class="cell ghost">65</span><span class="cell ghost">6</span>
+              <span class="tick"></span>
+            </div>
+          </div>
+        </div>
+        <div class="cta">Next exercise</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <ul>
+      <li><strong>One slot, three tenants, one precedence.</strong> The line
+        under a row can be last time's advice, this set's own words, or the way
+        in — never two of them. <em>Own words win, then last time's, then the
+        affordance</em>: once you have written something, your own sentence is
+        the live fact and the ghost of last week is spent. That is the rule the
+        current code already implies by rendering both; making the slot single
+        is what stops a live row growing to four lines when the rest countdown
+        is under it too.</li>
+      <li><strong>The empty line is the quietest thing on the screen</strong> —
+        <code>neutral700</code>, 11px, the <code>note</code> glyph the mark sheet
+        already uses. It is dimmer than the ghost figures beside it, which is
+        right: it is an offer, and everything else on the row is the workout.</li>
+      <li><strong>It borrows no outline.</strong> Per the tip rules — no fill, no
+        dash, no box. A note line is text and a glyph, so it can never be
+        mistaken for the held control the dashes mean.</li>
+      <li><strong>The tap target is the whole line, at <code>slop</code>.</strong>
+        The index digit stays tappable — it is how you mark a set without words
+        — but it stops being the <em>only</em> way in, which is the actual
+        complaint.</li>
+    </ul>
+  </div>
+
+  <div class="settled warn">
+    <div class="h">The cost of B, stated</div>
+    <ul>
+      <li>An 8-set exercise: <strong>8 × ~16px = 130px</strong> of vertical, six
+        or seven lines of it reading <em>+ Note</em>. The set you are on gets
+        pushed further from the thumb every set you finish, and the ledger stops
+        scanning as a column of numbers.</li>
+      <li>C pays the same 16px only where a set has been performed, so the cost
+        grows exactly as fast as the reason for it does — and an exercise you have
+        just started still opens as a clean ledger.</li>
+    </ul>
+  </div>
+
+  <hr class="fade">
+
+  <h2 class="sec">2 · The fourth frame — last time, before set 1</h2>
+  <p class="lede wide">
+    C still has a timing problem, and it's the one the per-set/per-exercise
+    question was really pointing at. A note is written <em>after</em> a set and
+    comes back next week on the row it was written on — which for
+    <em>try 75 next</em> is exactly right, and for <em>shoulder, drop to 60</em>
+    means reading it on set 3, after you have already loaded the bar twice.
+    <strong>So last session's verdicts hoist to the top of the exercise</strong>,
+    whole, each naming its set.
+  </p>
+
+  <div class="pair">
+    <div class="half">
+      <div class="cap bad">Two sets late</div>
+      <div class="sub">
+        Last time's advice drawn on the row it belongs to, out of
+        <code>prevMark</code>. <b>You reach it on set 3</b> — by which point the
+        bar is loaded and the decision it was about has been made twice.
+      </div>
+      <div class="phone" style="height: 500px">
+        <div class="status"><span>9:41</span><span>▮▮▮</span></div>
+        <div class="scr">
+          <div class="topbar">
+            <span class="back">‹</span><span class="chip">3 / 5</span><span class="clock">24:18</span>
+          </div>
+          <div class="exname">Bench Press</div>
+          <div class="exmeta">Chest · Barbell</div>
+          <div class="setup"><span>Seat 4</span><span>Bar 20 kg</span></div>
+          <div class="colhead">
+            <span>#</span><span>Last time</span><span class="c">kg</span><span class="c">Reps</span><span></span>
+          </div>
+          <div class="rowwrap">
+            <div class="setrow">
+              <span class="idx">1</span><span class="prev">70 × 8</span>
+              <span class="cell">70</span><span class="cell">8</span>
+              <span class="tick on">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#b5abfc" stroke-width="2.4" stroke-linecap="round"/></svg>
+              </span>
+            </div>
+          </div>
+          <div class="rowwrap">
+            <div class="setrow">
+              <span class="idx">2</span><span class="prev">70 × 8</span>
+              <span class="cell">70</span><span class="cell">8</span>
+              <span class="tick on">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#b5abfc" stroke-width="2.4" stroke-linecap="round"/></svg>
+              </span>
+            </div>
+          </div>
+          <div class="rowwrap">
+            <div class="livebox">
+              <div class="setrow">
+                <span class="idx live">3</span><span class="prev">65 × 8</span>
+                <span class="cell big ghost">65</span><span class="cell big ghost">8</span>
+                <span class="tick live"></span>
+              </div>
+              <div class="markline">
+                <svg class="mk" width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M12 4.8v14M5.8 12.6l6.2 6.2 6.2-6.2" stroke="#9397ab" stroke-width="2.2" stroke-linecap="round"/></svg>
+                <span class="t">Last time · shoulder, drop to 60</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="half">
+      <div class="cap good">D · Hoisted · shipped</div>
+      <div class="sub">
+        Every mark last session left on this exercise, at the top, before the
+        ledger — <b>each one naming its set</b>, which is what keeps
+        <em>try 75 next</em> attached to the 70 it was about. In the scroll, so
+        it gets out of the way once you're working.
+      </div>
+      <div class="phone" style="height: 500px">
+        <div class="status"><span>9:41</span><span>▮▮▮</span></div>
+        <div class="scr">
+          <div class="topbar">
+            <span class="back">‹</span><span class="chip">3 / 5</span><span class="clock">0:12</span>
+          </div>
+          <div class="exname">Bench Press</div>
+          <div class="exmeta">Chest · Barbell</div>
+          <div class="setup"><span>Seat 4</span><span>Bar 20 kg</span></div>
+
+          <div class="lastnotes">
+            <div class="lastnote">
+              <svg class="mk" width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M12 19.2V5.2M5.8 11.4l6.2-6.2 6.2 6.2" stroke="#9397ab" stroke-width="2.2" stroke-linecap="round"/></svg>
+              <span class="t">Last time · Set 2 · bar felt light — try 75 next</span>
+            </div>
+            <div class="lastnote">
+              <svg class="mk" width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M12 4.8v14M5.8 12.6l6.2 6.2 6.2-6.2" stroke="#9397ab" stroke-width="2.2" stroke-linecap="round"/></svg>
+              <span class="t">Last time · Set 3 · shoulder, drop to 60</span>
+            </div>
+          </div>
+
+          <div class="colhead">
+            <span>#</span><span>Last time</span><span class="c">kg</span><span class="c">Reps</span><span></span>
+          </div>
+          <div class="rowwrap">
+            <div class="livebox">
+              <div class="setrow">
+                <span class="idx live">1</span><span class="prev">70 × 8</span>
+                <span class="cell big ghost">70</span><span class="cell big ghost">8</span>
+                <span class="tick live"></span>
+              </div>
+            </div>
+          </div>
+          <div class="rowwrap">
+            <div class="setrow">
+              <span class="idx">2</span><span class="prev">70 × 8</span>
+              <span class="cell ghost">70</span><span class="cell ghost">8</span><span class="tick"></span>
+            </div>
+          </div>
+          <div class="rowwrap">
+            <div class="setrow">
+              <span class="idx">3</span><span class="prev">65 × 8</span>
+              <span class="cell ghost">65</span><span class="cell ghost">8</span><span class="tick"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <ul>
+      <li><strong>The row-level copy is gone, not kept alongside.</strong> The
+        same sentence in two places is two readings of one fact — and the live
+        row can already be carrying a rest countdown or the buddy's turn
+        underneath, so a third 11px line is where it stops reading. The set
+        row's one note slot is now <em>your own words, or the way in, or
+        nothing</em>.</li>
+      <li><strong>It reads <code>lastMarks</code>, not
+        <code>entry.sets[].prevMark</code>.</strong> That map is the complete
+        list for the exercise; the session's copy is truncated to however many
+        sets today's routine asks for, so four notes last week and three sets
+        today would silently drop the fourth.</li>
+      <li><strong>No new string.</strong> <code>markLastTime</code> already
+        carries the tense and <code>setLabel</code> the number:
+        <em>Last time · Set 2 · bar felt light</em>. A mark with no words falls
+        back to its own label, which is what the mark sheet already prints.</li>
+      <li><strong><code>prevMark</code> stays on <code>LoggedSet</code></strong>
+        — the mark sheet still prints last time's verdict for <em>that</em> set
+        at its head, which is per-set and correct there, since that sheet is
+        where you are judging set <em>n</em>.</li>
+    </ul>
+  </div>
+
+  <hr class="fade">
+
+  <h2 class="sec">3 · The mark sheet stays exactly as it is</h2>
+  <p class="lede wide">
+    Nothing in this change touches the sheet — it is still four verdicts and a
+    words field, still the one screen with room to read a note in full. What
+    changes is only how many ways there are to reach it.
+  </p>
+
+  <div class="pair">
+    <div class="half">
+      <div class="cap mid">Opened from the note line</div>
+      <div class="sub">
+        Same sheet, same <code>onPick</code> / <code>onNote</code>, same
+        "tap the mark again to clear it". <b>Words still imply a mark</b> and
+        clearing the mark still takes the words with it.
+      </div>
+      <div class="phone" style="height: 520px">
+        <div class="status"><span>9:41</span><span>▮▮▮</span></div>
+        <div class="scr" style="opacity: .3">
+          <div class="topbar">
+            <span class="back">‹</span><span class="chip">3 / 5</span><span class="clock">24:18</span>
+          </div>
+          <div class="exname">Bench Press</div>
+          <div class="colhead">
+            <span>#</span><span>Last time</span><span class="c">kg</span><span class="c">Reps</span><span></span>
+          </div>
+          <div class="rowwrap">
+            <div class="setrow">
+              <span class="idx">1</span><span class="prev">70 × 8</span>
+              <span class="cell">70</span><span class="cell">8</span><span class="tick on"></span>
+            </div>
+          </div>
+        </div>
+        <div class="sheet">
+          <h4>Set 1</h4>
+          <div class="sub">Bench Press</div>
+          <div class="marks">
+            <div class="marktile">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 19.2V5.2M5.8 11.4l6.2-6.2 6.2 6.2" stroke="#b2b6ca" stroke-width="2"/></svg>
+              <span>Heavier</span>
+            </div>
+            <div class="marktile">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 4.8v14M5.8 12.6l6.2 6.2 6.2-6.2" stroke="#b2b6ca" stroke-width="2"/></svg>
+              <span>Lighter</span>
+            </div>
+            <div class="marktile on">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M18.6 12A6.6 6.6 0 1 1 5.4 12a6.6 6.6 0 1 1 13.2 0" stroke="#e7e5fe" stroke-width="2"/></svg>
+              <span>Just right</span>
+            </div>
+            <div class="marktile">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 10.8v6.6M12 6.9v.01" stroke="#b2b6ca" stroke-width="2" stroke-linecap="round"/></svg>
+              <span>Note</span>
+            </div>
+          </div>
+          <div class="field">
+            <div class="lab">Note to yourself</div>
+            <div class="inp ph">What to remember for next time</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="half">
+      <div class="cap good">And it comes back, a week later</div>
+      <div class="sub">
+        The payoff that already exists and is worth restating: what you wrote
+        lands on <em>next</em> week's matching row as advice, out of
+        <code>lastMarks</code>. <b>That path is untouched.</b> This change adds
+        the diary, it does not replace the ghost.
+      </div>
+      <div class="phone" style="height: 520px">
+        <div class="status"><span>9:41</span><span>▮▮▮</span></div>
+        <div class="scr">
+          <div class="topbar">
+            <span class="back">‹</span><span class="chip">1 / 4</span><span class="clock">2:04</span>
+          </div>
+          <div class="exname">Bench Press</div>
+          <div class="exmeta">Chest · Barbell</div>
+          <div class="colhead">
+            <span>#</span><span>Last time</span><span class="c">kg</span><span class="c">Reps</span><span></span>
+          </div>
+          <div class="rowwrap">
+            <div class="livebox">
+              <div class="setrow">
+                <span class="idx live">1</span><span class="prev">70 × 8</span>
+                <span class="cell big ghost">70</span><span class="cell big ghost">8</span>
+                <span class="tick live"></span>
+              </div>
+              <div class="markline">
+                <svg class="mk" width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M12 19.2V5.2M5.8 11.4l6.2-6.2 6.2 6.2" stroke="#9397ab" stroke-width="2.2" stroke-linecap="round"/></svg>
+                <span class="t">Last time · bar felt light — try 75 next</span>
+              </div>
+            </div>
+          </div>
+          <div class="rowwrap">
+            <div class="setrow">
+              <span class="idx">2</span><span class="prev">70 × 8</span>
+              <span class="cell ghost">70</span><span class="cell ghost">8</span><span class="tick"></span>
+            </div>
+          </div>
+          <div class="rowwrap">
+            <div class="setrow">
+              <span class="idx">3</span><span class="prev">65 × 8</span>
+              <span class="cell ghost">65</span><span class="cell ghost">8</span><span class="tick"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <hr class="fade">
+
+  <h2 class="sec">4 · The diary — Plan's day panel</h2>
+  <p class="lede wide">
+    This is the half that does not exist at all today. The day panel reads
+    <code>h.list</code> back through <code>loggedLine</code> and prints a loose
+    wrapping row of figures; the notes are simply not in the data.
+  </p>
+
+  <div class="pair">
+    <div class="half">
+      <div class="cap bad">Today · numbers only</div>
+      <div class="sub">
+        Three sets, one of which you had a whole thought about, and the card is
+        the same card either way. <b>Six weeks later the thought is gone</b> —
+        unless you happen to open that exercise in a session and read the ghost.
+      </div>
+      <div class="phone" style="height: 470px">
+        <div class="status"><span>9:41</span><span>▮▮▮</span></div>
+        <div class="scr daypanel">
+          <div class="dayhead">Thursday, 13 August</div>
+          <div class="logcard">
+            <div class="logtop">
+              <span class="logtitle">Push A</span>
+              <span class="logbuddy">with Jonas</span>
+            </div>
+            <div class="logstats">48 min · 4 320 kg</div>
+
+            <div class="logex">
+              <div class="logextop">
+                <span class="logexname">Bench Press</span>
+                <span class="logexcount">3 sets</span>
+              </div>
+              <div class="logsets">
+                <span class="logset">70 × 8</span>
+                <span class="logset">70 × 8</span>
+                <span class="logset">65 × 8</span>
+              </div>
+            </div>
+
+            <div class="logex">
+              <div class="logextop">
+                <span class="logexname">Overhead Press</span>
+                <span class="logexcount">3 sets</span>
+              </div>
+              <div class="logsets">
+                <span class="logset">40 × 8</span>
+                <span class="logset">40 × 7</span>
+                <span class="logset">35 × 8</span>
+              </div>
+            </div>
+
+            <div class="logex">
+              <div class="logextop">
+                <span class="logexname">Plank</span>
+                <span class="logexcount">2 sets</span>
+              </div>
+              <div class="logsets">
+                <span class="logset">BW · 60 s</span>
+                <span class="logset">BW · 45 s</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="half">
+      <div class="cap good">Proposed · the annotated set takes its own line</div>
+      <div class="sub">
+        Sets keep flowing loose and wrapping. <b>A set with words breaks out to
+        full width</b> — glyph, then the note — and the ones around it close up
+        as before. Order is untouched, so the third set still reads third.
+      </div>
+      <div class="phone" style="height: 470px">
+        <div class="status"><span>9:41</span><span>▮▮▮</span></div>
+        <div class="scr daypanel">
+          <div class="dayhead">Thursday, 13 August</div>
+          <div class="logcard">
+            <div class="logtop">
+              <span class="logtitle">Push A</span>
+              <span class="logbuddy">with Jonas</span>
+            </div>
+            <div class="logstats">48 min · 4 320 kg</div>
+
+            <div class="logex">
+              <div class="logextop">
+                <span class="logexname">Bench Press</span>
+                <span class="logexcount">3 sets</span>
+              </div>
+              <div class="logsets">
+                <span class="logset">70 × 8</span>
+                <span class="logset full">
+                  <span class="num">70 × 8</span>
+                  <svg class="mk" width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M12 19.2V5.2M5.8 11.4l6.2-6.2 6.2 6.2" stroke="#9397ab" stroke-width="2.2" stroke-linecap="round"/></svg>
+                  <span class="nt">bar felt light — try 75 next</span>
+                </span>
+                <span class="logset">65 × 8</span>
+              </div>
+            </div>
+
+            <div class="logex">
+              <div class="logextop">
+                <span class="logexname">Overhead Press</span>
+                <span class="logexcount">3 sets</span>
+              </div>
+              <div class="logsets">
+                <span class="logset">40 × 8</span>
+                <span class="logset">40 × 7</span>
+                <span class="logset full">
+                  <span class="num">35 × 8</span>
+                  <svg class="mk" width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M12 4.8v14M5.8 12.6l6.2 6.2 6.2-6.2" stroke="#9397ab" stroke-width="2.2" stroke-linecap="round"/></svg>
+                  <span class="nt">shoulder — 30 next time</span>
+                </span>
+              </div>
+            </div>
+
+            <div class="logex">
+              <div class="logextop">
+                <span class="logexname">Plank</span>
+                <span class="logexcount">2 sets</span>
+              </div>
+              <div class="logsets">
+                <span class="logset">BW · 60 s</span>
+                <span class="logset full">
+                  <span class="num">BW · 45 s</span>
+                  <svg class="mk" width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M18.6 12A6.6 6.6 0 1 1 5.4 12a6.6 6.6 0 1 1 13.2 0" stroke="#9397ab" stroke-width="2.2"/></svg>
+                  <span class="nt">that was the limit</span>
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <ul>
+      <li><strong>A mark with no words shows the glyph and stops there.</strong>
+        <code>70 × 8 ▲</code> — the verdict is a fact about the set and worth
+        4px of glyph, and it does not need to break the wrap to say so. Only
+        <em>words</em> earn a full-width line.</li>
+      <li><strong>Read-only, like everything else in the day panel.</strong> No
+        editing a note six weeks later: the panel is a record, and the one thing
+        it already lets you write — <em>+ Save as routine</em> — writes a new
+        object rather than rewriting the day. A note is what you thought at the
+        time, and a diary that lets you revise that is worth less.</li>
+      <li><strong>The glyph is <code>neutral500</code>, not accent.</strong> In
+        the session the mark is accented because it is live and yours to change;
+        in the diary it is history, and history is written in the same greys the
+        figures beside it are.</li>
+      <li><strong>Nothing else on the card moves.</strong> Same
+        <code>logSets</code> container, same <code>columnGap: 14</code>, same
+        <code>loggedLine</code> for the figure — the annotated set is one item in
+        that wrap with <code>flexBasis: '100%'</code>.</li>
+    </ul>
+  </div>
+
+  <div class="settled warn">
+    <div class="h">Two alternatives, and why not</div>
+    <ul>
+      <li><strong>Notes gathered at the foot of the exercise</strong> —
+        <em>▲ set 3 · bar felt light</em> under the whole wrap. Keeps the figure
+        row perfectly compact, and pays for it by making you count sets to find
+        out which one is being talked about. Fine for one note, unreadable for
+        four.</li>
+      <li><strong>Glyph inline, note behind a tap</strong> —
+        <em>70 × 8 ▲</em> and press to reveal. That is what the app does now, one
+        screen over, and it is the thing being fixed: a note you have to go
+        looking for is a note you don't read.</li>
+    </ul>
+  </div>
+
+  <hr class="fade">
+
+  <h2 class="sec">5 · The shape</h2>
+  <p class="lede wide">
+    One optional field, index for index with the sets it describes — the same
+    relationship <code>lastMarks</code> already has to <code>lastLog</code>, and
+    the same reason it has to be kept in step: a ▲ that slides one row is a
+    verdict on a set that never earned it.
+  </p>
+
+<pre><span class="c">// src/store/workout-store.tsx</span>
+<span class="a">export type</span> LoggedExercise = {
+  ex: string;
+  sets: string[];
+  <span class="c">/** Each set's verdict, index for index with `sets`. Optional, so every</span>
+<span class="c">      entry logged before this keeps its numbers and simply says nothing. */</span>
+  marks?: (MarkNote | null)[];
+};
+</pre>
+
+  <div class="notes">
+    <ul>
+      <li><strong>Additive, so no version bump.</strong> <code>PERSIST</code>'s
+        rule is that a new optional field inside an existing key costs nothing —
+        this is the argument that let <code>list</code>, <code>secs</code>,
+        <code>vol</code> and <code>buddy</code> all land on
+        <code>HistoryEntry</code> without a migration over real training data.
+        <code>STORAGE_VERSION</code> stays 4.</li>
+      <li><strong><code>finishSession</code> writes it beside
+        <code>lastMarks</code>, from the same loop</strong>, filtered to ticked
+        sets exactly as <code>sets</code> is — the two arrays are built together
+        or they cannot be index-for-index.</li>
+      <li><strong>A backup carries it for free</strong> (the durable slice), and
+        <code>mergePersisted</code> needs no change: notes ride inside
+        <code>history</code>, which the sessions part already moves whole, keyed
+        by <code>historyKey</code>. The key is over date / rid / name / secs /
+        vol, so adding notes cannot split one session into two.</li>
+      <li><strong>It still never leaves the phone.</strong> A buddy snapshot
+        carries no <code>history</code> at all, and <code>BuddyProgress</code>
+        stays <code>done</code> booleans — what you thought of your own set is
+        not the buddy's business, before or after this.</li>
+      <li><strong>The statistics don't read it.</strong> <code>stats.ts</code>
+        takes volume off each entry's own <code>vol</code> and never parses set
+        strings except for <code>distanceKm</code>; notes are prose and there is
+        nothing in them to count.</li>
+    </ul>
+  </div>
+
+  <hr class="fade">
+
+  <h2 class="sec">6 · Copy</h2>
+  <p class="lede">
+    One new string, in both languages. German written rather than translated:
+    the plus and a noun, matching <code>+ Übung</code> and <code>+ Als Routine
+    speichern</code>.
+  </p>
+
+  <table>
+    <tr><th style="width: 22ch">Key</th><th style="width: 26ch">English</th><th>German</th></tr>
+    <tr>
+      <td class="k"><code>addNote</code></td>
+      <td>+ Note</td>
+      <td class="de">+ Notiz</td>
+    </tr>
+  </table>
+
+  <div class="notes">
+    <ul>
+      <li>Everything else is already written: <code>markUp</code> /
+        <code>markDown</code> / <code>markOk</code> / <code>markNote</code>,
+        <code>markLastTime</code>, <code>markNoteLabel</code>,
+        <code>markClear</code>. The diary's line prints the note verbatim and
+        needs no wrapper — it is the user's own sentence, and framing it would be
+        the app talking over them.</li>
+      <li>No <code>+ Note</code> on an unlogged set means no empty-state string
+        for a set that hasn't happened, which is one fewer line to write in two
+        languages and one fewer thing on the screen.</li>
+    </ul>
+  </div>
+
+  <hr class="fade">
+
+  <h2 class="sec">7 · What was settled</h2>
+
+  <div class="ask">
+    <div class="h">Built as drawn</div>
+    <ol>
+      <li><strong>C, not B.</strong> The line arrives with the tick and stays
+        for good. B is one boolean away if the offer turns out to be wanted on
+        rows you haven't reached yet — but an 8-set exercise pays 130px for it,
+        six lines of which say <em>+ Note</em>.</li>
+      <li><strong>One slot, not a stack.</strong> Own words, else the way in on
+        a lifted set, else nothing. Last time's advice left the row entirely
+        (§2) rather than sharing the slot — the live box can already be carrying
+        a rest countdown or the buddy's turn.</li>
+      <li><strong>The diary is read-only.</strong> No editing a note six weeks
+        on: the day panel is a record, and the one thing it already lets you
+        write — <em>+ Save as routine</em> — creates a new object rather than
+        rewriting the day.</li>
+      <li><strong>Per set, not per exercise or per routine.</strong> The note
+        rides on a <code>SetMark</code>, and <em>heavier</em> / <em>lighter</em>
+        is a verdict about a weight — an exercise has three to five of those in
+        it. A routine is a template that outlives every session run from it, so
+        a note on one could only be timeless, and timeless per-exercise text
+        already has a home in <code>cueEdits</code>. If a dated per-exercise
+        note is ever wanted it is <code>LoggedExercise.note?: string</code> —
+        additive, so waiting costs nothing.</li>
+    </ol>
+  </div>
+
+  <div class="settled">
+    <div class="h">Where it landed</div>
+    <ul>
+      <li><code>src/store/workout-store.tsx</code> — <code>LoggedExercise.marks</code>,
+        written in <code>finishSession</code>'s existing pass off the same
+        <code>ticked</code> array that builds <code>sets</code>.</li>
+      <li><code>src/components/overlays/session-overlay.tsx</code> — the row's
+        single note slot, and <code>LastNotes</code> above the ledger.</li>
+      <li><code>src/app/(tabs)/plan.tsx</code> — the annotated set leaving the
+        wrap.</li>
+      <li><code>src/data/i18n.ts</code> — <code>addNote</code>, both languages.</li>
+      <li><code>STORAGE_VERSION</code> stays 4. Nothing migrates.</li>
+    </ul>
+  </div>
+
+</div>

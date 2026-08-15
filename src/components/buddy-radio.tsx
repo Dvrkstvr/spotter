@@ -23,6 +23,7 @@ import { useEffect, useRef } from 'react';
 import { ensureRadioPermissions, radio } from '@/data/buddy-radio';
 import {
   authProof,
+  closureFor,
   decodePeerName,
   diffBuddy,
   encodePeerName,
@@ -37,7 +38,7 @@ import {
   shareableSlice,
   syncItemId,
 } from '@/data/buddy-sync';
-import { myName, Session, State, Store, useStore } from '@/store/workout-store';
+import { myName, restLeftOf, Session, State, Store, useStore } from '@/store/workout-store';
 
 /** The shared registers a progress message carries beside the set counts. */
 const sharedOf = (s: State) => ({ modes: s.turnModes, first: s.firstUp, bids: s.myBids });
@@ -142,6 +143,7 @@ export function BuddyRadio() {
         sessionRole: null,
         buddyJoin: null,
         buddyProgress: null,
+        buddyRest: null,
         turnModes: {},
         myBids: {},
       });
@@ -164,7 +166,21 @@ export function BuddyRadio() {
         JSON.stringify({
           v: 1,
           t: 'progress',
-          state: progressOf(cur.session, cur.active, sharedOf(cur)),
+          state: progressOf(
+            cur.session,
+            cur.active,
+            sharedOf(cur),
+            false,
+            restLeftOf(cur),
+            // What the buddy needs to name an exercise of ours they haven't
+            // got — almost always nothing, and computed off the list rather
+            // than off a routine, because a free session has no routine and
+            // an exercise added mid-workout is in neither.
+            closureFor(
+              cur,
+              cur.session.list.map((e) => e.ex)
+            )
+          ),
         })
       ).catch(() => {});
     }, 250);
@@ -178,6 +194,13 @@ export function BuddyRadio() {
     // buddyJoin is here for the host's benefit: their session started before
     // the guest accepted, so without a resend on "joined" the guest sits on
     // "waiting to join" until the host happens to tick something.
+    //
+    // `rest` is here for the *skip*, not the start: a rest starting rides out
+    // on the session change that earned it (the debounce coalesces the two),
+    // but "start now" changes nothing else, and without a resend the buddy
+    // would watch a countdown its owner had already dismissed. It is not a
+    // per-second dependency — `rest` is written when a set lands, when it is
+    // skipped, and when the session resets, and never in between.
   }, [
     shouldBroadcast,
     session,
@@ -187,6 +210,7 @@ export function BuddyRadio() {
     store.s.myBids,
     store.s.buddyJoin,
     store.s.buddyEndpoint,
+    store.s.rest,
   ]);
 
   /* — co-created routine draft: announce once, then broadcast full state — */
@@ -554,6 +578,13 @@ export function BuddyRadio() {
           case 'progress':
             st.patch((s) => ({
               buddyProgress: msg.state,
+              // Their rest arrives as a remainder and is stamped against this
+              // phone's own clock on the way in — the moment it lands is the
+              // only instant the two readings are known to agree. A message
+              // from a build that predates the field carries none, so their
+              // rest simply never shows; the turn row degrades to what it
+              // always said.
+              buddyRest: msg.state.rest ? { left: msg.state.rest, at: s.elapsed } : null,
               // Any progress proves they're in — covers a lost join message.
               ...(s.buddyJoin === 'pending' ? { buddyJoin: 'joined' as const } : {}),
             }));

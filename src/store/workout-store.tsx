@@ -60,6 +60,7 @@ import {
   V2_GROUP_KEYS,
 } from '@/data/exercises';
 import { DEFAULT_COACH, type CoachOptions, type ResolvedPlan } from '@/data/coach';
+import type { TipId, Tips } from '@/data/tips';
 import { deviceLang, DICT, fmtDayLong, Lang, LangMap, Strings } from '@/data/i18n';
 import { isThemeName, ThemeMode, ThemeName } from '@/design/tokens';
 
@@ -134,8 +135,20 @@ export type PickerMode = 'routine' | 'session' | null;
 export type RoutineSort = 'week' | 'recent' | 'az';
 /** What it is narrowed to: a family (see `routineFamily`) or your own makes. */
 export type RoutineFilter = 'all' | 'strength' | 'calisthenics' | 'cardio' | 'yours';
-/** One exercise as it was actually logged: the ticked sets, in order. */
-export type LoggedExercise = { ex: string; sets: string[] };
+/**
+ * One exercise as it was actually logged: the ticked sets, in order.
+ *
+ * `marks` is index for index with `sets` — the same relationship `lastMarks`
+ * has to `lastLog[id].sets`, and load-bearing for the same reason: a verdict
+ * that slides one slot is a ▲ about a set that never earned it. It is optional
+ * and absent when nothing was marked, so an entry logged before this keeps its
+ * numbers and simply says nothing — which is the whole migration.
+ *
+ * What `lastMarks` cannot do is remember: it holds only the latest session per
+ * exercise, so without this a note lives exactly one week and is then written
+ * over. This is the copy that stays on the day it belongs to.
+ */
+export type LoggedExercise = { ex: string; sets: string[]; marks?: (MarkNote | null)[] };
 /**
  * One finished session: which local day it landed on, from which routine, and
  * what was actually done.
@@ -298,6 +311,15 @@ export type State = {
    * version bump or a migration.
    */
   coach: CoachOptions;
+  /**
+   * What each in-place tip has cost the user so far — see `data/tips.ts`.
+   * Additive like `coach` and `buddySecrets`, so a phone that has been logging
+   * for months takes it without a `STORAGE_VERSION` bump or a migration: the
+   * key is simply absent, `filterPersisted` leaves `{}` standing, and every
+   * tip is unmet. Which is the right answer for an existing phone too — the
+   * gestures were never explained to it either.
+   */
+  tips: Tips;
   scanning: boolean;
   /**
    * This phone's install id, advertised alongside the profile name (see
@@ -396,19 +418,30 @@ export type State = {
   /** the buddy tapped Disconnect; a line says so until it's dismissed */
   buddyLeft: string | null;
   /**
-   * Why your next set isn't yours yet. `at` is the session clock the wait
-   * started on — counting in `elapsed` ticks rather than wall time keeps the
-   * countdown pure and re-renders it for free. `skipped` is the user saying
-   * they're ready before the clock agrees.
+   * The rest a logged set earned you — every logged set earns one, buddy or
+   * not. `at` is the session clock it started on: counting in `elapsed` ticks
+   * rather than wall time keeps the countdown pure and re-renders it for free.
+   * `skipped` is the user saying they're ready before the clock agrees.
    *
-   * `own` separates the two waits that look alike: a rest you earned by
-   * finishing a set — every logged set earns one, buddy or not — runs its
-   * full length whatever the buddy does, while a
-   * wait that only exists because it's their turn ends the moment the turn
-   * comes back — otherwise the guest of a fresh session would be held three
-   * minutes for a set they never did.
+   * **Only ever a rest of your own.** The buddy being mid-set is the other
+   * reason your next set can be held, and it is deliberately not stamped here:
+   * it has no clock to run down and ends when they tick rather than when a
+   * timer does. Writing it as a rest gave the guest of a fresh session a
+   * three-minute countdown on a set nobody had lifted yet.
    */
-  rest: { at: number; skipped: boolean; own: boolean } | null;
+  rest: { at: number; skipped: boolean } | null;
+  /**
+   * The buddy's rest, re-anchored to *this* phone's clock: `left` is the
+   * remainder they broadcast and `at` the `elapsed` it landed on here, so it
+   * runs down by the same arithmetic `rest` does. Transient like
+   * `buddyProgress`, and cleared everywhere that is.
+   *
+   * Separate from `buddyProgress` rather than stamped into it, because
+   * `BuddyProgress` is the wire shape — what the other phone said — and `at`
+   * is a local reading of a local clock that nothing about their message
+   * knows.
+   */
+  buddyRest: { left: number; at: number } | null;
   /** live co-created routine draft, or null (transient) */
   coDraft: CoDraft | null;
   /**
@@ -437,6 +470,16 @@ export type State = {
    * on the present.
    */
   planFocus: string | null;
+  /**
+   * One-shot handoff to the coach: a reply that arrived as a file rather than
+   * being pasted (see `<Intake>`), for it to open on the import step already
+   * holding. Consumed and cleared there, like `planFocus`.
+   *
+   * The text, not a parsed plan: the coach parses what it is given and shows
+   * the reasons it couldn't, and handing it a pre-digested object would mean two
+   * places deciding what a plan is.
+   */
+  coachIntake: string | null;
   /**
    * The plan sheet's subject, or null: the date being planned, and which
    * existing rule is being edited if any. A date rather than the old weekday
@@ -499,6 +542,7 @@ const initialState: State = {
   statsOpen: false,
   coachOpen: false,
   coach: { ...DEFAULT_COACH, kinds: [...DEFAULT_COACH.kinds] },
+  tips: {},
   scanning: false,
   // ANDROID_ID resolves at module load and never changes; the random
   // fallback is minted once here and then pinned by persistence.
@@ -526,6 +570,7 @@ const initialState: State = {
   myBids: {},
   buddyLeft: null,
   rest: null,
+  buddyRest: null,
   coDraft: null,
   sessionMin: false,
   buddyFocus: false,
@@ -533,6 +578,7 @@ const initialState: State = {
   routineSort: 'week',
   routineFilter: 'all',
   planFocus: null,
+  coachIntake: null,
   dayPlan: null,
   groups: DEFAULT_GROUPS.map((g) => ({ ...g })),
   kinds: DEFAULT_KINDS.map((k) => ({ ...k })),
@@ -615,7 +661,7 @@ const PERSIST = [
   'routines', 'plan', 'history', 'lastLog', 'lastMarks', 'custom', 'profile',
   'setups', 'videos', 'lang', 'groups', 'kinds', 'images', 'exEdits', 'cueEdits',
   'knownBuddies', 'buddyIds', 'buddySecrets', 'selfId', 'themeMode', 'theme', 'restSeconds', 'firstUpDefault',
-  'haptics', 'restAlert', 'privateMode', 'onboarded', 'style', 'level', 'coach',
+  'haptics', 'restAlert', 'privateMode', 'onboarded', 'style', 'level', 'coach', 'tips',
 ] as const satisfies readonly (keyof State)[];
 
 type Persisted = Pick<State, (typeof PERSIST)[number]>;
@@ -646,7 +692,7 @@ const PERSIST_SHAPE: Record<
   themeMode: 'string', theme: 'string', restSeconds: 'number',
   firstUpDefault: 'string', haptics: 'boolean', restAlert: 'boolean',
   privateMode: 'boolean', onboarded: 'boolean', style: 'string',
-  level: 'string', coach: 'object',
+  level: 'string', coach: 'object', tips: 'object',
 };
 
 const fitsShape = (v: unknown, shape: (typeof PERSIST_SHAPE)[keyof typeof PERSIST_SHAPE]) =>
@@ -876,6 +922,29 @@ export const prevNums = (prev: string) => {
   };
 };
 
+/**
+ * What is left of your own rest, in seconds — 0 when there is none, when it
+ * was skipped, or when the setting is off (`restSeconds` 0 collapses this to a
+ * constant 0).
+ *
+ * Pure, and takes the slice rather than reading the store, because two callers
+ * need the same arithmetic from different places: the session overlay draws
+ * it, and <BuddyRadio> puts it on the wire (`BuddyProgress.rest`) so the buddy
+ * can draw it too. One helper, or the number on their screen is a second
+ * opinion about your clock.
+ */
+export const restLeftOf = (s: Pick<State, 'rest' | 'restSeconds' | 'elapsed'>) =>
+  s.rest && !s.rest.skipped ? Math.max(0, s.restSeconds - (s.elapsed - s.rest.at)) : 0;
+
+/**
+ * The same reading of the buddy's rest, off the remainder they broadcast and
+ * the local `elapsed` it landed on. Their clock and yours share no origin, so
+ * a remainder re-anchored here is the only honest way to run it down — see
+ * `buddyRest`.
+ */
+export const buddyRestLeftOf = (s: Pick<State, 'buddyRest' | 'elapsed'>) =>
+  s.buddyRest ? Math.max(0, s.buddyRest.left - (s.elapsed - s.buddyRest.at)) : 0;
+
 /** mm:ss. The live session's clock and every logged one are the same number. */
 export const fmtClock = (secs: number) =>
   `${String(Math.floor(secs / 60)).padStart(2, '0')}:${String(secs % 60).padStart(2, '0')}`;
@@ -948,6 +1017,33 @@ const sessionFrom = (s: State, r: Routine): Session => {
   };
 };
 
+/**
+ * The row literal every mid-session add is built from — the picker's + and the
+ * buddy's offer both, or an exercise you took on from them would arrive a
+ * different shape from one you picked yourself.
+ *
+ * `sets` is how many rows to open; where last time had fewer, the ghost falls
+ * back to the first one and its verdict falls back with it, exactly as
+ * `sessionFrom` does for a routine asking for more.
+ */
+const freshSessionEx = (s: State, id: string, sets: number): SessionExercise => {
+  const last = s.lastLog[id]?.sets ?? [...EX, ...s.custom].find((e) => e.id === id)?.lastSets ?? [];
+  const marks = s.lastMarks[id] ?? [];
+  return {
+    ex: id,
+    sets: Array.from({ length: Math.max(1, sets) }, (_, k) => {
+      const src = last[k] ? k : 0;
+      return {
+        w: '',
+        reps: '',
+        done: false,
+        prev: last[src] || '—',
+        prevMark: marks[src] ?? null,
+      };
+    }),
+  };
+};
+
 /** The name this phone shows up as on the buddy's screen. */
 export const myName = (s: State) => s.profile.name.trim() || 'Spotter';
 
@@ -991,6 +1087,163 @@ const upsertShared = (
     custom,
     groups: [...s.groups, ...inc.groups.filter((g) => !s.groups.some((x) => x.key === g.key))],
     kinds: [...s.kinds, ...inc.kinds.filter((k) => !s.kinds.some((x) => x.key === k.key))],
+  };
+};
+
+/* ── restoring from a backup ───────────────────────────────────────────────
+ *
+ * A restore used to have one answer — replace the lot — which is right for a
+ * new phone and wrong every other time: a backup is a stranger to whatever you
+ * have trained since it was written. So there is a second way in, and it is the
+ * rule this app already applies to a buddy's library (`upsertShared`) and to
+ * the coach's plan: **additive, and what is on this phone wins.** A backup that
+ * has never watched you lift does not get to overwrite what you actually did.
+ *
+ * That rule is what makes a conflict screen unnecessary. There is nothing to
+ * ask about item by item — either the backup fills a gap, in which case take
+ * it, or it disagrees with something already here, in which case here wins.
+ * Someone who wants the backup's version of everything wants Replace, which is
+ * still one hold away.
+ *
+ * Pure and module-level, beside the other merges rather than in `data/`: these
+ * shapes are the store's own, and a `data/` module would have to restate every
+ * one of them structurally to avoid an import cycle (see `data/stats.ts`).
+ */
+
+/** The parts of a backup that can be taken separately. */
+export const RESTORE_PARTS = ['sessions', 'library', 'plan'] as const;
+export type RestorePart = (typeof RESTORE_PARTS)[number];
+
+/** What taking a backup's every part would add to what is already here. */
+export type RestoreCounts = {
+  sessions: number;
+  routines: number;
+  exercises: number;
+  plan: number;
+};
+
+/**
+ * A logged session's identity.
+ *
+ * `HistoryEntry` carries no id — it never needed one, because until now nothing
+ * ever met the same session twice — so this is a content key over the fields
+ * `finishSession` writes. Two entries that agree on all of them are one
+ * session logged once and copied; two real sessions on one day differ in the
+ * clock or the volume long before they collide here.
+ *
+ * Deliberately not `JSON.stringify`: key order is an implementation detail of
+ * whichever literal built the object, and a blob that has been through a
+ * migration is not obliged to keep it.
+ */
+const historyKey = (e: HistoryEntry) =>
+  [e.date, e.rid ?? '', e.name ?? '', e.secs ?? '', e.vol ?? ''].join('|');
+
+/** Fill the gaps in a keyed map, and only the gaps: what is here wins. */
+const fillGaps = <T,>(mine: Record<string, T>, theirs: Record<string, T> | undefined) => ({
+  ...(theirs ?? {}),
+  ...mine,
+});
+
+/** Add the rows whose key this phone doesn't have yet, in the backup's order. */
+const addMissing = <T,>(mine: T[], theirs: T[] | undefined, key: (x: T) => string) => {
+  const here = new Set(mine.map(key));
+  return [...mine, ...(theirs ?? []).filter((x) => !here.has(key(x)))];
+};
+
+/**
+ * The durable slice with a backup's missing pieces added to it.
+ *
+ * Returns only the keys the chosen parts touch, so everything else — every
+ * setting, the profile, and the whole buddy roster including `selfId` — is
+ * untouched by construction rather than by being listed. Which is the point:
+ * a merge must not be able to hand this phone another phone's install id.
+ */
+const mergePersisted = (
+  mine: Persisted,
+  theirs: Partial<Persisted>,
+  parts: ReadonlySet<RestorePart>
+): Partial<State> => {
+  const out: Partial<State> = {};
+
+  if (parts.has('sessions')) {
+    out.history = addMissing(mine.history, theirs.history, historyKey).sort((a, b) =>
+      a.date.localeCompare(b.date)
+    );
+
+    // `lastLog` carries the date of the session it came from, so "newer wins"
+    // is exact rather than a guess — and `lastMarks` moves with it index for
+    // index (see the key's own comment), or a ▲ ends up sitting on a set it
+    // was never a verdict about.
+    const lastLog = { ...mine.lastLog };
+    const lastMarks = { ...mine.lastMarks };
+    for (const [id, log] of Object.entries(theirs.lastLog ?? {})) {
+      if ((lastLog[id]?.date ?? '') >= log.date) continue;
+      lastLog[id] = log;
+      const marks = theirs.lastMarks?.[id];
+      if (marks) lastMarks[id] = marks;
+      else delete lastMarks[id];
+    }
+    out.lastLog = lastLog;
+    out.lastMarks = lastMarks;
+  }
+
+  if (parts.has('library')) {
+    out.routines = addMissing(mine.routines, theirs.routines, (r) => r.id);
+    out.custom = addMissing(mine.custom, theirs.custom, (e) => e.id);
+    // The lists come with the library rather than on their own tick: an
+    // exercise filed under a group this phone doesn't have is stranded outside
+    // the library's filter row, which is the state deleting a seeded group
+    // produces. Gaps only, so a renamed row keeps the user's name.
+    out.groups = addMissing(mine.groups, theirs.groups, (g) => g.key);
+    out.kinds = addMissing(mine.kinds, theirs.kinds, (k) => k.key);
+    out.setups = fillGaps(mine.setups, theirs.setups);
+    out.videos = fillGaps(mine.videos, theirs.videos);
+    out.images = fillGaps(mine.images, theirs.images);
+    out.exEdits = fillGaps(mine.exEdits, theirs.exEdits);
+    out.cueEdits = fillGaps(mine.cueEdits, theirs.cueEdits);
+  }
+
+  if (parts.has('plan')) {
+    const theirPlan = asPlan(theirs.plan);
+    // A rule names a routine, so one whose routine did not come along names
+    // nothing — it would draw a planned day the app cannot start. Only the
+    // *incoming* rules are filtered: an existing entry whose routine is gone is
+    // a state the plan screen already handles, and a merge has no business
+    // tidying it.
+    const rids = new Set((out.routines ?? mine.routines).map((r) => r.id));
+    const here = new Set(mine.plan.entries.map((e) => e.id));
+    const entries = [
+      ...mine.plan.entries,
+      ...theirPlan.entries.filter((e) => !here.has(e.id) && rids.has(e.rid)),
+    ];
+
+    // A skip names an entry id, so one pointing at a rule that didn't come
+    // along is a cancellation of nothing.
+    const ids = new Set(entries.map((e) => e.id));
+    const skips: Record<string, string[]> = { ...mine.plan.skips };
+    for (const [iso, list] of Object.entries(theirPlan.skips)) {
+      const add = list.filter((id) => ids.has(id) && !(skips[iso] ?? []).includes(id));
+      if (add.length) skips[iso] = [...(skips[iso] ?? []), ...add];
+    }
+    out.plan = { entries, skips };
+  }
+
+  return out;
+};
+
+/**
+ * What a backup would add.
+ *
+ * Computed by running the merge and measuring it, rather than by a second pass
+ * that counts — so the preview cannot promise a number the import then misses.
+ */
+const restoreCounts = (mine: Persisted, theirs: Partial<Persisted>): RestoreCounts => {
+  const all = mergePersisted(mine, theirs, new Set(RESTORE_PARTS));
+  return {
+    sessions: (all.history?.length ?? 0) - mine.history.length,
+    routines: (all.routines?.length ?? 0) - mine.routines.length,
+    exercises: (all.custom?.length ?? 0) - mine.custom.length,
+    plan: (all.plan?.entries.length ?? 0) - mine.plan.entries.length,
   };
 };
 
@@ -1222,6 +1475,42 @@ function useWorkoutState() {
       return { exEdits, cueEdits };
     });
 
+  /* — tips — */
+
+  /**
+   * One more showing on the clock. Called by `<Tip>` after its dwell, not on
+   * mount: a tip that flashed past while the list scrolled was never read, and
+   * charging it a showing would spend the budget on nothing.
+   *
+   * A retired tip is left alone rather than counted up — `done` is the end
+   * state and nothing walks back out of it.
+   */
+  const tipShown = (id: TipId) =>
+    patch((s) => {
+      const cur = s.tips[id];
+      if (cur?.done) return null;
+      return { tips: { ...s.tips, [id]: { seen: (cur?.seen ?? 0) + 1, done: false } } };
+    });
+
+  /**
+   * That tip is finished. Written from the gesture it teaches as well as from
+   * its ×, so it is deliberately idempotent and cheap: every call site fires it
+   * blindly rather than first working out whether the tip was even on screen.
+   */
+  const tipDone = (id: TipId) =>
+    patch((s) =>
+      s.tips[id]?.done
+        ? null
+        : { tips: { ...s.tips, [id]: { seen: s.tips[id]?.seen ?? 0, done: true } } }
+    );
+
+  /**
+   * Meet them all again. One key, cleared — which is why this row can live in
+   * the ordinary part of Settings where re-running the tour could not: nothing
+   * is re-applied and nothing is overwritten.
+   */
+  const resetTips = () => patch({ tips: {} });
+
   /* — mutation — */
 
   /** Copy-on-write one exercise inside the live session, then mutate the copy. */
@@ -1235,6 +1524,63 @@ function useWorkoutState() {
       return { session: { ...s.session, list } };
     });
   };
+
+  /**
+   * Add an exercise to the live session, or start a free one around it when
+   * there is none — the picker's whole job. The clock restarts with a fresh
+   * session, so the rest goes with it: a stamp from the previous session
+   * against a zeroed clock reads as a half-hour countdown.
+   */
+  const addSessionEx = (id: string) =>
+    patch((s) => {
+      const fresh = freshSessionEx(s, id, 3);
+      if (!s.session)
+        return {
+          session: { rid: null, name: (DICT[s.lang] ?? DICT.en).freeSession, list: [fresh] },
+          active: 0,
+          elapsed: 0,
+          rest: null,
+          summary: null,
+        };
+      return {
+        session: { ...s.session, list: [...s.session.list, fresh] },
+        active: s.session.list.length,
+      };
+    });
+
+  /**
+   * Take on an exercise the buddy has in their session and this phone hasn't
+   * — the other half of the jump button, and the only way one phone's list
+   * ever grows from the other's. Never automatic: their list changing must
+   * not move what a swipe lands on or flip Finish between a tap and a hold
+   * while a set is in front of you.
+   *
+   * Their set count is adopted and their numbers are not — the co-draft's
+   * rule, and what makes the turn arithmetic right on the first set instead
+   * of after you match counts by hand. The ghost is your own history, because
+   * "last time" was never theirs.
+   *
+   * If it is a custom exercise of theirs, the closure that arrived with the
+   * progress naming it is upserted here and nowhere earlier: receiving it
+   * makes the row nameable, and only this tap writes it into the library.
+   */
+  const adoptBuddyEx = (id: string, focus = true) =>
+    patch((s) => {
+      if (!s.session || !s.sessionShared) return null;
+      if (s.session.list.some((e) => e.ex === id)) return null;
+      const theirs = s.buddyProgress?.list.find((e) => e.ex === id);
+      if (!theirs) return null;
+      const deps = s.buddyProgress?.deps;
+      const merged = deps?.custom.some((e) => e.id === id) ? upsertShared(s, deps) : null;
+      // The ghost is read after the upsert, so an adopted exercise falls back
+      // to the same place an invited one does.
+      const fresh = freshSessionEx(merged ? { ...s, ...merged } : s, id, theirs.done.length);
+      return {
+        ...(merged ?? {}),
+        session: { ...s.session, list: [...s.session.list, fresh] },
+        ...(focus ? { active: s.session.list.length } : {}),
+      };
+    });
 
   /**
    * Drop an exercise from the live session — the undo for a wrong pick, which
@@ -1573,6 +1919,7 @@ function useWorkoutState() {
         sessionRole: withBuddy ?? null,
         buddyJoin: withBuddy ? ('joined' as const) : null,
         buddyProgress: null,
+        buddyRest: null,
         turnModes: {},
         firstUp: freshFirstUp(s.firstUpDefault),
         myBids: {},
@@ -1615,12 +1962,14 @@ function useWorkoutState() {
         sessionRole: 'guest',
         buddyJoin: null,
         buddyProgress: null,
+        buddyRest: null,
         turnModes: {},
         // The host's register arrives with their next broadcast and wins the
         // rev-0 tie, so this is only what the guest shows for one message.
         firstUp: freshFirstUp(s.firstUpDefault),
         myBids: {},
-        // The clock this rest was stamped against is being set back to zero.
+        // The clock this rest was stamped against is being set back to zero —
+        // and so is the one their remainder was anchored against.
         rest: null,
         sessionMin: false,
       };
@@ -1722,6 +2071,43 @@ function useWorkoutState() {
   };
 
   /**
+   * What this backup would add, without adding it. `null` for a file from a
+   * newer build — the same refusal `importState` makes, made early so the
+   * screen can say so instead of offering a preview it would then decline.
+   */
+  const previewRestore = (env: { v: number; data: Record<string, unknown> }): RestoreCounts | null =>
+    env.v > STORAGE_VERSION
+      ? null
+      : restoreCounts(pickPersisted(state), migrateBlob(env.data, env.v) as Partial<Persisted>);
+
+  /**
+   * Take the parts of a backup this phone is missing and leave everything else
+   * alone — the non-destructive half of a restore. Older backups come through
+   * the same migrations, and `mergePersisted` returns only the keys the chosen
+   * parts touch, so nothing outside them can be written by accident.
+   *
+   * Returns what actually landed, which is the number worth showing: "added 3
+   * sessions" and "added nothing, it was all here" are different answers and
+   * the screen says which.
+   */
+  const mergeState = (
+    env: { v: number; data: Record<string, unknown> },
+    parts: ReadonlySet<RestorePart>
+  ): RestoreCounts | null => {
+    if (env.v > STORAGE_VERSION) return null;
+    const mine = pickPersisted(state);
+    const theirs = migrateBlob(env.data, env.v) as Partial<Persisted>;
+    const merged = mergePersisted(mine, theirs, parts);
+    patch(merged);
+    return {
+      sessions: (merged.history?.length ?? mine.history.length) - mine.history.length,
+      routines: (merged.routines?.length ?? mine.routines.length) - mine.routines.length,
+      exercises: (merged.custom?.length ?? mine.custom.length) - mine.custom.length,
+      plan: (merged.plan?.entries.length ?? mine.plan.entries.length) - mine.plan.entries.length,
+    };
+  };
+
+  /**
    * Remember a buddy we just paired with, so the radio can find them again —
    * and record their install id when one arrived. The id is the rename
    * detector: a known id showing up under a new display name renames the
@@ -1798,6 +2184,7 @@ function useWorkoutState() {
       sessionRole: null,
       buddyJoin: null,
       buddyProgress: null,
+      buddyRest: null,
       turnModes: {},
       firstUp: freshFirstUp(s.firstUpDefault),
       myBids: {},
@@ -1947,10 +2334,12 @@ function useWorkoutState() {
         sessionRole: 'guest' as const,
         buddyJoin: 'joined' as const,
         buddyProgress: null,
+        buddyRest: null,
         turnModes: {},
         firstUp: freshFirstUp(s.firstUpDefault),
         myBids: {},
-        // Same reset as `start`: a rest is stamped against `elapsed`.
+        // Same reset as `start`: a rest is stamped against `elapsed`, theirs
+        // included.
         rest: null,
         sessionMin: false,
       };
@@ -2012,17 +2401,24 @@ function useWorkoutState() {
         );
         if (sets.length) {
           lastLog[e.ex] = { date: today, sets };
-          logged.push({ ex: e.ex, sets });
-          // The verdicts ride alongside, one slot per string above. An
-          // exercise nobody marked this time loses the key rather than
-          // keeping it: last month's "go heavier" beside this month's
-          // numbers is advice about a session that no longer exists.
+          // The verdicts ride alongside, one slot per string above — built in
+          // the same pass as `sets`, off the same `ticked` array, because two
+          // loops are two chances for the indexes to stop describing each
+          // other.
           const marks = ticked.map((x) =>
             x.mark
               ? { mark: x.mark, ...(x.note?.trim() ? { note: x.note.trim() } : {}) }
               : null
           );
-          if (marks.some(Boolean)) lastMarks[e.ex] = marks;
+          const marked = marks.some(Boolean);
+          // The day keeps its own copy, and keeps it for good. `lastMarks` is
+          // the ghost for *next* time and holds one session per exercise, so
+          // an exercise nobody marked this time loses the key rather than
+          // keeping it: last month's "go heavier" beside this month's numbers
+          // is advice about a session that no longer exists. The entry below
+          // is the diary, where that same note is the point.
+          logged.push({ ex: e.ex, sets, ...(marked ? { marks } : {}) });
+          if (marked) lastMarks[e.ex] = marks;
           else delete lastMarks[e.ex];
         }
       }
@@ -2032,8 +2428,10 @@ function useWorkoutState() {
         // The rest earned by the final set must not outlive the session:
         // <RestAlarm> stays mounted after finish and would re-arm a fresh
         // full-length alarm off the stale stamp — "Rest over", minutes after
-        // the workout ended.
+        // the workout ended. The buddy's goes for the plainer reason that
+        // there is no longer a row to draw it on.
         rest: null,
+        buddyRest: null,
         // Finish is the only way out of a session now that Discard is gone, so
         // it has to carry what Discard did: a session where nothing was ticked
         // never happened, and must not land on the calendar as a training day.
@@ -2296,7 +2694,12 @@ function useWorkoutState() {
     editEx,
     exEdited,
     resetEx,
+    tipShown,
+    tipDone,
+    resetTips,
     mutSession,
+    addSessionEx,
+    adoptBuddyEx,
     removeSessionEx,
     mutRoutine,
     deleteRoutine,
@@ -2306,6 +2709,8 @@ function useWorkoutState() {
     markBuddySynced,
     exportState,
     importState,
+    previewRestore,
+    mergeState,
     start,
     acceptInvite,
     declineInvite,

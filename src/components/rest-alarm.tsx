@@ -33,11 +33,12 @@ export function RestAlarm() {
 
   const rest = s.rest;
   /**
-   * Only a rest you earned. A wait that exists because it's the buddy's turn
-   * ends when the turn comes back, not when a clock does — there is no moment
-   * to announce, and `own` is what separates the two (see `rest` in the store).
+   * Every rest here is one you earned, because that is the only kind `rest`
+   * holds (see the store): a wait that exists because it's the buddy's turn
+   * ends when they tick, not when a clock does, so there is no moment to
+   * announce and nothing is stamped for it.
    */
-  const armed = !!rest && rest.own && !rest.skipped && s.restSeconds > 0 && s.restAlert;
+  const armed = !!rest && !rest.skipped && s.restSeconds > 0 && s.restAlert;
 
   /**
    * What the lock screen says. Deliberately the exercise and nothing more: a

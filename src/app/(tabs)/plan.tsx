@@ -20,11 +20,14 @@ import { useEffect, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
+import { Icon, MARK_D } from '@/components/icon';
 import { Screen } from '@/components/screen';
+import { Tip } from '@/components/tip';
 import { fromISO, toISO, todayISO } from '@/data/date';
 import { measureOf } from '@/data/exercises';
 import { countN, DAYS_SHORT, fmtDayShort, MONTHS, repeatLabel } from '@/data/i18n';
 import { plannedOn, restChosen, skippedOn } from '@/data/plan';
+import { pickTip } from '@/data/tips';
 import { themed, useColors, useThemed } from '@/design/theme';
 import { color, font, t, tracking } from '@/design/tokens';
 import { Btn, H2, H4, H6, Input, missingName } from '@/design/ui';
@@ -37,7 +40,7 @@ export default function PlanScreen() {
   const c = useColors();
   const {
     s, L, patch, ex, exInfo, routine, doneOn, sessionsOn, rInfo, saveDayAsRoutine, start,
-    restorePlanDay,
+    restorePlanDay, tipDone,
   } = useStore();
   const router = useRouter();
   const [gridWidth, setGridWidth] = useState(0);
@@ -175,7 +178,12 @@ export default function PlanScreen() {
     clearDay();
   };
 
-  const planDay = (entry: string | null) => patch({ dayPlan: { iso: sel, entry } });
+  // Opening a day is the card's whole lesson — the rest of the model is
+  // written on the sheet that comes up.
+  const planDay = (entry: string | null) => {
+    tipDone('plan');
+    patch({ dayPlan: { iso: sel, entry } });
+  };
 
   /** Start, or resurface the one already running — the guard in `start` decides. */
   const startRow = (rid: string) => (live ? patch({ sessionMin: false }) : start(rid));
@@ -198,6 +206,16 @@ export default function PlanScreen() {
       <H2 size={t.h2} style={styles.tight}>
         {L.plan}
       </H2>
+
+      {/* A card rather than a nudge, because what it teaches is the whole
+          screen's model rather than one control: the grid *is* the plan now
+          that the seven weekday rows are gone, and nothing in a month of dots
+          says a rule lives behind each one. Capped list of two — this and
+          Insights — and a third screen wanting one would be a screen with a
+          problem a card can't fix. */}
+      {pickTip(s.tips, ['plan']) === 'plan' && (
+        <Tip card id="plan" title={L.tipPlan} sub={L.tipPlanSub} />
+      )}
 
       <View style={styles.monthRow}>
         <View style={styles.monthNav}>
@@ -445,11 +463,51 @@ export default function PlanScreen() {
                           </Text>
                         </View>
                         <View style={styles.logSets}>
-                          {e.sets.map((v, j) => (
-                            <Text key={j} style={styles.logSet}>
-                              {loggedLine(v, measureOf(en), L)}
-                            </Text>
-                          ))}
+                          {e.sets.map((v, j) => {
+                            const line = loggedLine(v, measureOf(en), L);
+                            // Index for index with the sets — see
+                            // `LoggedExercise`. Absent on every entry logged
+                            // before marks were kept, and on any session
+                            // nobody marked.
+                            const mk = e.marks?.[j] ?? null;
+                            if (!mk) {
+                              return (
+                                <Text key={j} style={styles.logSet}>
+                                  {line}
+                                </Text>
+                              );
+                            }
+                            const note = mk.note?.trim();
+                            return (
+                              // A verdict is worth a glyph and stays in the
+                              // wrap; only *words* earn a line of their own,
+                              // and take the full width to get one. The sets
+                              // around it close up as before, so a card with
+                              // nothing written on it is the card it always
+                              // was.
+                              <View
+                                key={j}
+                                style={[styles.logMarked, !!note && styles.logNoted]}
+                              >
+                                <Text style={styles.logSet}>{line}</Text>
+                                {/* `neutral500`, not accent: in the session
+                                    the mark is live and yours to change, here
+                                    it is history, written in the greys the
+                                    figures beside it are. */}
+                                <Icon
+                                  d={MARK_D[mk.mark]}
+                                  size={12}
+                                  color={c.neutral500}
+                                  strokeWidth={2.2}
+                                />
+                                {note ? (
+                                  <Text style={styles.logNote} numberOfLines={2}>
+                                    {note}
+                                  </Text>
+                                ) : null}
+                              </View>
+                            );
+                          })}
                         </View>
                       </View>
                     );
@@ -656,6 +714,11 @@ const sheet = themed(() => ({
     color: color.neutral400,
     fontVariant: ['tabular-nums'],
   },
+  /** A set carrying a verdict: the figure, then the glyph, still in the wrap. */
+  logMarked: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  /** With words it leaves the wrap and takes the whole line. */
+  logNoted: { flexBasis: '100%' },
+  logNote: { flex: 1, minWidth: 0, fontFamily: font.regular, fontSize: 11, color: color.neutral500 },
 
   saveLinkBtn: { alignSelf: 'flex-start', marginTop: 11, paddingVertical: 2, paddingHorizontal: 0 },
   saveLink: { fontSize: 12 },

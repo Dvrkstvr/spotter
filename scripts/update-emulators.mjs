@@ -1,15 +1,16 @@
 /**
- * Put the running emulators (back) on the sim-radio version: a fresh Metro
- * with EXPO_PUBLIC_SIM_RADIO, and Expo Go force-reloaded on every emulator
+ * Put the running instances (back) on the sim-radio version: a fresh Metro
+ * with EXPO_PUBLIC_SIM_RADIO, and Expo Go force-reloaded on every one of them
  * so it refetches the current JS. Windows-only, like the rest of the tooling.
  *
  *   npm run update:emu
+ *   npm run update:emu -- --phone   — the cabled phone too (see start:emu)
  *
  * Exists because the failure mode is silent: a stale Metro process keeps
  * port 8081, the emulators keep loading exp://127.0.0.1:8081 from it, and
  * code changes never arrive. This kills the old Metro (only if it's a node
  * process), starts a fresh one in its own window, and cold-restarts the app.
- * Emulators must already be running — `npm run start:emu` boots them.
+ * The instances must already be up — `npm run start:emu` boots them.
  */
 import { execFileSync, spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -22,6 +23,8 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 const RELAY_PORT = Number(process.env.BUDDY_RELAY_PORT ?? 8787);
 const METRO_PORT = 8081;
 const APP = 'host.exp.exponent';
+
+const wantPhone = process.argv.slice(2).includes('--phone');
 
 const log = (m) => console.log(`[update:emu] ${m}`);
 const run = (exe, args) => execFileSync(exe, args, { encoding: 'utf8' });
@@ -38,15 +41,27 @@ if (!sdk) {
 }
 const adb = path.join(sdk, 'platform-tools', 'adb.exe');
 
-const serials = run(adb, ['devices'])
+const devices = run(adb, ['devices'])
   .split(/\r?\n/)
-  .map((l) => l.match(/^(emulator-\d+)\tdevice$/)?.[1])
-  .filter(Boolean);
+  .slice(1)
+  .map((l) => l.trim().split(/\s+/))
+  .filter(([serial, state]) => serial && state === 'device')
+  .map(([serial]) => serial);
+
+// The phone is opt-in here for the same reason it is in start:emu — tethering
+// keeps it on the cable, and a plain reload must not take it over. Passing
+// `--phone` covers the instance `start:phone` opened, which would otherwise be
+// the one thing left on stale code: exactly what this script exists to prevent.
+const serials = devices.filter((s) => s.startsWith('emulator-') || (wantPhone && !s.includes(':')));
 if (!serials.length) {
-  log('no running emulators — boot them first with `npm run start:emu`');
+  log(
+    wantPhone
+      ? 'nothing to reload — no running emulator and no phone on the cable'
+      : 'no running emulators — boot them first with `npm run start:emu` (`--phone` includes the cable)',
+  );
   process.exit(1);
 }
-log(`emulators: ${serials.join(', ')}`);
+log(`targets: ${serials.join(', ')}`);
 
 /* — a fresh Metro: kill whatever node process holds 8081, start our own — */
 

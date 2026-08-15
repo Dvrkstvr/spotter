@@ -250,6 +250,34 @@ export type BuddyProgress = {
    */
   first?: FirstUpChoice;
   bids?: Record<string, Bid>;
+  /**
+   * Seconds left on the sender's own rest **as this message was built** — 0 or
+   * absent when they aren't resting. Deliberately a remainder rather than the
+   * `{ at, skipped }` the sender holds: `at` is a stamp on *their* `elapsed`,
+   * and the two phones' session clocks share no origin (a guest joins mid-way,
+   * and `restSeconds` is a per-phone setting anyway). A remainder is the one
+   * figure that means the same thing on both sides; the receiver re-anchors it
+   * to its own clock on arrival and counts down from there. Optional, like
+   * `first` and `bids`, so an older build's message still parses.
+   */
+  rest?: number;
+  /**
+   * The closure for the exercises in `list` that aren't in the seeded library
+   * — see `closureFor`. An exercise one of you added mid-session is otherwise
+   * an id the other phone cannot name, so the offer to take it on could not
+   * be drawn, let alone accepted.
+   *
+   * It rides here rather than as a message of its own for the reason
+   * everything in this protocol does: `progress` is whole state, so a closure
+   * that missed a dropped link arrives with the next broadcast instead of
+   * being lost for the workout. Nothing is written from it until the offer is
+   * accepted — receiving it only makes the row nameable.
+   *
+   * Absent when the session is all seeded exercises, which is almost always,
+   * and absent from an older build — whose extra exercises simply stay
+   * unnameable, exactly as they are today.
+   */
+  deps?: ExClosure;
 };
 
 type ProgressSource = {
@@ -261,7 +289,9 @@ export const progressOf = (
   session: ProgressSource,
   activeIndex: number,
   shared: { modes: Record<string, TurnChoice>; first: FirstUpChoice; bids: Record<string, Bid> },
-  finished = false
+  finished = false,
+  restLeft = 0,
+  deps?: ExClosure
 ): BuddyProgress => ({
   rid: session.rid,
   active: finished ? null : (session.list[activeIndex]?.ex ?? null),
@@ -270,6 +300,11 @@ export const progressOf = (
   modes: shared.modes,
   first: shared.first,
   bids: shared.bids,
+  rest: finished ? 0 : Math.max(0, Math.round(restLeft)),
+  // Only when there is something to carry: a session of seeded exercises adds
+  // nothing to the wire, and the field stays as absent as it is on a build
+  // that predates it.
+  ...(deps && deps.custom.length > 0 ? { deps } : {}),
 });
 
 /**
@@ -312,19 +347,33 @@ export type SessionInvite = {
 export const routineEquals = (a: Routine, b: Routine) =>
   JSON.stringify({ n: a.names, i: a.items }) === JSON.stringify({ n: b.names, i: b.items });
 
+/** What a set of exercises needs alongside it to be renderable on another phone. */
+export type ExClosure = { custom: Exercise[]; groups: Labelled[]; kinds: Labelled[] };
+
 /**
- * The dependency closure a routine needs to travel: its custom exercises and
- * their groups/kinds. Both the session invite and the co-created draft ship
- * this so the receiver can always render what arrives.
+ * The dependency closure a set of exercises needs to travel: the custom ones
+ * among them and the groups/kinds those file under. Seeded exercises carry
+ * nothing — both phones have the library already.
  */
-export const routineClosure = (s: SyncSide, routine: Routine) => {
-  const custom = s.custom.filter((e) => routine.items.some((i) => i.ex === e.id));
+export const closureFor = (s: SyncSide, exIds: string[]): ExClosure => {
+  const custom = s.custom.filter((e) => exIds.includes(e.id));
   return {
     custom,
     groups: s.groups.filter((g) => custom.some((e) => e.group === g.key)),
     kinds: s.kinds.filter((k) => custom.some((e) => e.kind === k.key)),
   };
 };
+
+/**
+ * The dependency closure a routine needs to travel. Both the session invite
+ * and the co-created draft ship this so the receiver can always render what
+ * arrives.
+ */
+export const routineClosure = (s: SyncSide, routine: Routine): ExClosure =>
+  closureFor(
+    s,
+    routine.items.map((i) => i.ex)
+  );
 
 /* ── co-created routines (build one together) ──────────────────────────── */
 
@@ -706,6 +755,24 @@ const cleanBids = (v: unknown): Record<string, Bid> | undefined => {
   return out;
 };
 
+/**
+ * Same rebuild `cleanInvite` gives an invite's closure, and bounded by the
+ * same caps. An empty one is dropped rather than carried: the field's whole
+ * meaning is "here are the exercises you can't name", and an empty closure
+ * says nothing a missing field doesn't.
+ */
+const cleanClosure = (v: unknown): ExClosure | undefined => {
+  if (!isObj(v)) return undefined;
+  const custom = cleanList(v.custom, cleanExercise);
+  return custom.length
+    ? {
+        custom,
+        groups: cleanList(v.groups, cleanLabelled),
+        kinds: cleanList(v.kinds, cleanLabelled),
+      }
+    : undefined;
+};
+
 const cleanProgress = (v: unknown): BuddyProgress | null => {
   if (!isObj(v)) return null;
   const list = (Array.isArray(v.list) ? v.list : [])
@@ -726,6 +793,11 @@ const cleanProgress = (v: unknown): BuddyProgress | null => {
   if (first) prog.first = first;
   const bids = cleanBids(v.bids);
   if (bids) prog.bids = bids;
+  const deps = cleanClosure(v.deps);
+  if (deps) prog.deps = deps;
+  // A day's worth of headroom over any rest anybody sets, which is all this
+  // has to be: the figure only ever drives a countdown label.
+  prog.rest = Math.min(86400, Math.max(0, Math.round(finite(v.rest))));
   return prog;
 };
 

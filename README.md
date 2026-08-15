@@ -68,6 +68,7 @@ iOS config is untouched but unexercised — nothing has been checked on it.
 These also exist as double-clickable batch files in the repo root:
 `start-app.bat` (plain Metro), `start-emulated.bat` (the full buddy-testing
 setup below; takes the emulator count as an optional argument),
+`start-phone.bat` (that setup with the cabled phone as one of the two),
 `build-apk.bat` (the release APK into `_builds\`) and `install-apk.bat`
 (that APK onto the phone on the cable).
 
@@ -89,7 +90,34 @@ skip-if-already-there, so rerunning it reuses running emulators and the open
 relay. Needs the Android emulator plus AVDs installed once (Android Studio's
 Device Manager is the easy way; the script prints the alternatives).
 
-When the emulators are already running but showing stale code (or the
+To have the real phone be one of the two, put it on the USB cable and run
+
+```bash
+npm run start:phone
+```
+
+which is the same script with `--phone`: the phone becomes one of the two
+instances, so only one emulator is booted. `-- 0` boots none (two cabled
+phones are the pair), `-- -s <serial>` singles out one of two. Also
+double-clickable as `start-phone.bat`. The phone is opt-in rather than
+detected, because tethering keeps it on the cable permanently and a plain
+`start:emu` must not take it over.
+
+Nothing new is involved: adb reverse is what the emulators already use, and
+for the phone it is a path down the cable — no LAN address, no route, no
+firewall rule. That is why it works unchanged **while the PC is online through
+that same phone's tethering**, where the LAN-mode alternative is exactly what
+tethering makes awkward. Toggling tethering re-enumerates USB and drops the
+forwards, so they are re-armed every few seconds rather than set once.
+
+The phone runs the app in Expo Go here, not the installed Spotter: where the
+native module exists the real radio always wins, and an emulator has no
+Bluetooth to answer it. Expo Go keeps its own storage, so that instance is a
+scratch diary and the real one is untouched. Installing Expo Go on the phone
+is the one manual step — an emulator's is x86_64, so the clone-between-
+emulators trick can't reach it.
+
+When the instances are already running but showing stale code (or the
 standalone app), put them back on the current sim-radio bundle with
 
 ```bash
@@ -98,8 +126,9 @@ npm run update:emu
 
 which replaces any Metro holding port 8081 with a fresh sim-enabled one and
 cold-restarts Expo Go on every emulator so it refetches the JS — a stale
-Metro keeps the port and serves old code otherwise, silently. Also
-double-clickable as `update-emulators.bat`.
+Metro keeps the port and serves old code otherwise, silently. `-- --phone`
+includes the cabled phone, which would otherwise be the one instance left on
+old code. Also double-clickable as `update-emulators.bat`.
 
 Without emulators the two halves also run by hand — the relay plus a
 sim-enabled Metro, with the app in Expo Go on one or two phones:

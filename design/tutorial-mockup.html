@@ -1,0 +1,1859 @@
+<title>Spotter — Teaching a gesture where it happens (mockup)</title>
+<style>
+  /* ── Nocturne, verbatim from src/design/tokens.ts ─────────────────────
+     Single-theme on purpose: this mocks the app's default (blurple · dark),
+     which is byte-identical to the ported design palette. */
+  :root {
+    --bg: #161826;          /* app page */
+    --surface: #232532;
+    --text: #e9e9ed;
+    --accent: #9184d9;
+    --accent2: #a7a1db;
+    --a100: #f5f4ff; --a200: #e7e5fe; --a300: #d2cefd; --a400: #b5abfc;
+    --a500: #968ae0; --a600: #796cbf; --a700: #5d5294; --a800: #423a6a; --a900: #2b2741;
+    --n100: #f3f5fe; --n300: #cbcedd; --n400: #b2b6ca; --n500: #9397ab; --n600: #75798c;
+    --n700: #595d6c; --n800: #3f424d; --n900: #292b31;
+    --scrim: #0b0c14;
+    --divider: rgba(233, 233, 237, 0.16);
+    --rule: rgba(233, 233, 237, 0.09);
+    --wash-t8: rgba(233, 233, 237, 0.08);
+    --wash-t5: rgba(233, 233, 237, 0.05);
+    --wash-a16: rgba(145, 132, 217, 0.16);
+    --wash-a10: rgba(145, 132, 217, 0.10);
+    --wash-a7: rgba(145, 132, 217, 0.07);
+    --sans: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--scrim);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 1180px; margin: 0 auto; padding: 56px 28px 96px; }
+
+  .kicker {
+    font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--accent); font-weight: 400;
+  }
+  h1 {
+    font-weight: 500; font-size: 40px; line-height: 1.12;
+    letter-spacing: -0.015em; margin: 10px 0 14px; text-wrap: balance;
+  }
+  h2.sec { font-weight: 500; font-size: 24px; letter-spacing: -0.015em; margin: 0 0 6px; }
+  .lede { color: var(--n400); max-width: 66ch; }
+  .lede.wide { max-width: 82ch; }
+  .lede strong { color: var(--text); font-weight: 500; }
+  .lede code, .notes code, .settled code, td code, .cat code {
+    font-family: var(--mono); font-size: 12.5px; color: var(--a300);
+    background: var(--n900); border-radius: 4px; padding: 1px 5px;
+  }
+
+  .settled {
+    margin: 26px 0 0; border: 1px solid var(--divider); border-left: 2px solid var(--accent);
+    border-radius: 8px; padding: 13px 16px; max-width: 82ch;
+  }
+  .settled .h { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); }
+  .settled ul { margin: 9px 0 0; padding-left: 18px; color: var(--n400); font-size: 13.5px; display: grid; gap: 7px; }
+  .settled li::marker { color: var(--n700); }
+  .settled strong { color: var(--text); font-weight: 500; }
+  .settled.warn { border-left-color: var(--n600); }
+  .settled.warn .h { color: var(--n400); }
+
+  hr.fade {
+    border: 0; height: 1px; margin: 52px 0;
+    background: linear-gradient(90deg, transparent, var(--divider) 48px, var(--divider) calc(100% - 48px), transparent);
+  }
+
+  /* ── frames laid out side by side ── */
+  .pair { display: grid; grid-template-columns: 348px 348px; gap: 32px; margin-top: 26px; align-items: start; }
+  .trio { display: grid; grid-template-columns: repeat(3, 348px); gap: 26px; margin-top: 26px; align-items: start; }
+  .half .cap { font-size: 13px; font-weight: 500; margin-bottom: 3px; }
+  .half .cap.bad { color: var(--n400); }
+  .half .cap.good { color: var(--accent); }
+  .half .cap.no { color: var(--n500); text-decoration: line-through; text-decoration-color: var(--n700); }
+  .half .sub { font-size: 12px; color: var(--n500); margin-bottom: 12px; max-width: 42ch; min-height: 54px; }
+  .notes { margin-top: 22px; max-width: 78ch; }
+  .notes ul { margin: 10px 0 0; padding-left: 18px; color: var(--n400); font-size: 14px; display: grid; gap: 9px; }
+  .notes li::marker { color: var(--n700); }
+  .notes strong { color: var(--text); font-weight: 500; }
+  @media (max-width: 1140px) { .trio { grid-template-columns: 1fr; } }
+  @media (max-width: 880px) { .pair { grid-template-columns: 1fr; } }
+
+  /* ── phone frame ── */
+  .phone {
+    width: 348px; height: 748px; background: var(--bg);
+    border: 1px solid var(--n800); border-radius: 30px;
+    overflow: hidden; display: flex; flex-direction: column;
+    box-shadow: 0 16px 40px rgba(0,0,0,0.55); position: relative;
+  }
+  .phone.short { height: 520px; }
+  .status {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 20px 4px; font-size: 11.5px; color: var(--n500); flex: none;
+  }
+  .batt { display: inline-block; width: 18px; height: 9px; border: 1px solid var(--n600); border-radius: 2px; position: relative; }
+  .batt::after { content: ""; position: absolute; inset: 1.5px 30% 1.5px 1.5px; background: var(--n500); border-radius: 1px; }
+  .app { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+
+  /* in-phone primitives */
+  .sc-kicker { font-size: 9.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent); }
+  .sc-h3 { font-weight: 500; font-size: 22px; letter-spacing: -0.01em; line-height: 1.15; }
+  .sc-h4 { font-weight: 500; font-size: 17px; letter-spacing: -0.01em; }
+  .sc-h6 { font-size: 9.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--n600); }
+  .dim { color: var(--n500); }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    border: 1px solid var(--divider); border-radius: 8px;
+    padding: 7px 14px; font-size: 13px; font-weight: 500; color: var(--text);
+  }
+  .btn.block { display: flex; width: 100%; }
+  .btn.acc { background: var(--wash-a16); border-color: var(--a700); color: var(--a200); }
+
+  /* ── session screen (shared with keyboard-mockup.html) ── */
+  .ses-head { flex: none; padding: 12px 18px 0; }
+  .ses-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+  .ses-count { font-size: 11.5px; color: var(--n500); font-variant-numeric: tabular-nums; white-space: nowrap; padding-top: 16px; }
+  .ses-prog { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+  .ses-bar { flex: 1; height: 3px; border-radius: 2px; background: var(--n900); position: relative; overflow: hidden; }
+  .ses-bar::after { content: ""; position: absolute; inset: 0 82% 0 0; background: var(--accent); border-radius: 2px; }
+  .pos-chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    border: 1px solid var(--divider); border-radius: 7px; padding: 3px 9px;
+    font-size: 11.5px; color: var(--n300); font-variant-numeric: tabular-nums;
+  }
+  .pos-chip .caret { font-size: 9px; color: var(--n600); }
+  .ex-head { flex: none; padding: 14px 18px 0; }
+  .ex-name-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .ex-name { font-weight: 500; font-size: 23px; letter-spacing: -0.01em; }
+  .howto { border: 1px solid var(--divider); border-radius: 7px; padding: 4px 10px; font-size: 11.5px; color: var(--n300); }
+  .ex-sub-row { display: flex; align-items: baseline; justify-content: space-between; margin-top: 3px; }
+  .ex-sub { font-size: 12px; color: var(--n500); }
+  .ex-count { font-size: 11.5px; color: var(--n600); font-variant-numeric: tabular-nums; }
+  .seal-lane { height: 0; border-top: 1px solid var(--wash-t8); margin: 12px 16px 0; }
+
+  .ses-body { flex: 1; overflow: hidden; padding: 8px 16px 0; position: relative; }
+  .col-head { display: flex; gap: 8px; padding: 0 2px 5px; }
+  .col-head span { font-size: 9.5px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--n700); }
+  .c-idx { width: 16px; } .c-prev { width: 66px; } .c-flex { flex: 1; text-align: center; } .c-chk { width: 34px; }
+
+  .set-row { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; padding: 0 2px; }
+  .set-row .idx { width: 16px; font-size: 12px; color: var(--n600); font-variant-numeric: tabular-nums; }
+  .set-row .idx.mark { color: var(--n500); font-size: 13px; }
+  .set-row .prev { width: 66px; font-size: 11.5px; color: var(--n500); font-variant-numeric: tabular-nums; }
+  .cell {
+    flex: 1; text-align: center; border: 1px solid var(--divider); border-radius: 8px;
+    padding: 6px 2px; font-size: 15px; color: var(--text); font-variant-numeric: tabular-nums;
+    background: transparent;
+  }
+  .set-row.done .cell { color: var(--n500); border-color: var(--rule); }
+  .chk {
+    width: 34px; height: 32px; border-radius: 7px; border: 1px solid var(--divider);
+    display: flex; align-items: center; justify-content: center; flex: none;
+  }
+  .set-row.done .chk { background: var(--accent); border-color: var(--accent); color: #14121f; font-size: 15px; }
+  .live-box {
+    margin: 3px 0 5px; padding: 8px; border: 1px solid var(--a700); border-radius: 12px;
+    background: var(--wash-a7); position: relative;
+  }
+  .live-box .set-row { margin-bottom: 0; padding: 0; }
+  .live-box .idx { color: var(--a400); }
+  .live-box .cell {
+    font-size: 22px; min-height: 46px; padding: 4px 2px; background: var(--bg);
+    border-color: var(--a800); display: flex; align-items: center; justify-content: center;
+    position: relative;
+  }
+  .live-box .cell .ph { color: var(--n700); }
+  .add-set {
+    border: 1px dashed var(--divider); border-radius: 8px; padding: 8px;
+    text-align: center; font-size: 12.5px; color: var(--n400); margin-top: 4px;
+  }
+  .ses-foot { flex: none; padding: 10px 16px 14px; }
+  .cta {
+    height: 50px; border-radius: 8px; background: var(--wash-a10);
+    border: 1px dashed var(--a700); display: flex; align-items: center; justify-content: center;
+    font-size: 15px; font-weight: 500; color: var(--accent);
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════
+     THE TIP — the one new primitive.
+
+     Deliberately quieter than everything around it, and deliberately not
+     borrowing any outline that already means something on this screen:
+       · no accent fill  — that is the live set box
+       · no dashed edge  — dashed means "this one is held" (HoldBtn, the
+                            waiting set row, the coach's routine card)
+     So: one hairline, no fill, an accent dot at the left, dim text, and a
+     single × at the app's small-control reach.
+     ══════════════════════════════════════════════════════════════════════ */
+  .tip {
+    display: flex; align-items: flex-start; gap: 9px;
+    border: 1px solid var(--divider); border-radius: 8px;
+    padding: 9px 10px 9px 11px; margin: 8px 0 2px;
+    background: transparent;
+  }
+  .tip .dot {
+    width: 6px; height: 6px; border-radius: 3px; background: var(--accent);
+    flex: none; margin-top: 6px;
+  }
+  .tip .body { flex: 1; min-width: 0; }
+  .tip .t { font-size: 13px; font-weight: 500; color: var(--text); line-height: 1.35; }
+  .tip .s { font-size: 11.5px; color: var(--n500); line-height: 1.4; margin-top: 1px; }
+  .tip .x { flex: none; width: 20px; height: 20px; display: flex; align-items: center;
+            justify-content: center; color: var(--n600); font-size: 15px; margin-top: 1px; }
+  /* The reach it takes is `slop` from tokens — the glyph is 20px, the target
+     is 36. Not drawn: the tip should look here exactly as it looks on a
+     phone, and an annotation ring would read as part of the design. */
+
+  /* the card form — a whole screen's model, at the top of it */
+  .tip-card {
+    border: 1px solid var(--divider); border-radius: 8px; padding: 12px 12px 12px 13px;
+    display: flex; gap: 10px; align-items: flex-start; margin-bottom: 12px;
+  }
+  .tip-card .dot { width: 6px; height: 6px; border-radius: 3px; background: var(--accent); flex: none; margin-top: 6px; }
+  .tip-card .t { font-size: 14px; font-weight: 500; }
+  .tip-card .s { font-size: 12px; color: var(--n500); margin-top: 3px; }
+  .tip-card .x { color: var(--n600); font-size: 15px; }
+
+  /* ── the overview sheet (§5) ── */
+  .sheet-wrap { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
+  .scrim-bg { flex: 1; background: rgba(11, 12, 20, 0.66); position: relative; overflow: hidden; }
+  .under { position: absolute; inset: 0; padding: 12px 18px; opacity: 0.42; }
+  .sheet {
+    background: var(--surface); border-radius: 18px 18px 0 0;
+    box-shadow: 0 -12px 34px rgba(0,0,0,0.45);
+    display: flex; flex-direction: column; overflow: hidden; flex: none;
+  }
+  .grabber { width: 36px; height: 4px; border-radius: 2px; background: var(--n700); margin: 12px auto 10px; flex: none; }
+  .sheet-body { padding: 0 16px 18px; }
+  .ov-sub { font-size: 11.5px; color: var(--n500); margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .ov-list { margin-top: 12px; }
+  .ov-row {
+    display: flex; align-items: center; gap: 10px; padding: 9px 8px;
+    border-bottom: 1px solid var(--rule); border-radius: 6px;
+  }
+  .ov-row .nm { flex: 1; font-size: 14px; min-width: 0; }
+  .ov-row .ct { font-size: 12px; color: var(--n500); font-variant-numeric: tabular-nums; }
+  .ov-row .tk { font-size: 12px; color: var(--accent); width: 12px; }
+  .ov-row .rm { font-size: 15px; color: var(--n600); width: 14px; text-align: center; }
+  .ov-row.cur { background: var(--wash-a10); }
+  .ov-row.cur .nm { color: var(--a200); }
+  .ov-row.cur .ct { color: var(--a400); }
+  .ov-row.done .nm { color: var(--n500); }
+  .ov-add {
+    border: 1px solid var(--divider); border-radius: 8px; padding: 9px;
+    text-align: center; font-size: 13.5px; color: var(--n300); margin-top: 14px;
+  }
+  .ov-finish {
+    height: 46px; border-radius: 8px; background: var(--wash-a10);
+    border: 1px dashed var(--a700); display: flex; align-items: center; justify-content: center;
+    font-size: 15px; font-weight: 500; color: var(--accent); margin-top: 14px;
+  }
+  .ov-finish.solid { border-style: solid; }
+  /* Not a tip. A permanent line that only appears while it is true — see the
+     note under §5. */
+  .ov-hint { font-size: 11.5px; color: var(--n500); text-align: center; margin-top: 7px; }
+  /* the chip the §5 tip points at */
+  .pos-chip.lit { border-color: var(--accent); color: var(--a200); }
+
+  /* ── the demo: a pointer drawn OVER the real cell, writing nothing ────
+     Geometry, so the overlay lands exactly on the kg cell rather than near
+     it: the live box's padding box is 296px wide, and the row inside it is
+     idx 16 · gap 8 · prev 66 · gap 8 · [cell 74] · gap 8 · [cell 74] · gap 8
+     · chk 34. So the kg cell starts at 8 + 16 + 8 + 66 + 8 = 106 and the row
+     starts at the box's 8px of padding. */
+  .demo-layer { position: absolute; inset: 0; pointer-events: none; z-index: 9; }
+  .ptr {
+    position: absolute; width: 30px; height: 30px; border-radius: 15px;
+    background: rgba(233,233,237,0.18); border: 1px solid rgba(233,233,237,0.4);
+    left: 150px; top: 30px;
+    animation: ptr 4.6s cubic-bezier(0.2,0.8,0.3,1) infinite;
+  }
+  /* the hold: a ring that closes in the 120ms `HOLD_MS` takes, then the grab */
+  .ptr::before {
+    content: ""; position: absolute; inset: -9px; border-radius: 50%;
+    border: 1.5px solid var(--accent); opacity: 0;
+    animation: grab 4.6s ease-out infinite;
+  }
+  @keyframes ptr {
+    0%, 6%    { opacity: 0; transform: translateY(0) scale(1.25); }
+    12%       { opacity: 1; transform: translateY(0) scale(1); }
+    18%       { opacity: 1; transform: translateY(0) scale(0.9); }   /* the hold lands */
+    52%       { opacity: 1; transform: translateY(-38px) scale(0.9); }
+    68%       { opacity: 1; transform: translateY(-38px) scale(0.9); }
+    78%, 100% { opacity: 0; transform: translateY(-38px) scale(1.1); }
+  }
+  @keyframes grab {
+    0%, 15%  { opacity: 0; transform: scale(1.6); }
+    18%      { opacity: 0.9; transform: scale(1); }   /* buzz.grab — you feel this */
+    30%      { opacity: 0; transform: scale(1.5); }
+    100%     { opacity: 0; transform: scale(1.5); }
+  }
+  /* the figure the pointer is scrubbing. Drawn on the overlay, so the
+     TextInput under it is untouched and still typeable. */
+  .scrub {
+    position: absolute; left: 106px; top: 8px; width: 74px; height: 46px;
+    display: flex; align-items: center; justify-content: center; overflow: hidden;
+    border-radius: 8px; background: var(--bg); border: 1px solid var(--accent);
+    opacity: 0; animation: scrubbox 4.6s linear infinite;
+  }
+  @keyframes scrubbox {
+    0%, 16%   { opacity: 0; }
+    19%, 72%  { opacity: 1; }
+    80%, 100% { opacity: 0; }
+  }
+  .scrub .stack {
+    display: flex; flex-direction: column; font-size: 22px; color: var(--text);
+    font-variant-numeric: tabular-nums; animation: stack 4.6s steps(1, end) infinite;
+  }
+  .scrub .stack span { height: 44px; line-height: 44px; flex: none; }
+  /* One 12px `PX_PER_STEP` of travel is one 0.5 kg step, so the pointer's 38px
+     of travel is three of them — 60 → 61.5, and no more. A demo that ran 60 to
+     100 in one sweep would be teaching a gesture the app does not have. */
+  @keyframes stack {
+    0%, 26%   { transform: translateY(0); }
+    36%       { transform: translateY(-44px); }
+    45%       { transform: translateY(-88px); }
+    54%, 100% { transform: translateY(-132px); }
+  }
+
+  /* ── the rejected spotlight ──
+     The cutout, measured onto the kg cell (l 123 · t 212 · 74 × 46) with 6px
+     of breathing room — which is the point of §2's third bullet: this is a
+     pixel rectangle, and everything it points at moves */
+  .spot-hole {
+    position: absolute; left: 117px; top: 206px; width: 86px; height: 58px;
+    border-radius: 10px; box-shadow: 0 0 0 9999px rgba(11,12,20,0.78);
+    border: 1px solid var(--accent); z-index: 31;
+  }
+  .spot-call {
+    position: absolute; left: 24px; right: 24px; top: 282px; z-index: 32;
+    background: var(--surface); border: 1px solid var(--n700); border-radius: 12px;
+    padding: 14px; box-shadow: 0 12px 34px rgba(0,0,0,0.5);
+  }
+  .spot-call .t { font-size: 15px; font-weight: 500; }
+  .spot-call .s { font-size: 12.5px; color: var(--n400); margin-top: 4px; }
+  .spot-call .foot { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; }
+  .spot-call .pips { display: flex; gap: 5px; }
+  .spot-call .pips i { width: 5px; height: 5px; border-radius: 3px; background: var(--n700); display: block; }
+  .spot-call .pips i.on { background: var(--accent); }
+
+  /* ── lifecycle strip ── */
+  .life { display: flex; align-items: stretch; gap: 0; margin-top: 24px; flex-wrap: wrap; }
+  .life .st {
+    border: 1px solid var(--divider); border-radius: 8px; padding: 11px 13px;
+    min-width: 168px; flex: 1;
+  }
+  .life .st .n { font-size: 9.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent); }
+  .life .st .t { font-size: 13.5px; font-weight: 500; margin-top: 3px; }
+  .life .st .s { font-size: 12px; color: var(--n500); margin-top: 3px; }
+  .life .arr { display: flex; align-items: center; color: var(--n700); padding: 0 10px; font-size: 15px; }
+  .life .st.end { border-left: 2px solid var(--accent); }
+  .life .st.dead { border-style: dashed; }
+  .life .st.dead .n { color: var(--n500); }
+
+  /* ── catalogue table ── */
+  .t-wrap { overflow-x: auto; }
+  table.cat { border-collapse: collapse; width: 100%; min-width: 880px; margin-top: 22px; font-size: 13px; }
+  table.cat th {
+    text-align: left; font-weight: 400; font-size: 9.5px; letter-spacing: 0.09em;
+    text-transform: uppercase; color: var(--n600); padding: 0 12px 7px 0;
+    border-bottom: 1px solid var(--divider);
+  }
+  table.cat td { padding: 9px 12px 9px 0; border-bottom: 1px solid var(--rule); color: var(--n400); vertical-align: top; }
+  table.cat td.k { color: var(--text); font-weight: 500; white-space: nowrap; }
+  table.cat td.k .id { display: block; font-family: var(--mono); font-size: 11px; color: var(--n600); font-weight: 400; }
+  table.cat tr.first td { color: var(--n300); }
+  .shape-tag {
+    display: inline-block; border: 1px solid var(--divider); border-radius: 5px;
+    padding: 1px 7px; font-size: 10.5px; color: var(--n300); white-space: nowrap;
+  }
+  .shape-tag.demo { border-color: var(--a700); color: var(--a300); }
+
+  /* ── copy table ── */
+  table.copy { border-collapse: collapse; width: 100%; min-width: 760px; margin-top: 20px; font-size: 13px; max-width: 1000px; }
+  table.copy th {
+    text-align: left; font-weight: 400; font-size: 9.5px; letter-spacing: 0.09em;
+    text-transform: uppercase; color: var(--n600); padding: 0 14px 7px 0;
+    border-bottom: 1px solid var(--divider);
+  }
+  table.copy td { padding: 10px 14px 10px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  table.copy td.id { font-family: var(--mono); font-size: 11.5px; color: var(--n600); white-space: nowrap; }
+  table.copy td b { display: block; color: var(--text); font-weight: 500; }
+  table.copy td i { display: block; color: var(--n500); font-style: normal; font-size: 12px; margin-top: 1px; }
+
+  /* ── today / routines bits used in §6 ── */
+  .strip { display: flex; gap: 6px; margin-top: 10px; }
+  .strip .d { flex: 1; text-align: center; }
+  .strip .d .l { font-size: 9.5px; color: var(--n600); text-transform: uppercase; letter-spacing: 0.06em; }
+  .strip .d .m { height: 26px; display: flex; align-items: center; justify-content: center; margin-top: 4px; }
+  .strip .d .m .full { width: 7px; height: 7px; border-radius: 4px; background: var(--accent); }
+  .strip .d .m .ring { width: 7px; height: 7px; border-radius: 4px; border: 1px solid var(--a600); }
+  .strip .d .m .dash { width: 8px; height: 1px; background: var(--n700); }
+  .strip .d.today .m { border: 1px solid var(--divider); border-radius: 7px; }
+  .searchbar {
+    border: 1px solid var(--divider); border-radius: 8px; padding: 9px 11px;
+    font-size: 13.5px; color: var(--n600); display: flex; align-items: center; gap: 8px;
+  }
+  .rt-row { padding: 10px 0; border-bottom: 1px solid var(--rule); }
+  .rt-row .n { font-size: 14.5px; font-weight: 500; }
+  .rt-row .m { font-size: 11.5px; color: var(--n500); margin-top: 2px; }
+
+  /* settings rows */
+  .st-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--rule); }
+  .st-row .l { font-size: 14px; }
+  .st-row .h { font-size: 11.5px; color: var(--n500); margin-top: 2px; max-width: 40ch; }
+  .st-row .v { font-size: 12px; color: var(--n500); white-space: nowrap; }
+</style>
+
+<div class="page">
+  <div class="kicker">Spotter · mockup</div>
+  <h1>Teaching a gesture where it happens</h1>
+  <p class="lede wide">
+    Half of what this app can do is invisible. A kg cell is a text field that is also a
+    slider; a set number is a button; the bottom CTA sometimes has to be <em>held</em>; the
+    ghost column is tappable; and a chip that reads like a page number is the door to the
+    whole workout. The tour already knows this — its second screen is literally
+    <em>"Four things you wouldn't guess by looking at a screen"</em> — but it runs at minute
+    zero, before the user has ever opened a session, and
+    <strong>the door back into it is commented out</strong> (see
+    <code>settings-overlay.tsx</code>, the hidden danger corner: finishing the tour re-applies
+    routine picks, so it was taken away). So the one place the drag is explained is a screen
+    you see once, ninety seconds after installing, and never again.
+  </p>
+  <p class="lede wide" style="margin-top: 14px">
+    This proposes the other half: <strong>a tip fires in the place the feature lives, the
+    first time you are standing in front of it</strong> — and retires itself the moment you
+    do the thing. Which is the app's own name as a design rule. A spotter tells you one
+    thing, while you are under the bar, and then shuts up.
+  </p>
+
+  <div class="settled">
+    <div class="h">The shape of it, in one line each</div>
+    <ul>
+      <li><strong>In place, not in a list.</strong> The tip renders in normal flow next to
+        the control it is about, so it scrolls with it — no measuring, no re-anchoring, no
+        overlay layer to keep in sync with a keyboard.</li>
+      <li><strong>Never modal.</strong> No scrim, no "Next", no step counter. Everything
+        under it stays pressable, because the phone is on a bench between sets and the app
+        does not get to hold it hostage.</li>
+      <li><strong>Doing the thing is the dismissal.</strong> A tip that has been obeyed is
+        retired silently; the × is for "I know this already". There is no <em>Got it</em>
+        button to press to get back to your workout.</li>
+      <li><strong>A gesture gets a demonstration, not a paragraph.</strong> Words can teach
+        a tap. They cannot teach hold-then-drag, so that one tip performs the gesture on
+        the real cell — with a pointer drawn <em>over</em> it, writing nothing.</li>
+      <li><strong>One at a time, three showings, then never.</strong> A tip that is being
+        ignored is furniture, and furniture is what this whole screen is trying not to
+        become.</li>
+    </ul>
+  </div>
+
+  <hr class="fade" />
+
+  <!-- ════════════════════════ 1 · the gap ════════════════════════ -->
+  <h2 class="sec">1 · The gap, as it stands</h2>
+  <p class="lede">
+    The same feature, at the two moments that matter: when it is explained, and when it is
+    needed. Nothing connects them.
+  </p>
+
+  <div class="pair">
+    <div class="half">
+      <div class="cap bad">Minute 0 — the tour's rundown</div>
+      <div class="sub">Correct, well written, and read by someone who has never seen a set
+        row. It is also the last time this text is ever on screen: the Settings row that
+        reopened the tour is commented out.</div>
+      <div class="phone">
+        <div class="status"><span>18:22</span><span class="batt"></span></div>
+        <div class="app">
+          <div style="padding: 26px 20px 0">
+            <div class="sc-kicker">Setup · 2 of 9</div>
+            <div class="sc-h3" style="margin-top: 6px">How it works</div>
+            <div class="dim" style="font-size: 13px; margin-top: 4px">
+              Four things you wouldn't guess by looking at a screen.
+            </div>
+
+            <div style="margin-top: 22px; display: grid; gap: 16px">
+              <div style="display: flex; gap: 12px">
+                <div style="width: 24px; height: 24px; border: 1.4px solid var(--accent); border-radius: 4px; flex: none; display:flex; align-items:center; justify-content:center; color: var(--accent); font-size: 13px">✓</div>
+                <div>
+                  <div style="font-size: 14.5px; font-weight: 500">One tap logs a set</div>
+                  <div style="font-size: 12px; color: var(--n500)">The tick box is the whole button. Tap it again to take the set back.</div>
+                </div>
+              </div>
+              <div style="display: flex; gap: 12px">
+                <div style="width: 24px; height: 24px; flex: none; display:flex; align-items:center; justify-content:center; color: var(--accent); font-size: 17px">↕</div>
+                <div>
+                  <div style="font-size: 14.5px; font-weight: 500">Numbers are a gesture</div>
+                  <div style="font-size: 12px; color: var(--n500)">Hold a kg or reps cell, then drag up or down. Most sets never need the keyboard.</div>
+                </div>
+              </div>
+              <div style="display: flex; gap: 12px">
+                <div style="width: 24px; height: 24px; flex: none; display:flex; align-items:center; justify-content:center; color: var(--accent); font-size: 15px">◔</div>
+                <div>
+                  <div style="font-size: 14.5px; font-weight: 500">Rest runs itself</div>
+                  <div style="font-size: 12px; color: var(--n500)">Every set you tick starts the clock, drawn on the set you are on next.</div>
+                </div>
+              </div>
+              <div style="display: flex; gap: 12px">
+                <div style="width: 24px; height: 24px; flex: none; display:flex; align-items:center; justify-content:center; color: var(--accent); font-size: 15px">⚇</div>
+                <div>
+                  <div style="font-size: 14.5px; font-weight: 500">Bring a training partner</div>
+                  <div style="font-size: 12px; color: var(--n500)">Two phones, one session, side by side. No account and no internet.</div>
+                </div>
+              </div>
+            </div>
+
+            <div style="margin-top: 26px" class="btn block acc">Next</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="half">
+      <div class="cap bad">Minute 40 — the first real set</div>
+      <div class="sub">Empty fields, a ghost of nothing, and a keyboard one tap away. There
+        is no mark, hint or affordance anywhere on this screen saying the cells can be
+        dragged. The fastest path in the app is the one nobody finds.</div>
+      <div class="phone">
+        <div class="status"><span>19:04</span><span class="batt"></span></div>
+        <div class="app">
+          <div class="ses-head">
+            <div class="ses-row">
+              <div>
+                <div class="sc-kicker">Logging</div>
+                <div class="sc-h3">Push Day A</div>
+              </div>
+              <div class="ses-count">0 of 20 sets</div>
+            </div>
+            <div class="ses-prog">
+              <div class="ses-bar"></div>
+              <span class="pos-chip">1 / 5 <span class="caret">▾</span></span>
+            </div>
+          </div>
+          <div class="ex-head">
+            <div class="ex-name-row">
+              <div class="ex-name">Bench Press</div>
+              <span class="howto">How to</span>
+            </div>
+            <div class="ex-sub-row">
+              <span class="ex-sub">Barbell · Chest</span>
+              <span class="ex-count">0/4</span>
+            </div>
+          </div>
+          <div class="seal-lane"></div>
+          <div class="ses-body">
+            <div class="col-head">
+              <span class="c-idx">#</span><span class="c-prev">Last time</span>
+              <span class="c-flex">kg</span><span class="c-flex">Reps</span><span class="c-chk"></span>
+            </div>
+            <div class="live-box">
+              <div class="set-row">
+                <span class="idx">1</span><span class="prev">—</span>
+                <span class="cell"><span class="ph">60</span></span>
+                <span class="cell"><span class="ph">8</span></span>
+                <span class="chk"></span>
+              </div>
+            </div>
+            <div class="set-row">
+              <span class="idx">2</span><span class="prev">—</span>
+              <span class="cell"></span><span class="cell"></span><span class="chk"></span>
+            </div>
+            <div class="set-row">
+              <span class="idx">3</span><span class="prev">—</span>
+              <span class="cell"></span><span class="cell"></span><span class="chk"></span>
+            </div>
+            <div class="set-row">
+              <span class="idx">4</span><span class="prev">—</span>
+              <span class="cell"></span><span class="cell"></span><span class="chk"></span>
+            </div>
+            <div class="add-set">Hold to add a set</div>
+          </div>
+          <div class="ses-foot"><div class="cta">Hold for the next exercise</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <ul>
+      <li><strong>The rundown is not the problem and does not get deleted.</strong> It is
+        the right screen for "here is what this app is". What it cannot do is be present at
+        minute 40 — so the tips carry the same four sentences, <em>literally the same
+        strings</em>, to the place they apply. One list, two surfaces, the way
+        <code>routineInStyle</code> serves both the tour's pick screen and the Routines
+        tab.</li>
+      <li><strong>This is worse than it looks for the drag specifically.</strong> The
+        gesture existed and silently never fired for about a year (Android's
+        <code>ReactEditText</code> was cancelling the pan before <code>HOLD_MS</code>
+        elapsed — see the <code>NumCell</code> note). It works now. Nobody has been told.</li>
+    </ul>
+  </div>
+
+  <hr class="fade" />
+
+  <!-- ════════════════════════ 2 · the rejected shape ════════════════════════ -->
+  <h2 class="sec">2 · What this deliberately is not</h2>
+  <p class="lede">
+    The default answer to "teach a feature in place" is a spotlight coach mark: scrim the
+    screen, cut a hole around the control, float a card with <em>Next</em> and some pips.
+    Drawn here so the rejection is on the record rather than implied.
+  </p>
+
+  <div class="pair">
+    <div class="half">
+      <div class="cap no">The spotlight tour</div>
+      <div class="sub">Blocks the app, arrives as a sequence, and has to be finished. Every
+        one of those is wrong for a screen someone is using between sets with a barbell
+        waiting.</div>
+      <div class="phone">
+        <div class="status"><span>19:04</span><span class="batt"></span></div>
+        <div class="app">
+          <div class="ses-head">
+            <div class="ses-row">
+              <div>
+                <div class="sc-kicker">Logging</div>
+                <div class="sc-h3">Push Day A</div>
+              </div>
+              <div class="ses-count">0 of 20 sets</div>
+            </div>
+            <div class="ses-prog">
+              <div class="ses-bar"></div>
+              <span class="pos-chip">1 / 5 <span class="caret">▾</span></span>
+            </div>
+          </div>
+          <div class="ex-head">
+            <div class="ex-name-row">
+              <div class="ex-name">Bench Press</div>
+              <span class="howto">How to</span>
+            </div>
+            <div class="ex-sub-row">
+              <span class="ex-sub">Barbell · Chest</span>
+              <span class="ex-count">0/4</span>
+            </div>
+          </div>
+          <div class="seal-lane"></div>
+          <div class="ses-body">
+            <div class="col-head">
+              <span class="c-idx">#</span><span class="c-prev">Last time</span>
+              <span class="c-flex">kg</span><span class="c-flex">Reps</span><span class="c-chk"></span>
+            </div>
+            <div class="live-box">
+              <div class="set-row">
+                <span class="idx">1</span><span class="prev">—</span>
+                <span class="cell"><span class="ph">60</span></span>
+                <span class="cell"><span class="ph">8</span></span>
+                <span class="chk"></span>
+              </div>
+            </div>
+            <div class="set-row">
+              <span class="idx">2</span><span class="prev">—</span>
+              <span class="cell"></span><span class="cell"></span><span class="chk"></span>
+            </div>
+            <div class="set-row">
+              <span class="idx">3</span><span class="prev">—</span>
+              <span class="cell"></span><span class="cell"></span><span class="chk"></span>
+            </div>
+            <div class="set-row">
+              <span class="idx">4</span><span class="prev">—</span>
+              <span class="cell"></span><span class="cell"></span><span class="chk"></span>
+            </div>
+            <div class="add-set">Hold to add a set</div>
+          </div>
+          <div class="ses-foot"><div class="cta">Hold for the next exercise</div></div>
+
+          <div class="spot-hole"></div>
+          <div class="spot-call">
+            <div class="t">Numbers are a gesture</div>
+            <div class="s">Hold a kg or reps cell, then drag up or down. Most sets never
+              need the keyboard.</div>
+            <div class="foot">
+              <div class="pips"><i class="on"></i><i></i><i></i><i></i></div>
+              <div style="display: flex; gap: 8px">
+                <span class="btn" style="padding: 5px 11px; font-size: 12px; color: var(--n500)">Skip</span>
+                <span class="btn acc" style="padding: 5px 13px; font-size: 12px">Next</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="half">
+      <div class="cap good">Why not</div>
+      <div class="sub">Three reasons, and the third is the one that makes it unbuildable
+        here rather than merely unpleasant.</div>
+      <div class="notes" style="margin-top: 0">
+        <ul>
+          <li><strong>It takes the app away to describe the app.</strong> You cannot try the
+            gesture while being told about it — the scrim eats the touch. So the user reads
+            it, taps Next four times, and is returned to a screen they now have to
+            remember. Which is the rundown again, one screen later.</li>
+          <li><strong>Four in a row is a tour, and a tour has to be finished.</strong> Pips
+            and a Next button turn a hint into an obligation, mid-workout. Anything with a
+            step counter is going to be Skipped in one tap by exactly the person who needed
+            it.</li>
+          <li><strong>The hole cannot stay over the control.</strong> A cutout is absolute
+            pixels; the thing it points at moves. The set list scrolls, the live box slides
+            as sets complete, and the keyboard shifts everything through
+            <code>KeyboardAvoidingView</code> a beat <em>after</em> Android reports it —
+            with no will-show event to re-measure from. Every one of those leaves an
+            accent-ringed hole over the wrong thing.</li>
+          <li><strong>It also cannot be quiet.</strong> A full-screen scrim in this design
+            system is <code>wash.scrim(66)</code> — the same weight the app spends on a
+            sheet. Spending it on a hint means a hint that looks exactly as important as
+            Restore this backup.</li>
+        </ul>
+      </div>
+      <div class="settled warn" style="margin-top: 20px">
+        <div class="h">The one thing worth keeping from it</div>
+        <ul>
+          <li>Pointing at the control <em>is</em> right. What is wrong is the scrim, the
+            sequence and the modality — so the tip keeps the anchoring and drops the rest:
+            it sits under the thing, in flow, one at a time, with the app still live.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <hr class="fade" />
+
+  <!-- ════════════════════════ 3 · the three shapes ════════════════════════ -->
+  <h2 class="sec">3 · Three shapes, and where each is allowed</h2>
+  <p class="lede">
+    One component, three renderings. Which one a tip gets is a property of the tip, not a
+    per-site decision — so no two hints in the app are differently loud.
+  </p>
+
+  <div class="trio">
+    <div class="half">
+      <div class="cap good">Nudge — the default</div>
+      <div class="sub">A hairline row under the control. For anything a sentence can teach:
+        a tap, a target you didn't know was one, a rule.</div>
+      <div class="phone short">
+        <div class="app" style="padding: 20px 16px">
+          <div class="col-head">
+            <span class="c-idx">#</span><span class="c-prev">Last time</span>
+            <span class="c-flex">kg</span><span class="c-flex">Reps</span><span class="c-chk"></span>
+          </div>
+          <div class="set-row done">
+            <span class="idx">1</span><span class="prev">80 × 8</span>
+            <span class="cell">80</span><span class="cell">8</span><span class="chk">✓</span>
+          </div>
+          <div class="set-row done">
+            <span class="idx">2</span><span class="prev">80 × 8</span>
+            <span class="cell">80</span><span class="cell">8</span><span class="chk">✓</span>
+          </div>
+          <div class="tip">
+            <span class="dot"></span>
+            <div class="body">
+              <div class="t">Tap the set number</div>
+              <div class="s">Heavier, lighter, just right — or a few words for next time.</div>
+            </div>
+            <span class="x">×</span>
+          </div>
+          <div class="live-box" style="margin-top: 8px">
+            <div class="set-row">
+              <span class="idx">3</span><span class="prev">80 × 8</span>
+              <span class="cell">80</span><span class="cell"><span class="ph">8</span></span>
+              <span class="chk"></span>
+            </div>
+          </div>
+          <div class="add-set">Hold to add a set</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="half">
+      <div class="cap good">Demo — gestures only</div>
+      <div class="sub">The nudge plus the app performing the gesture on the real control,
+        once, at its real speed. The only form that can teach hold-then-drag.</div>
+      <div class="phone short">
+        <div class="app" style="padding: 20px 16px">
+          <div class="col-head">
+            <span class="c-idx">#</span><span class="c-prev">Last time</span>
+            <span class="c-flex">kg</span><span class="c-flex">Reps</span><span class="c-chk"></span>
+          </div>
+          <div class="live-box" style="position: relative">
+            <div class="set-row">
+              <span class="idx">1</span><span class="prev">—</span>
+              <span class="cell"><span class="ph">60</span></span>
+              <span class="cell"><span class="ph">8</span></span>
+              <span class="chk"></span>
+            </div>
+            <div class="demo-layer">
+              <div class="scrub">
+                <div class="stack">
+                  <span>60</span><span>60.5</span><span>61</span><span>61.5</span>
+                </div>
+              </div>
+              <div class="ptr"></div>
+            </div>
+          </div>
+          <div class="tip">
+            <span class="dot"></span>
+            <div class="body">
+              <div class="t">Hold a cell, then drag up or down</div>
+              <div class="s">Most sets never need the keyboard.</div>
+            </div>
+            <span class="x">×</span>
+          </div>
+          <div class="set-row">
+            <span class="idx">2</span><span class="prev">—</span>
+            <span class="cell"></span><span class="cell"></span><span class="chk"></span>
+          </div>
+          <div class="set-row">
+            <span class="idx">3</span><span class="prev">—</span>
+            <span class="cell"></span><span class="cell"></span><span class="chk"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="half">
+      <div class="cap good">Card — a screen's model</div>
+      <div class="sub">Top of a screen, once, when the whole surface works in a way the
+        rows can't say. Insights and the Plan calendar are the two that earn it.</div>
+      <div class="phone short">
+        <div class="app" style="padding: 20px 16px">
+          <div class="sc-kicker">This month</div>
+          <div class="sc-h3" style="margin-bottom: 12px">August</div>
+          <div class="tip-card">
+            <span class="dot"></span>
+            <div style="flex: 1">
+              <div class="t">The calendar is the plan</div>
+              <div class="s">Tap any day to plan it, move it, or take it off. A rule
+                repeats until you change it.</div>
+            </div>
+            <span class="x">×</span>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 4px">
+            <div class="strip" style="display: contents">
+              <span class="sc-h6" style="text-align:center">M</span>
+              <span class="sc-h6" style="text-align:center">T</span>
+              <span class="sc-h6" style="text-align:center">W</span>
+              <span class="sc-h6" style="text-align:center">T</span>
+              <span class="sc-h6" style="text-align:center">F</span>
+              <span class="sc-h6" style="text-align:center">S</span>
+              <span class="sc-h6" style="text-align:center">S</span>
+            </div>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 6px; font-size: 12px; color: var(--n400); text-align: center">
+            <span>28</span><span>29</span><span>30</span><span>31</span><span>1</span><span>2</span><span>3</span>
+            <span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span><span>10</span>
+            <span>11</span><span>12</span><span style="color: var(--text)">13</span><span>14</span><span>15</span><span>16</span><span>17</span>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 2px; justify-items: center">
+            <span class="full" style="width:5px;height:5px;border-radius:3px;background:var(--accent)"></span>
+            <span></span>
+            <span class="full" style="width:5px;height:5px;border-radius:3px;background:var(--accent)"></span>
+            <span></span>
+            <span style="width:5px;height:5px;border-radius:3px;border:1px solid var(--a600)"></span>
+            <span></span><span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <ul>
+      <li><strong>The tip borrows no outline that already means something.</strong> Not the
+        live box's accent fill, and above all <em>not</em> a dashed border — in this app
+        dashed means "this one is held" at three sites (<code>HoldBtn</code>, the waiting
+        set row, the coach's routine card), and a dashed hint would read as a control you
+        are supposed to press and hold. One hairline, no fill, an accent dot, dim text.</li>
+      <li><strong>The × is drawn at 20px and takes <code>slop</code>,</strong> like every
+        other × in the app. It is the only interactive thing the tip contains.</li>
+      <li><strong>Card tips are capped at two, forever.</strong> Insights and the Plan
+        calendar. If a third screen seems to need one, that screen has a problem a card
+        won't fix.</li>
+    </ul>
+  </div>
+
+  <hr class="fade" />
+
+  <!-- ════════════════════════ 4 · the hero ════════════════════════ -->
+  <h2 class="sec">4 · The drag, taught</h2>
+  <p class="lede wide">
+    The first set of the first session, fields still empty. The demo runs once on arrival
+    and again if the user is still sitting there thirty seconds later; the tip stays until
+    something retires it. <strong>The pointer and the figure are drawn on an overlay above
+    the cell — the <code>TextInput</code> underneath is untouched, still focusable, and the
+    store never hears about the demo at all.</strong> The whole thing is a picture of a
+    gesture, not a recording of one.
+  </p>
+
+  <div class="pair">
+    <div class="half">
+      <div class="cap good">First session — the tip and its demo</div>
+      <div class="sub">One tip on screen. The tick, the fields and the keyboard all still
+        work; the CTA has not moved. Note the demo happens on the <em>kg</em> cell of the
+        live row, because that is the cell a finger is about to land on.</div>
+      <div class="phone">
+        <div class="status"><span>19:04</span><span class="batt"></span></div>
+        <div class="app">
+          <div class="ses-head">
+            <div class="ses-row">
+              <div>
+                <div class="sc-kicker">Logging</div>
+                <div class="sc-h3">Push Day A</div>
+              </div>
+              <div class="ses-count">0 of 20 sets</div>
+            </div>
+            <div class="ses-prog">
+              <div class="ses-bar"></div>
+              <span class="pos-chip">1 / 5 <span class="caret">▾</span></span>
+            </div>
+          </div>
+          <div class="ex-head">
+            <div class="ex-name-row">
+              <div class="ex-name">Bench Press</div>
+              <span class="howto">How to</span>
+            </div>
+            <div class="ex-sub-row">
+              <span class="ex-sub">Barbell · Chest</span>
+              <span class="ex-count">0/4</span>
+            </div>
+          </div>
+          <div class="seal-lane"></div>
+          <div class="ses-body">
+            <div class="col-head">
+              <span class="c-idx">#</span><span class="c-prev">Last time</span>
+              <span class="c-flex">kg</span><span class="c-flex">Reps</span><span class="c-chk"></span>
+            </div>
+
+            <div class="live-box">
+              <div class="set-row">
+                <span class="idx">1</span><span class="prev">—</span>
+                <span class="cell"><span class="ph">60</span></span>
+                <span class="cell"><span class="ph">8</span></span>
+                <span class="chk"></span>
+              </div>
+              <!-- the demo layer: pointer + scrubbed figure, drawn over the cell -->
+              <div class="demo-layer">
+                <div class="scrub">
+                  <div class="stack">
+                    <span>60</span><span>60.5</span><span>61</span><span>61.5</span>
+                  </div>
+                </div>
+                <div class="ptr"></div>
+              </div>
+            </div>
+
+            <div class="tip">
+              <span class="dot"></span>
+              <div class="body">
+                <div class="t">Hold a cell, then drag up or down</div>
+                <div class="s">0.5&nbsp;kg or one rep per notch, and you'll feel each one.
+                  Most sets never need the keyboard.</div>
+              </div>
+              <span class="x">×</span>
+            </div>
+
+            <div class="set-row">
+              <span class="idx">2</span><span class="prev">—</span>
+              <span class="cell"></span><span class="cell"></span><span class="chk"></span>
+            </div>
+            <div class="set-row">
+              <span class="idx">3</span><span class="prev">—</span>
+              <span class="cell"></span><span class="cell"></span><span class="chk"></span>
+            </div>
+            <div class="set-row">
+              <span class="idx">4</span><span class="prev">—</span>
+              <span class="cell"></span><span class="cell"></span><span class="chk"></span>
+            </div>
+            <div class="add-set">Hold to add a set</div>
+          </div>
+          <div class="ses-foot"><div class="cta">Hold for the next exercise</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="half">
+      <div class="cap good">One drag later — nothing left behind</div>
+      <div class="sub">The user held the cell and moved it to 82.5. The tip is gone on the
+        spot, without an animation asking to be watched, and it is gone for good: the store
+        wrote <code>tips.drag.done</code>. The row it was occupying closes up on
+        <code>motion.move</code>.</div>
+      <div class="phone">
+        <div class="status"><span>19:05</span><span class="batt"></span></div>
+        <div class="app">
+          <div class="ses-head">
+            <div class="ses-row">
+              <div>
+                <div class="sc-kicker">Logging</div>
+                <div class="sc-h3">Push Day A</div>
+              </div>
+              <div class="ses-count">0 of 20 sets</div>
+            </div>
+            <div class="ses-prog">
+              <div class="ses-bar"></div>
+              <span class="pos-chip">1 / 5 <span class="caret">▾</span></span>
+            </div>
+          </div>
+          <div class="ex-head">
+            <div class="ex-name-row">
+              <div class="ex-name">Bench Press</div>
+              <span class="howto">How to</span>
+            </div>
+            <div class="ex-sub-row">
+              <span class="ex-sub">Barbell · Chest</span>
+              <span class="ex-count">0/4</span>
+            </div>
+          </div>
+          <div class="seal-lane"></div>
+          <div class="ses-body">
+            <div class="col-head">
+              <span class="c-idx">#</span><span class="c-prev">Last time</span>
+              <span class="c-flex">kg</span><span class="c-flex">Reps</span><span class="c-chk"></span>
+            </div>
+            <div class="live-box">
+              <div class="set-row">
+                <span class="idx">1</span><span class="prev">—</span>
+                <span class="cell">82.5</span>
+                <span class="cell"><span class="ph">8</span></span>
+                <span class="chk"></span>
+              </div>
+            </div>
+            <div class="set-row">
+              <span class="idx">2</span><span class="prev">—</span>
+              <span class="cell"></span><span class="cell"></span><span class="chk"></span>
+            </div>
+            <div class="set-row">
+              <span class="idx">3</span><span class="prev">—</span>
+              <span class="cell"></span><span class="cell"></span><span class="chk"></span>
+            </div>
+            <div class="set-row">
+              <span class="idx">4</span><span class="prev">—</span>
+              <span class="cell"></span><span class="cell"></span><span class="chk"></span>
+            </div>
+            <div class="add-set">Hold to add a set</div>
+          </div>
+          <div class="ses-foot"><div class="cta">Hold for the next exercise</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <ul>
+      <li><strong>The demo shows the real numbers.</strong> 0.5&nbsp;kg per notch, roughly
+        four notches over the pointer's travel, because that is what
+        <code>PX_PER_STEP</code>&nbsp;=&nbsp;12 and <code>step</code> actually do. A demo
+        that scrubbed 60 → 100 in one sweep would teach a gesture the app does not have.</li>
+      <li><strong>And the real hold.</strong> <code>HOLD_MS</code> is 120&nbsp;ms — a
+        stillness test, not a wait — so the pointer barely pauses before it moves. Drawing a
+        long, deliberate press would teach people to hold for a second and then wonder why
+        the list scrolled out from under them.</li>
+      <li><strong>The ring at the grab is the haptic, drawn.</strong> <code>buzz.grab</code>
+        fires when the cell is taken, at the same weight as a ticked set; the demo's ring
+        is that moment made visible, so the buzz is expected rather than surprising. The
+        demo itself buzzes nothing — nobody's phone should vibrate because a hint played.</li>
+      <li><strong>The tip never appears while the keyboard is open.</strong> Someone typing
+        has already chosen; interrupting to recommend the other way is the app arguing with
+        a decision it just watched being made. It waits for the next visit.</li>
+      <li><strong>It sits under the live box, not over anything.</strong> That is what
+        keeps the tick box, the fields and the CTA exactly where they were — the tip costs
+        one row of the set list, which on the first exercise is empty rows anyway.</li>
+    </ul>
+  </div>
+
+  <hr class="fade" />
+
+  <!-- ════════════════════════ 5 · the drawer ════════════════════════ -->
+  <h2 class="sec">5 · The drawer behind the chip</h2>
+  <p class="lede wide">
+    Three questions people actually ask — <em>where are the other exercises? how do I add
+    one? how do I get out of this?</em> — and they have one answer between them, which is
+    the argument for teaching them as one thing. The live session is
+    <strong>one exercise per screen</strong>, a deliberate deviation from the design's stack
+    of collapsed cards, and the <code>3 / 5</code> chip is what pays for it: the whole list,
+    the counts, jump-to-any, remove-a-wrong-pick, Add exercise and Finish all moved in
+    there. Nothing on the glass says a chip that reads like a page number is a door.
+  </p>
+
+  <div class="trio">
+    <div class="half">
+      <div class="cap good">One tip, on the chip</div>
+      <div class="sub">It names the place rather than the three errands — a tip is allowed
+        to say what is behind a door, because that is one fact. Anchored under the header
+        so it sits directly beneath what it points at.</div>
+      <div class="phone">
+        <div class="status"><span>19:31</span><span class="batt"></span></div>
+        <div class="app">
+          <div class="ses-head">
+            <div class="ses-row">
+              <div>
+                <div class="sc-kicker">Logging</div>
+                <div class="sc-h3">Push Day A</div>
+              </div>
+              <div class="ses-count">6 of 20 sets</div>
+            </div>
+            <div class="ses-prog">
+              <div class="ses-bar"></div>
+              <span class="pos-chip lit">2 / 5 <span class="caret">▾</span></span>
+            </div>
+            <div class="tip" style="margin-top: 10px">
+              <span class="dot"></span>
+              <div class="body">
+                <div class="t">The whole workout is behind the chip</div>
+                <div class="s">Jump to any exercise, add one, or finish up.</div>
+              </div>
+              <span class="x">×</span>
+            </div>
+          </div>
+          <div class="ex-head">
+            <div class="ex-name-row">
+              <div class="ex-name">Incline Press</div>
+              <span class="howto">How to</span>
+            </div>
+            <div class="ex-sub-row">
+              <span class="ex-sub">Dumbbell · Chest</span>
+              <span class="ex-count">2/4</span>
+            </div>
+          </div>
+          <div class="seal-lane"></div>
+          <div class="ses-body">
+            <div class="col-head">
+              <span class="c-idx">#</span><span class="c-prev">Last time</span>
+              <span class="c-flex">kg</span><span class="c-flex">Reps</span><span class="c-chk"></span>
+            </div>
+            <div class="set-row done">
+              <span class="idx">1</span><span class="prev">22 × 10</span>
+              <span class="cell">22</span><span class="cell">10</span><span class="chk">✓</span>
+            </div>
+            <div class="set-row done">
+              <span class="idx">2</span><span class="prev">24 × 8</span>
+              <span class="cell">24</span><span class="cell">8</span><span class="chk">✓</span>
+            </div>
+            <div class="live-box">
+              <div class="set-row">
+                <span class="idx">3</span><span class="prev">24 × 8</span>
+                <span class="cell">24</span><span class="cell"><span class="ph">8</span></span>
+                <span class="chk"></span>
+              </div>
+            </div>
+            <div class="set-row">
+              <span class="idx">4</span><span class="prev">24 × 7</span>
+              <span class="cell"></span><span class="cell"></span><span class="chk"></span>
+            </div>
+            <div class="add-set">Hold to add a set</div>
+          </div>
+          <div class="ses-foot"><div class="cta">Hold for the next exercise</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="half">
+      <div class="cap good">What is actually in there</div>
+      <div class="sub">Opened. Every row is labelled, so <strong>no tip fires inside this
+        sheet</strong> — the list, the counts, Add exercise and Finish all say what they
+        are. The chip tip's whole job was getting you here.</div>
+      <div class="phone">
+        <div class="status"><span>19:31</span><span class="batt"></span></div>
+        <div class="app">
+          <div class="sheet-wrap">
+            <div class="scrim-bg">
+              <div class="under">
+                <div class="sc-kicker">Logging</div>
+                <div class="sc-h3">Push Day A</div>
+                <div class="ex-name" style="margin-top: 22px">Incline Press</div>
+                <div class="ex-sub">Dumbbell · Chest</div>
+              </div>
+            </div>
+            <div class="sheet">
+              <div class="grabber"></div>
+              <div class="sheet-body">
+                <div class="sc-h4">Push Day A</div>
+                <div class="ov-sub">6 of 20 sets · 12:43</div>
+                <div class="ov-list">
+                  <div class="ov-row done">
+                    <span class="nm">Bench Press</span>
+                    <span class="ct">4/4</span><span class="tk">✓</span><span class="rm"></span>
+                  </div>
+                  <div class="ov-row cur">
+                    <span class="nm">Incline Press</span>
+                    <span class="ct">2/4</span><span class="tk"></span><span class="rm"></span>
+                  </div>
+                  <div class="ov-row">
+                    <span class="nm">Cable Fly</span>
+                    <span class="ct">0/4</span><span class="tk"></span><span class="rm">×</span>
+                  </div>
+                  <div class="ov-row">
+                    <span class="nm">Overhead Press</span>
+                    <span class="ct">0/4</span><span class="tk"></span><span class="rm">×</span>
+                  </div>
+                  <div class="ov-row">
+                    <span class="nm">Triceps Pushdown</span>
+                    <span class="ct">0/4</span><span class="tk"></span><span class="rm">×</span>
+                  </div>
+                </div>
+                <div class="ov-add">+ Add exercise</div>
+                <div class="ov-finish">Hold to finish</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="half">
+      <div class="cap good">Where "cancel" went</div>
+      <div class="sub">The same sheet, nothing ticked. There is no Discard in this app —
+        Finish carries what it used to — but a person who started a workout by mistake will
+        never press a button called <em>Finish</em>. So the button says what it is about
+        to do.</div>
+      <div class="phone">
+        <div class="status"><span>19:03</span><span class="batt"></span></div>
+        <div class="app">
+          <div class="sheet-wrap">
+            <div class="scrim-bg">
+              <div class="under">
+                <div class="sc-kicker">Logging</div>
+                <div class="sc-h3">Push Day A</div>
+                <div class="ex-name" style="margin-top: 22px">Bench Press</div>
+                <div class="ex-sub">Barbell · Chest</div>
+              </div>
+            </div>
+            <div class="sheet">
+              <div class="grabber"></div>
+              <div class="sheet-body">
+                <div class="sc-h4">Push Day A</div>
+                <div class="ov-sub">0 of 20 sets · 0:38</div>
+                <div class="ov-list">
+                  <div class="ov-row cur">
+                    <span class="nm">Bench Press</span>
+                    <span class="ct">0/4</span><span class="tk"></span><span class="rm">×</span>
+                  </div>
+                  <div class="ov-row">
+                    <span class="nm">Incline Press</span>
+                    <span class="ct">0/4</span><span class="tk"></span><span class="rm">×</span>
+                  </div>
+                  <div class="ov-row">
+                    <span class="nm">Cable Fly</span>
+                    <span class="ct">0/4</span><span class="tk"></span><span class="rm">×</span>
+                  </div>
+                  <div class="ov-row">
+                    <span class="nm">Overhead Press</span>
+                    <span class="ct">0/4</span><span class="tk"></span><span class="rm">×</span>
+                  </div>
+                  <div class="ov-row">
+                    <span class="nm">Triceps Pushdown</span>
+                    <span class="ct">0/4</span><span class="tk"></span><span class="rm">×</span>
+                  </div>
+                </div>
+                <div class="ov-add">+ Add exercise</div>
+                <div class="ov-finish">Hold to finish</div>
+                <div class="ov-hint">Nothing ticked off — finishing now logs nothing.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <ul>
+      <li><strong>The Finish line is not a tip, and that distinction is the point of this
+        section.</strong> A tip teaches something invisible and then goes away forever. This
+        is a permanent statement of what a button is about to do, shown exactly while it is
+        true (<code>tot.done === 0</code>) — the same fact the summary already reports
+        afterwards as <em>"Nothing was ticked off — nothing logged."</em>, moved to before
+        the press, where somebody hunting for a way out can act on it. If it were a tip it
+        would expire after three showings, and the fourth person to start a workout by
+        mistake would be back to guessing.</li>
+      <li><strong>It reuses the summary's own wording deliberately.</strong>
+        <code>savedEmpty</code> and this line are one sentence in two tenses; two different
+        phrasings of "nothing happened" would read as two different rules.</li>
+      <li><strong>No tip fires inside the sheet.</strong> By §7's admission test — <em>could
+        a careful person use this for a month and never find it?</em> — everything in here
+        fails the test in the right direction: the rows are named, the counts are numbers,
+        and both buttons carry labels. The one thing to teach was the chip.</li>
+      <li><strong>Adding an exercise needed no tip of its own for the same reason.</strong>
+        <code>+ Add exercise</code> is a labelled button; it is only unfindable while the
+        sheet is. That is what makes this one tip rather than three — and why it is
+        <em>the chip</em> that gets taught rather than any of the errands behind it.</li>
+    </ul>
+  </div>
+
+  <div class="settled warn">
+    <div class="h">Two things this drew out that are not about tips</div>
+    <ul>
+      <li><strong>The held × on an overview row has no tell.</strong> It is a
+        <code>HoldBtn</code> without <code>dashed</code>, so it breaks the app's own
+        grammar — <em>a bordered control that needs a hold says so by going dashed</em>
+        (<code>HoldBtn</code>, the waiting set row, the coach's routine card). A tap on it
+        does nothing and nothing explains why. The fix is the glyph, not a hint about the
+        glyph; noted here rather than papered over with a tenth tip.</li>
+      <li><strong>The <code>Overview</code> docstring still says "Discard".</strong>
+        <code>session-overlay.tsx:722</code> — <em>"Add exercise, Discard and Finish live
+        here too"</em>. Discard was removed and Finish took its job; the comment did not
+        follow. Worth a one-line fix while this area is open.</li>
+    </ul>
+  </div>
+
+  <hr class="fade" />
+
+  <!-- ════════════════════════ 6 · lifecycle ════════════════════════ -->
+  <h2 class="sec">6 · When it fires, and when it stops</h2>
+  <p class="lede wide">
+    The whole state machine, and it is small on purpose. Everything in it is derivable from
+    state the app already keeps, plus one durable counter per tip.
+  </p>
+
+  <div class="life">
+    <div class="st">
+      <div class="n">1 · Armed</div>
+      <div class="t">The precondition holds</div>
+      <div class="s">You are on the surface, the control is on screen, and the tip's own
+        test passes — for the drag, "first session, nothing logged yet, keyboard closed".</div>
+    </div>
+    <div class="arr">→</div>
+    <div class="st">
+      <div class="n">2 · Shown</div>
+      <div class="t">On screen, in flow</div>
+      <div class="s">Enters on <code>motion.move</code>. It only <em>counts</em> as shown
+        after two seconds — a tip that flashed past while you were scrolling to the next
+        exercise was never read.</div>
+    </div>
+    <div class="arr">→</div>
+    <div class="st end">
+      <div class="n">3a · Retired — performed</div>
+      <div class="t">You did the thing</div>
+      <div class="s">The best exit and the common one. Vanishes on the spot, no
+        acknowledgement, no "nice one". <code>done: true</code>.</div>
+    </div>
+    <div class="arr">→</div>
+    <div class="st end">
+      <div class="n">3b · Retired — dismissed</div>
+      <div class="t">You tapped the ×</div>
+      <div class="s">Means "I know this", and is believed. Same durable result as
+        performing it.</div>
+    </div>
+    <div class="arr">→</div>
+    <div class="st dead">
+      <div class="n">3c · Expired</div>
+      <div class="t">Shown three times, ignored</div>
+      <div class="s">It has had its say. A fourth showing is not teaching, it is nagging —
+        and the fourth is the one that becomes furniture.</div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <ul>
+      <li><strong>One at a time, and never two on one screen.</strong>
+        <code>pickTip</code> returns at most one id, so this is structural rather than a
+        rule each screen has to remember: a surface offers what it <em>could</em> show and
+        is handed back what it <em>should</em>.</li>
+      <li><strong>And one per visit.</strong> Most of the session's tips are armed by the
+        same empty live row, so without this a first workout would be a slideshow of eight
+        hints as each retired. The session picks once per mounting and holds it: when that
+        tip is dealt with, nothing replaces it until you next open the screen. Minimising
+        and coming back is a new visit, which is about the right pace — one thing learned
+        per time you look at it.</li>
+      <li><strong>A tip never counts during the tour.</strong> The tour covers the whole
+        screen, so a tip mounted behind it would sit out its dwell unread; the check lives
+        in <code>&lt;Tip&gt;</code> itself, since it is the one rule that belongs to no
+        surface.</li>
+      <li><strong>Nothing new is offered over an open keyboard</strong> — but a tip already
+        on screen stays. The gate is on the pick rather than the arming, deliberately:
+        unmounting and re-mounting it would be a second showing charged against a budget of
+        three, for a hint nobody looked away from.</li>
+      <li><strong>The trigger is arrival at the moment, not app launch.</strong> The ghost
+        tip cannot fire until there is a ghost to tap, which is the second session at the
+        earliest. The hold tip waits for the CTA to actually be dashed. A tip that fires
+        where its feature is not yet usable teaches nothing and burns a showing.</li>
+      <li><strong>Nothing here blocks or gates.</strong> Every precondition is a read. If a
+        tip's moment never comes, the feature is simply never explained — which is exactly
+        today's behaviour, so the floor is "no worse".</li>
+    </ul>
+  </div>
+
+  <hr class="fade" />
+
+  <!-- ════════════════════════ 7 · the catalogue ════════════════════════ -->
+  <h2 class="sec">7 · The catalogue</h2>
+  <p class="lede wide">
+    Ten, and the list is meant to be closed rather than grown. The first four are the
+    tour's own rundown, moved to where they apply and sharing its strings — so the tour and
+    the tips can never phrase one feature two ways.
+  </p>
+
+  <div class="t-wrap">
+  <table class="cat">
+    <thead>
+      <tr>
+        <th style="width: 150px">Tip</th>
+        <th style="width: 170px">Where it draws</th>
+        <th>Fires when</th>
+        <th style="width: 78px">Shape</th>
+        <th style="width: 210px">Retires when</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr class="first">
+        <td class="k">Numbers are a gesture<span class="id">drag</span></td>
+        <td>Session · under the live set box</td>
+        <td>There is a set open to type into</td>
+        <td><span class="shape-tag demo">Demo</span></td>
+        <td>A drag steps a figure</td>
+      </tr>
+      <tr class="first">
+        <td class="k">One tap logs a set<span class="id">tick</span></td>
+        <td>Session · under the live set box</td>
+        <td>The live row's fields are filled and it isn't ticked</td>
+        <td><span class="shape-tag">Nudge</span></td>
+        <td>A set is ticked, or un-ticked</td>
+      </tr>
+      <tr class="first">
+        <td class="k">Rest runs itself<span class="id">rest</span></td>
+        <td>Session · under the resting row</td>
+        <td>A rest is running with over a minute left on it</td>
+        <td><span class="shape-tag">Nudge</span></td>
+        <td><em>Start now</em> is tapped</td>
+      </tr>
+      <tr>
+        <td class="k">Last time's numbers<span class="id">ghost</span></td>
+        <td>Session · under the live set box</td>
+        <td>The live row has a ghost behind it and both fields are empty</td>
+        <td><span class="shape-tag">Nudge</span></td>
+        <td>A ghost is tapped into the fields</td>
+      </tr>
+      <tr>
+        <td class="k">A set can carry a verdict<span class="id">mark</span></td>
+        <td>Session · under the live set box</td>
+        <td>Two sets are ticked in this exercise</td>
+        <td><span class="shape-tag">Nudge</span></td>
+        <td>The mark sheet is opened</td>
+      </tr>
+      <tr>
+        <td class="k">Move between exercises<span class="id">swipe</span></td>
+        <td>Session · under the header</td>
+        <td>More than one exercise, and this one is fully ticked</td>
+        <td><span class="shape-tag">Nudge</span></td>
+        <td>Any move lands — a swipe, or a jump from the chip's list</td>
+      </tr>
+      <tr>
+        <td class="k">The workout is behind the chip<span class="id">chip</span></td>
+        <td>Session · under the header</td>
+        <td>More than one exercise</td>
+        <td><span class="shape-tag">Nudge</span></td>
+        <td>The overview sheet is opened, however you got there</td>
+      </tr>
+      <tr>
+        <td class="k">Dashed means hold<span class="id">hold</span></td>
+        <td>Session · above the CTA</td>
+        <td>The CTA is currently a held gesture</td>
+        <td><span class="shape-tag">Nudge</span></td>
+        <td>A hold on the CTA completes</td>
+      </tr>
+      <tr>
+        <td class="k">The week is tappable<span class="id">strip</span></td>
+        <td>Today · under the week strip</td>
+        <td>Whenever Today is open</td>
+        <td><span class="shape-tag">Nudge</span></td>
+        <td>A day is opened from the strip</td>
+      </tr>
+      <tr>
+        <td class="k">Search finds muscles<span class="id">search</span></td>
+        <td>Routines · under the field</td>
+        <td>There are routines to search and no query is live</td>
+        <td><span class="shape-tag">Nudge</span></td>
+        <td>Anything at all is typed into the field</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="notes">
+    <ul>
+      <li><strong>Two card tips sit outside this table because they are about a screen
+        rather than a control:</strong> the Plan calendar (<code>plan</code>, first open —
+        "the calendar <em>is</em> the plan", which the removed weekday rows used to say) and
+        Insights (<code>stats</code>, first open with enough history to make claims).</li>
+      <li><strong>What is deliberately not here:</strong> anything a label already
+        explains. No tip for Start, for Add exercise, for Settings. The test for admission
+        is <em>"could a careful person use this app for a month and never find it?"</em> —
+        and if the answer is yes for a control that is not on this list, the honest fix is
+        usually the control, not a hint about it.</li>
+      <li><strong>The test threw one out on the way to being built.</strong> A
+        <em>"bring a training partner"</em> tip was drafted for Today and cut: the button
+        that opens buddy pairing sits on Profile with a label on it, so the tip would have
+        been a pitch rather than a hint. It stays where it belongs — a card in the welcome
+        tour, which is the surface for what the app <em>is</em>.</li>
+      <li><strong>Every "fires when" is a read of state the screen already has</strong> —
+        whether a set is open, whether a rest is running, whether the CTA is currently
+        dashed. Nothing here needs new bookkeeping beyond the seen-counts themselves,
+        which is why the conditions live at their sites rather than in
+        <code>tips.ts</code>: a copy of them over there would be a second reading of the
+        session, kept in step by hand.</li>
+    </ul>
+  </div>
+
+  <hr class="fade" />
+
+  <!-- ════════════════════════ 8 · in the wild ════════════════════════ -->
+  <h2 class="sec">8 · Two more, in place</h2>
+  <p class="lede">
+    The same primitive on two other surfaces, to show it stays quiet outside the session.
+  </p>
+
+  <div class="trio">
+    <div class="half">
+      <div class="cap good">Today · the week strip</div>
+      <div class="sub">Seven dots you read — and, less obviously, seven days you can tap.
+        The strip deliberately has no "tap to change" hint of its own, so this is where
+        that job went.</div>
+      <div class="phone short">
+        <div class="app" style="padding: 20px 16px">
+          <div class="sc-kicker">Thursday</div>
+          <div class="sc-h3" style="margin-bottom: 2px">13 August</div>
+          <div style="border: 1px solid var(--divider); border-radius: 8px; padding: 14px; margin-top: 12px; background: linear-gradient(150deg, var(--a900), var(--surface) 62%)">
+            <div class="sc-kicker">Today</div>
+            <div class="sc-h4" style="margin-top: 3px">Push Day A</div>
+            <div style="font-size: 12px; color: var(--n400); margin-top: 2px">5 exercises · every Mon, Thu</div>
+            <div class="btn block acc" style="margin-top: 12px">Start Push Day A</div>
+          </div>
+
+          <div class="sc-h6" style="margin-top: 18px">This week</div>
+          <div class="strip">
+            <div class="d"><div class="l">M</div><div class="m"><span class="full"></span></div></div>
+            <div class="d"><div class="l">T</div><div class="m"><span class="dash"></span></div></div>
+            <div class="d"><div class="l">W</div><div class="m"><span class="full"></span></div></div>
+            <div class="d today"><div class="l">T</div><div class="m"><span class="ring"></span></div></div>
+            <div class="d"><div class="l">F</div><div class="m"><span class="dash"></span></div></div>
+            <div class="d"><div class="l">S</div><div class="m"><span class="ring"></span></div></div>
+            <div class="d"><div class="l">S</div><div class="m"><span class="dash"></span></div></div>
+          </div>
+          <div class="tip">
+            <span class="dot"></span>
+            <div class="body">
+              <div class="t">Tap a day</div>
+              <div class="s">Plan it, move it, or take it off.</div>
+            </div>
+            <span class="x">×</span>
+          </div>
+          <div style="font-size: 12.5px; color: var(--n400); margin-top: 6px">See plan ›</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="half">
+      <div class="cap good">Routines · the search field</div>
+      <div class="sub">Searching by muscle group is the single most useful thing about this
+        field and the least guessable. It fires on first focus, before the query is typed.</div>
+      <div class="phone short">
+        <div class="app" style="padding: 20px 16px">
+          <div class="sc-kicker">Routines</div>
+          <div class="sc-h3" style="margin-bottom: 12px">Your list</div>
+          <div class="searchbar"><span style="color: var(--n600)">⌕</span> Search routines</div>
+          <div class="tip">
+            <span class="dot"></span>
+            <div class="body">
+              <div class="t">Search muscles, not just names</div>
+              <div class="s">"Back" finds Legs&nbsp;B too — the Deadlift files under lower
+                back.</div>
+            </div>
+            <span class="x">×</span>
+          </div>
+          <div style="margin-top: 8px">
+            <div class="rt-row">
+              <div class="n">Push Day A</div>
+              <div class="m">5 exercises · Chest · every Mon, Thu</div>
+            </div>
+            <div class="rt-row">
+              <div class="n">Legs B</div>
+              <div class="m">4 exercises · Legs · every Sat</div>
+            </div>
+            <div class="rt-row">
+              <div class="n">Easy Run</div>
+              <div class="m">1 exercise · Cardio</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="half">
+      <div class="cap good">Settings · the door back</div>
+      <div class="sub">One row, and it can live in the ordinary part of Settings rather
+        than a danger corner: resetting tips writes one key and destroys nothing — which is
+        precisely what "rerun the tour" could not promise.</div>
+      <div class="phone short">
+        <div class="app" style="padding: 20px 16px">
+          <div class="sc-kicker">Settings</div>
+          <div class="sc-h3" style="margin-bottom: 10px">Spotter</div>
+          <div class="sc-h6" style="margin-top: 10px">Session</div>
+          <div class="st-row">
+            <div><div class="l">Rest between sets</div></div>
+            <div class="v">3:00</div>
+          </div>
+          <div class="st-row">
+            <div><div class="l">Vibration</div></div>
+            <div class="v">On</div>
+          </div>
+          <div class="sc-h6" style="margin-top: 16px">Tips</div>
+          <div class="st-row">
+            <div>
+              <div class="l">Show tips again</div>
+              <div class="h">The short hints that point out gestures the first time you
+                meet them.</div>
+            </div>
+            <div class="v">6 of 12 seen</div>
+          </div>
+          <div class="sc-h6" style="margin-top: 16px">Data</div>
+          <div class="st-row">
+            <div><div class="l">Export a backup</div></div>
+            <div class="v">›</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <hr class="fade" />
+
+  <!-- ════════════════════════ 9 · copy ════════════════════════ -->
+  <h2 class="sec">9 · The copy, both languages</h2>
+  <p class="lede wide">
+    Mechanism first, consequence second. No praise, no exclamation marks, and no
+    second-person cheerleading — a tip states what the control does and stops. German is
+    written rather than translated: du-form, apocopated imperatives (<em>halt</em>,
+    <em>zieh</em>, <em>tipp</em>, <em>wisch</em>), <strong>Wdh.</strong> and
+    <strong>Fingertipp</strong> as decided.
+  </p>
+
+  <div class="t-wrap">
+  <table class="copy">
+    <thead>
+      <tr>
+        <th style="width: 90px">Id</th>
+        <th style="width: 45%">English</th>
+        <th>Deutsch</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="id">tipDrag</td>
+        <td><b>Hold a cell, then drag up or down</b><i>0.5 kg or one rep per notch, and
+          you'll feel each one. Most sets never need the keyboard.</i></td>
+        <td><b>Halt ein Feld, dann zieh hoch oder runter</b><i>0,5 kg oder eine Wdh. pro
+          Raste — du spürst jede. Die meisten Sätze brauchen nie die Tastatur.</i></td>
+      </tr>
+      <tr>
+        <td class="id">tipTick</td>
+        <td><b>The box is the whole button</b><i>One tap logs the set. Tap it again to take
+          it back.</i></td>
+        <td><b>Die Box ist der ganze Knopf</b><i>Ein Fingertipp hakt den Satz ab. Nochmal
+          tippen nimmt ihn zurück.</i></td>
+      </tr>
+      <tr>
+        <td class="id">tipSwipe</td>
+        <td><b>Swipe for the next exercise</b><i>Or open the chip up top and jump to any
+          of them.</i></td>
+        <td><b>Wisch zur nächsten Übung</b><i>Oder öffne den Chip oben und spring zu jeder
+          beliebigen.</i></td>
+      </tr>
+      <tr>
+        <td class="id">tipRest</td>
+        <td><b>The rest is already running</b><i>It's drawn on the set you're on next.
+          Start now cuts it short.</i></td>
+        <td><b>Die Pause läuft schon</b><i>Sie steht auf dem Satz, der als Nächstes dran
+          ist. Jetzt starten kürzt sie ab.</i></td>
+      </tr>
+      <tr>
+        <td class="id">tipChip</td>
+        <td><b>The whole workout is behind the chip</b><i>Jump to any exercise, add one, or
+          finish up.</i></td>
+        <td><b>Hinter dem Chip liegt das ganze Training</b><i>Spring zu jeder Übung, füg
+          eine dazu oder beende das Training.</i></td>
+      </tr>
+      <tr>
+        <td class="id">finishLogsNothing<br /><span style="color: var(--n700)">(not a tip)</span></td>
+        <td><b>Nothing ticked off — finishing now logs nothing.</b><i>Under the Finish
+          button, only while it is true. The past-tense twin of
+          <code>savedEmpty</code>: "Nothing was ticked off — nothing logged."</i></td>
+        <td><b>Nichts abgehakt — beenden speichert nichts.</b><i>Zwilling zu
+          <code>savedEmpty</code>: „Nichts abgehakt — nichts gespeichert."</i></td>
+      </tr>
+      <tr>
+        <td class="id">tipGhost</td>
+        <td><b>Tap last time's numbers</b><i>They land in the fields — still yours to
+          change.</i></td>
+        <td><b>Tipp die Zahlen von letztem Mal an</b><i>Sie landen in den Feldern — ändern
+          kannst du sie weiterhin.</i></td>
+      </tr>
+      <tr>
+        <td class="id">tipHold</td>
+        <td><b>Dashed means hold</b><i>A tap won't do it here. Let go early and nothing
+          happens.</i></td>
+        <td><b>Gestrichelt heißt halten</b><i>Ein Fingertipp reicht hier nicht. Lässt du
+          früh los, passiert nichts.</i></td>
+      </tr>
+      <tr>
+        <td class="id">tipMark</td>
+        <td><b>Tap the set number</b><i>Heavier, lighter, just right — or a few words for
+          next time.</i></td>
+        <td><b>Tipp die Satznummer an</b><i>Schwerer, leichter, passt — oder ein paar Worte
+          fürs nächste Mal.</i></td>
+      </tr>
+      <tr>
+        <td class="id">tipSearch</td>
+        <td><b>Search muscles, not just names</b><i>“Back” finds the Deadlift’s routines
+          too.</i></td>
+        <td><b>Such nach Muskeln, nicht nur nach Namen</b><i>„Rücken“ findet auch die
+          Routinen mit Kreuzheben.</i></td>
+      </tr>
+      <tr>
+        <td class="id">tipStrip</td>
+        <td><b>Tap a day</b><i>Plan it, move it, or take it off.</i></td>
+        <td><b>Tipp einen Tag an</b><i>Planen, verschieben oder freinehmen.</i></td>
+      </tr>
+      <tr>
+        <td class="id">tipPlan</td>
+        <td><b>The calendar is the plan</b><i>Tap any day to plan it, move it, or take it
+          off. A rule repeats until you change it.</i></td>
+        <td><b>Der Kalender ist der Plan</b><i>Tipp einen Tag an: planen, verschieben oder
+          freinehmen. Eine Regel läuft, bis du sie änderst.</i></td>
+      </tr>
+      <tr>
+        <td class="id">tipStats</td>
+        <td><b>Everything here is read, never stored</b><i>It's your logged sessions,
+          counted. Nothing to set up and nothing to keep up to date.</i></td>
+        <td><b>Alles hier wird nur gelesen</b><i>Es sind deine aufgezeichneten Einheiten,
+          ausgezählt. Nichts einzurichten, nichts zu pflegen.</i></td>
+      </tr>
+      <tr>
+        <td class="id">tipsAgain<br />tipsAgainHint</td>
+        <td><b>Show tips again</b><i>The short hints that point out gestures the first time
+          you meet them.</i></td>
+        <td><b>Tipps wieder anzeigen</b><i>Die kurzen Hinweise, die Gesten zeigen, wenn du
+          ihnen zum ersten Mal begegnest.</i></td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="notes">
+    <ul>
+      <li><strong>Three of these are read by two surfaces.</strong> <code>tipDrag</code>,
+        <code>tipTick</code> and <code>tipRest</code> replaced the tour's
+        <code>obFeat*</code> pairs outright — <code>onboarding-overlay.tsx</code> now reads
+        them from here, so the rundown and the in-place hints are one list. The drag's
+        subtitle gained the notch size on the way, because in place it can afford to be
+        precise where a rundown could not; the tour got the better sentence for free. The
+        buddy card kept its own copy, having no tip twin.</li>
+      <li><strong>The German is not the English with the words swapped.</strong>
+        <em>"Raste"</em> for a detent, <em>0,5</em> with the comma, and
+        <em>"Lässt du früh los, passiert nichts"</em> — which beats the English line it
+        stands beside, in the way <code>copy-audit.md</code> §7 catalogues.</li>
+    </ul>
+  </div>
+
+  <hr class="fade" />
+
+  <div class="settled">
+    <div class="h">Mechanics — as built</div>
+    <ul>
+      <li><strong>One new pure module, <code>src/data/tips.ts</code>.</strong> Like
+        <code>plan.ts</code> and <code>stats.ts</code>: the <code>TipId</code> union,
+        <code>TIP_ORDER</code> (priority), <code>TIP_SHAPE</code>, and
+        <code>pickTip(tips, armed)</code> returning the one tip to draw or null. No store,
+        no hooks, no colours, no strings — which also keeps the React Compiler out of
+        it. <strong>What is <em>not</em> in there is the arming</strong>: whether a set is
+        open or a rest is running is the screen's own state, and a copy of it over here
+        would be a second reading of the session kept in step by hand. So a surface offers
+        the ids it could show and this answers with the one it should.</li>
+      <li><strong>One new durable key: <code>tips: Record&lt;string, { seen: number; done:
+        boolean }&gt;</code>.</strong> <code>PERSIST</code> is additive, so this costs no
+        <code>STORAGE_VERSION</code> bump and no migration over real training data — the
+        same allowance <code>lastMarks</code>, <code>coach</code> and
+        <code>buddySecrets</code> were added under. <code>PERSIST_SHAPE</code> gets
+        <code>tips: 'object'</code>; the rows are the mutator's business, like every other
+        object key that is not the plan.</li>
+      <li><strong>Three mutators and nothing else:</strong> <code>tipShown(id)</code> after
+        the two-second dwell, <code>tipDone(id)</code> from the × and from every place that
+        counts as performing it, and <code>resetTips()</code> behind the Settings row. All
+        one-line patches, and <code>tipDone</code> being idempotent means every call site
+        fires it blindly — including <code>NumCell</code>'s <code>onUpdate</code>, which
+        runs on every step of every drag forever. <code>patch</code> returns the identical
+        state object when its updater returns null, so React bails out of the render and
+        the repeat calls cost nothing at all.</li>
+      <li><strong>It rides existing events, it does not add listeners.</strong>
+        <code>tipDone('drag')</code> goes in <code>NumCell</code>'s
+        <code>onUpdate</code> beside the step it already emits; <code>tipDone('tick')</code>
+        in the tick handler; <code>tipDone('mark')</code> where a mark is written. Nothing
+        new watches anything.</li>
+      <li><strong>The demo is drawn, never dispatched.</strong> A pointer and a figure on an
+        absolutely-positioned overlay inside the live box — <code>pointerEvents: 'none'</code>,
+        no synthetic touches, no writes to the store, and the <code>TextInput</code>
+        underneath stays focusable throughout. A demo that actually drove the gesture would
+        have to write to the set and then take it back, and an app that types into your
+        workout to show you a feature is an app that lost a set once.</li>
+      <li><strong>Motion is by the ladder.</strong> The tip enters and leaves on
+        <code>motion.move</code>, the demo pointer's loop is one new
+        <code>linger</code> entry (<code>linger.demo</code>, the length of one taught
+        gesture), and nothing here gets <code>payoff</code> — that is the seal's, once per
+        workout.</li>
+      <li><strong>No haptics.</strong> <code>buzz.grab</code> is a report that your finger
+        took the cell; firing it because a picture of a finger did would make the buzz mean
+        two different things.</li>
+      <li><strong>It never leaves the phone.</strong> <code>tips</code> is not in any buddy
+        snapshot — what one phone has been taught is not the buddy's business, the same rule
+        set marks follow. A backup carries it (a backup is the durable slice) and
+        <code>mergePersisted</code> ignores it by construction, since it returns only the
+        keys sessions / library / plan touch.</li>
+      <li><strong>The Settings row is <em>not</em> in the danger corner.</strong> "Show tips
+        again" writes <code>tips: {}</code> and nothing else — no routine picks re-applied,
+        nothing overwritten — which is exactly why the tour's own row had to be hidden and
+        this one does not.</li>
+      <li><strong>Nothing native, nothing new in the tree.</strong> No package, no
+        <code>prebuild</code>, no APK on either phone beyond the usual JS. Expo Go is
+        unaffected.</li>
+    </ul>
+  </div>
+
+  <div class="settled warn" style="margin-top: 22px">
+    <div class="h">Where the build differs from the pages above</div>
+    <ul>
+      <li><strong><code>swipe</code> shipped as a Nudge, not a Demo.</strong> A pointer
+        arcing sideways would have to be drawn across the set list — over the rows you are
+        being taught to leave — and the gesture is one word anyway. The drag keeps the only
+        demo in the app, which is what "reserved for gestures words cannot teach" was
+        supposed to mean.</li>
+      <li><strong>No tip gates on how many sessions you have logged.</strong> The pages
+        above wrote conditions like "first session" and "third session"; the build arms on
+        the situation alone. On a phone that has been training for months every tip is
+        unmet — <code>tips</code> is simply absent from its blob — and a "first session"
+        gate would have hidden the whole feature from exactly the person who has been
+        missing the drag for a year. The seen-counts already say "first time".</li>
+      <li><strong><code>stats</code> has no gesture to retire it,</strong> so it leaves by
+        its × or by expiring. That is the honest shape of a card tip about a screen that
+        only reads: there is nothing on Insights to <em>do</em>.</li>
+    </ul>
+  </div>
+
+  <div class="settled warn" style="margin-top: 22px">
+    <div class="h">Known costs, taken deliberately</div>
+    <ul>
+      <li><strong>One more thing on the busiest screen in the app.</strong> The session view
+        already carries a progress bar, a position chip, a ghost column, a rest countdown
+        and sometimes a buddy's name. The three-showing cap and retire-on-use are the whole
+        defence, and they are the part to hold the line on if this ever grows a tenth
+        tip.</li>
+      <li><strong>Nothing measures whether it worked.</strong> There is no analytics in this
+        app and this does not add any; the only signal is whether Calvin and his training
+        partner stop asking each other how the weights work.</li>
+      <li><strong>A tip is not a manual.</strong> Anything that needs two sentences to
+        explain is a control that needs redrawing, and the catalogue's admission test is
+        written to keep that pressure where it belongs.</li>
+    </ul>
+  </div>
+</div>

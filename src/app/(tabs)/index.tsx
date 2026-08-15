@@ -18,12 +18,14 @@ import { Pressable, Text, View } from 'react-native';
 
 import { CHECK_D, Icon } from '@/components/icon';
 import { Screen } from '@/components/screen';
+import { Tip } from '@/components/tip';
 import { routineEquals } from '@/data/buddy-sync';
 import { daysSince, shiftISO, todayDow, todayISO } from '@/data/date';
 import { measureOf } from '@/data/exercises';
 import { plannedOn } from '@/data/plan';
 import { countN, DAYS_SHORT, fmtDayShort, fmtDayTiny, fmtLastDone } from '@/data/i18n';
 import { groupDigits } from '@/data/stats';
+import { pickTip } from '@/data/tips';
 import { themed, useColors, useThemed } from '@/design/theme';
 import { color, elevation, font, radius, t, tracking, wash } from '@/design/tokens';
 import { Btn, CardKicker, H2, H3, H6, missingName } from '@/design/ui';
@@ -32,7 +34,8 @@ import { fmtClock, schemeLine, useStore } from '@/store/workout-store';
 export default function TodayScreen() {
   const styles = useThemed(sheet);
   const c = useColors();
-  const { s, L, patch, ex, routine, start, doneOn, rInfo, exInfo, totals, clock } = useStore();
+  const { s, L, patch, ex, routine, start, doneOn, rInfo, exInfo, totals, clock, tipDone } =
+    useStore();
   const router = useRouter();
 
   const dow = todayDow();
@@ -358,7 +361,10 @@ export default function TodayScreen() {
             key={i}
             accessibilityRole="button"
             accessibilityLabel={w.label}
-            onPress={() => patch({ dayPlan: { iso: w.date, entry: null } })}
+            onPress={() => {
+              tipDone('strip');
+              patch({ dayPlan: { iso: w.date, entry: null } });
+            }}
             style={[styles.day, w.isToday && styles.dayToday]}
           >
             <Text style={[styles.dayLabel, w.isToday && { color: c.accent200 }]}>{w.label}</Text>
@@ -373,6 +379,14 @@ export default function TodayScreen() {
           </Pressable>
         ))}
       </View>
+
+      {/* Where the "tap to change" hint went. The heading deliberately no
+          longer advertises the tap — it was written for Plan's seven named
+          rows — so this is the one place that says the dots are days you can
+          open, and it says it once. */}
+      {pickTip(s.tips, ['strip']) === 'strip' && (
+        <Tip id="strip" title={L.tipStrip} sub={L.tipStripSub} />
+      )}
 
       {/* Under the strip rather than beside the heading: the glance comes
           first, and the way to the whole plan is what you reach for after

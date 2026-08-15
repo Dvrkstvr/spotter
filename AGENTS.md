@@ -67,6 +67,13 @@ to the ported palette, and that is the property to preserve.
 - **`color-mix()` has no RN equivalent** — use the `wash.*` helpers in tokens,
   which resolve to literal rgba. Don't inline your own.
 - **CSS letter-spacing is em, RN's is px.** Always go through `tracking(size, em)`.
+- **A bordered view that ever goes dashed states `borderStyle` in its base
+  style.** Android recomputes the border's path effect inside a
+  `borderStyle?.let` (RN 0.81 `BorderDrawable.updatePathEffect`), so *removing*
+  the style is a no-op and the dashes stay on the paint — `dashed && styles.dashed`
+  paints one way only. Naming `solid` in the base makes every flip a value
+  change, which is the case that clears it. Three sites: `HoldBtn`, the session's
+  live set row, the coach's routine card.
 - **All state lives in `src/store/workout-store.tsx`**, a direct port of the
   design's `Component` class — same shape, same mutators. Add state there, not in
   a screen.
@@ -429,6 +436,14 @@ untouched.
   chat app has no reason to remember this flow, and `parsePlan` hunting the
   block out of the surrounding prose is what makes "copy the whole thing" true
   advice rather than a trap.
+  - **There is a second way home, and the prompt offers it to the AI rather than
+    printing it for the user** (`promptRuleFile`): Spotter answers a tapped file
+    now, so a reply that *can* arrive as `plan.json` skips the copy and the
+    paste — see the intake bullet under the deviations. Belt and braces on
+    purpose, because the block still goes in the message: most chat AIs cannot
+    attach anything, and swapping the working delivery route for an unproven one
+    would be a downgrade. Nothing about the contract changed — the file is read
+    by the same `parsePlan`, which is the point of it being the seam.
 - **Names are the join key in both directions.** The prompt ships the library,
   the muscle-group keys and the equipment keys so the answer builds on what is
   here instead of inventing a second Bench Press; `resolvePlan` turns names back
@@ -439,7 +454,38 @@ untouched.
   the shapes the app already has: nothing edited, nothing replaced, and
   `history` / `lastLog` untouchable by construction. The worst a bad plan can do
   is leave rows to delete, which is what lets the preview be a preview rather
-  than a warning. An imported exercise is written with the same literal the
+  than a warning.
+  - **So a routine you already have a name for arrives unticked** (`takes` in
+    the coach overlay) — the same rule a backup merge follows, and it now says
+    so in the same words (`addOnlyMissing`, shared with `RestoreSheet`, because
+    two wordings would read as two rules). It used to arrive ticked, which made
+    the one thing the preview warned about also the one thing it did by
+    default, and you left with two routines called Push A. It stays *tickable*,
+    unlike an empty row in the restore sheet: an empty row has nothing to add,
+    where the AI's "Push A" may be a genuinely different workout that happens
+    to share a name. The tag says which case you are in; the tick overrules it.
+  - Exercises never needed this — `resolvePlan` matches them by name across
+    every language and reuses the id, so a duplicate exercise cannot be created
+    in the first place. Routines have no id to match on (the AI was never given
+    one), which is why the name is the key and why the answer is a default
+    rather than a silent skip.
+- **The import step folds the reply away and then leaves.** Both halves are
+  about the same thing — the step is a preview of routines, not a text editor:
+  - Once a plan parses, the paste box collapses to a link
+    (`importShowReply`), because it has done its job and the routines under it
+    are what the screen is for. A parse that *failed* keeps the box open, which
+    is the one time editing the raw text is the point.
+  - Importing closes the coach *and* Insights and lands on the Routines tab. It
+    used to print "Imported. 2 routines added." and leave you on the import
+    screen holding a reply you were finished with; the list is the better answer
+    to "did that work?", and it is the app's habit anyway — show the thing
+    rather than announce it. Insights closes with it because it is what the
+    coach was opened over, and dropping back onto it would put a screen between
+    you and what you came for.
+  - **Saying no is an act** (`importDiscard`), and it lands on the coach's first
+    step. Without it the only way out was the back arrow, which for a reply that
+    arrived from outside the app means backing into a prompt step the user never
+    asked to see. An imported exercise is written with the same literal the
   new-exercise sheet writes, down to `load` staying absent — it must be
   indistinguishable from a hand-made one, or it reaches a buddy as a different
   shape.
@@ -467,6 +513,92 @@ untouched.
 - **The coach sits directly above Insights in the overlay stack** (76 → 77).
   It is opened from there and has to cover it; closing it drops you back onto
   the statistics you left.
+
+## The tips
+
+Half of what this app can do is invisible: a kg cell is a text field that is
+also a slider, a set number is a button, the bottom CTA sometimes has to be
+*held*, the `3 / 5` chip is the door to the whole workout. The tour's second
+screen already says four of these — and it says them at minute zero, before
+anyone has opened a session, on a screen seen once (its Settings row is
+commented out, because finishing the tour re-applies routine picks). A **tip**
+says the same thing in the place it applies, the first time you are standing
+in front of it, and then goes away for good. Mockup:
+`design/tutorial-mockup.html`.
+
+- **The model is `src/data/tips.ts`, and it deliberately does not know what a
+  screen is doing.** Pure like `plan.ts` / `stats.ts`: the `TipId` union,
+  `TIP_ORDER` (priority), `TIP_SHAPE`, `pickTip(tips, armed)`. Whether a set is
+  open or a rest is running is the *screen's* state, and a copy of it in there
+  would be a second reading of the session kept in step by hand — so a surface
+  offers the ids it could show and `pickTip` answers with the one it should.
+  That is also what makes "never two on one screen" structural rather than a
+  rule each site has to remember.
+- **`tips: Record<string, { seen, done }>` is additive**, like `coach` and
+  `buddySecrets` — no `STORAGE_VERSION` bump, no migration. A phone that has
+  been logging for months simply lacks the key and meets every tip fresh, which
+  is right: nobody explained the drag to it either. It is in a backup (a backup
+  is the durable slice), untouched by `mergePersisted` (which returns only the
+  keys sessions / library / plan touch), and **never in a buddy snapshot** —
+  what one phone has been taught is not the buddy's business, the same rule set
+  marks follow.
+- **Doing the thing is the dismissal.** `tipDone` is written from the gesture —
+  a drag that steps a figure retires `drag`, `onCopy` retires `ghost` — not from
+  a button. It is idempotent, so every call site fires it blindly, including
+  `NumCell`'s `onUpdate` on every step of every drag; `patch` returns the
+  identical state when its updater returns null, so React bails and the repeats
+  are free. The × means "I know this already" and lands in the same place.
+- **Three showings, then never** (`MAX_SHOWS`), and a showing only counts after
+  a two-second dwell (`DWELL_MS` in `<Tip>`) — one that flashed past while the
+  list scrolled was never read. A tip being ignored is furniture, and furniture
+  is what the session screen is trying hardest not to become.
+- **One tip per visit, not just one at a time.** Most of the session's tips are
+  armed by the same empty live row, so the overlay picks once per mounting and
+  holds it: when that one is dealt with, nothing replaces it until you next open
+  the screen. Otherwise a first workout is a slideshow of eight hints.
+- **Nothing new is offered over an open keyboard — but a tip already on screen
+  stays.** The gate is on the pick, not the arming. Unmounting and re-mounting
+  it would charge a second showing against a budget of three for a hint nobody
+  looked away from.
+- **The tip borrows no outline that already means something.** Not the live
+  box's accent fill, and above all **not dashed** — dashed means *this one is
+  held* at three sites, and a dashed hint reads as a control you are supposed to
+  press and hold, which is the exact confusion it exists to end. One hairline,
+  no fill, an accent dot, dim text, one × at `slop`.
+- **Only `drag` gets a demo, and the demo writes nothing.** Words teach a tap
+  and cannot teach hold-then-drag. `DragDemo` draws a pointer and a figure on an
+  overlay above the cell (`pointerEvents: 'none'`); the `TextInput` underneath is
+  untouched and still typeable. Every number in it is the real one — the travel
+  is `DEMO_STEPS × PX_PER_STEP` and the pause before it moves is `HOLD_MS`, which
+  is 120 ms and a stillness test rather than a wait. It is the one animation in
+  the app deliberately **off** the native driver: the figure is text, which no
+  driver can animate, so the pointer and the number share one JS clock instead of
+  drifting apart on two. It does not buzz — `buzz.grab` reports that *your*
+  finger took the cell, and the ring is that moment drawn instead.
+- **The tour reads the tip strings.** `obFeatTick/Drag/Rest` are gone;
+  `onboarding-overlay.tsx`'s `features()` reads `tipTick` / `tipDrag` / `tipRest`.
+  One list, two surfaces, so a rundown card and an in-place hint cannot phrase
+  one gesture two ways. The buddy card kept its own copy, having no tip twin —
+  the button that opens pairing carries a label, so it fails the admission test
+  in the right direction.
+- **The catalogue is closed on purpose.** The admission test is *"could a
+  careful person use this for a month and never find it?"* — and if the answer
+  is yes for something not on the list, the honest fix is usually the control.
+  There is no tip for Start, Add exercise or Settings; `+ Add exercise` is only
+  unfindable while the overview sheet is, which is why `chip` is a tip and
+  adding an exercise is not.
+- **`finishLogsNothing` is not a tip**, and the distinction is the point. A tip
+  teaches something invisible three times and retires; that line is a permanent
+  statement of what a button is about to do, drawn under Finish while
+  `tot.done === 0` in both places Finish lives. It is the answer to "how do I
+  cancel this" — `finishSession` writes no `history` entry when nothing was
+  ticked, which is what Discard used to be for, but nobody hunting for a way out
+  tries a button labelled *Finish*. It is `savedEmpty` in the other tense on
+  purpose: two phrasings of "nothing happened" would read as two rules.
+- **"Show tips again" lives in ordinary Settings**, not the danger corner. It
+  writes `tips: {}` and nothing else — nothing re-applied, nothing overwritten —
+  which is precisely what re-running the tour could not promise. The count on
+  the right going back to zero is the whole confirmation it needs.
 
 ## Deliberate deviations from the design
 
@@ -588,7 +720,8 @@ Keep these; they're decisions, not drift. Each is commented at its site.
 - **A set can also carry a verdict** (`SetMark`: `up` / `down` / `ok` / `note`)
   — heavier next time, lighter next time, that was the weight, or words. Not in
   the design; the numbers record what you lifted and never what to do about it,
-  which by next week is the part you wanted back. Four rules hold it together:
+  which by next week is the part you wanted back. The mockup is
+  `design/set-notes-mockup.html`. Seven rules hold it together:
   - **The mark lives in the index column, and takes the digit's place.** Which
     set a row is you can count; once you have judged it the judgement is worth
     more in 16px. Taking the slot rather than adding a column is also what
@@ -606,31 +739,94 @@ Keep these; they're decisions, not drift. Each is commented at its site.
     different set. A new persisted key rather than a richer `LastLog`: `PERSIST`
     is additive, and reshaping `lastLog` would cost a `STORAGE_VERSION` bump
     and a migration over real training data.
+  - **It is a fact about the day too, so it also goes in the diary.**
+    `LoggedExercise.marks?: (MarkNote | null)[]`, index for index with `sets`
+    and written in the same pass off the same `ticked` array — two loops are
+    two chances for the indexes to stop describing each other. `lastMarks`
+    holds only the *latest* session per exercise, so without this copy a note
+    lives exactly one week and is then written over; the entry on the day is
+    what a diary owes you. Optional and absent when nothing was marked, so
+    every entry logged before it keeps its numbers and simply says nothing —
+    which is the whole migration, and why `STORAGE_VERSION` stays 4. A backup
+    carries it inside `history`, and `mergePersisted` needs no change:
+    `historyKey` is over date / rid / name / secs / vol, so adding notes cannot
+    split one session into two.
+  - **Last time's verdicts are read at the top of the exercise, not on the
+    row** (`LastNotes`). They used to draw one per live row out of `prevMark`,
+    which put each where it was written and two sets too late to act on:
+    "shoulder, drop to 60" is advice about the exercise you are walking up to.
+    So they hoist, whole, each naming its set — which keeps "try 75 next"
+    attached to the 70 it was about — and they hoist out of `lastMarks` rather
+    than off `entry.sets[].prevMark`, because that map is the complete list
+    where the session's copy is truncated to however many sets today's routine
+    asks for. The row-level copy is **gone**, not kept alongside: the same
+    sentence twice is two readings of one fact, and that row can already be
+    carrying a rest countdown or the buddy's turn. `prevMark` stays on
+    `LoggedSet` for the mark sheet, which prints last time's verdict for *that*
+    set and is per-set correctly.
+  - **The set row has exactly one note slot**: your own words, else — on a set
+    you have *ticked* — the way in (`addNote`), else nothing. The offer arrives
+    with the tick because a set you have lifted is a set you have an opinion
+    about, where row 4 is a plan and has nothing to say yet; standing on every
+    unlifted row it is 16px of furniture eight times over, on the screen
+    working hardest not to become furniture. It borrows no outline — no fill
+    and above all no dash, for the reason a tip doesn't: dashed means *this one
+    is held* at three sites.
+  - **The diary draws it read-only, and words are what earn a line.** A verdict
+    with no note is a glyph and stays in the day panel's wrap; only words break
+    out to full width (`logNoted`, `flexBasis: '100%'`), so a card with nothing
+    written on it is the card it always was. The glyph is `neutral500` there
+    rather than accent: in the session the mark is live and yours to change,
+    in the diary it is history. No editing six weeks on — the panel is a
+    record, and the one thing it already lets you write (*+ Save as routine*)
+    creates a new object rather than rewriting the day.
   - **It never leaves the phone.** `BuddyProgress` carries `done` booleans and
     nothing else; what you thought of your own set is not the buddy's business.
+    A buddy snapshot carries no `history` at all, so the diary copy changes
+    nothing about that.
+  - **It stays per set, and there is no per-routine note.** The words ride on a
+    `SetMark`, and `up` / `down` is a verdict about *a weight* — an exercise
+    holds three to five of those, so "heavier" at the exercise level is not a
+    statement. A routine is a template that outlives every session run from it,
+    so a note on one could only be timeless and could never reach a day; the
+    timeless per-exercise slot is already `cueEdits`, and the machine is
+    `setups`. If a *dated* per-exercise note is ever wanted it is
+    `LoggedExercise.note?: string` — additive, so waiting for someone to ask
+    costs nothing.
 - **Numbers are also a gesture**: hold a kg or reps cell still for `HOLD_MS`,
   then drag up or down to step it (0.5 kg / 1 rep per `PX_PER_STEP`). The hold
-  is what lets a tap still focus the field and a straight drag still scroll the
-  list; while a drag runs, the list's `scrollEnabled` goes off. Most sets never
-  need the keyboard. This one gesture is the reason
+  is only long enough to tell the finger apart from a scroll — gesture-handler
+  fails the pan the moment it moves before the delay elapses, so `HOLD_MS` is a
+  stillness test rather than a wait, and it is short enough that the gesture
+  reads as touch-and-slide. While a drag runs, the list's `scrollEnabled` goes
+  off. Most sets never need the keyboard. This one gesture is the reason
   `react-native-gesture-handler` is mounted at all (`GestureHandlerRootView` in
   `src/app/_layout.tsx`), and `Gesture.Pan().activateAfterLongPress()` is what
   keeps it apart from the list's own scroll. Everything else on this screen —
   the swipe between exercises included — is still a plain `PanResponder`, and
   should stay one.
-  - **The cell is `box-only` until it is focused, and that is load-bearing.**
-    A number cell is a `TextInput`, and Android's `ReactEditText` answers every
-    ACTION_DOWN with `requestDisallowInterceptTouchEvent(true)`. That walks up
-    to `GestureHandlerRootView`, which reads it as a native view claiming the
+  - **The cell is `box-only` always, focused or not, and that is
+    load-bearing.** A number cell is a `TextInput`, and Android's
+    `ReactEditText` answers every ACTION_DOWN with
+    `requestDisallowInterceptTouchEvent(true)`. That walks up to
+    `GestureHandlerRootView`, which reads it as a native view claiming the
     touch and **cancels every handler in the orchestrator** — so a pan waiting
     out `HOLD_MS` is already dead before the hold elapses. Moving to
     gesture-handler did not fix that; it is the same disallow one layer down,
     and for a year the drag simply never fired. What fixes it is never letting
     the finger reach the editor: `box-only` has `ReactViewGroup` intercept the
     touch natively, so no DOWN reaches the editor and nothing is cancelled.
-    The tap that focusing needs is handed back as a `Gesture.Tap` racing the
-    pan, and the cell returns to `auto` once focused, so placing the caret
-    inside a figure still works.
+    The cell used to return to `auto` once focused, so that a tap could place
+    the caret inside a figure — and that gave the disallow back on every cell
+    the keyboard had ever been opened on, which after one set is most of them.
+    Four characters of numeral don't need an aimable caret; the drag is what
+    the cell is for.
+  - **So the tap is a gesture too, and it toggles.** `Gesture.Tap` races the
+    pan and focuses the field — or blurs it when it already has focus, which is
+    the way out of the keyboard that doesn't log a set. A pan that activated,
+    stepped nothing and was released is routed to the same place: overshooting
+    `HOLD_MS` on what you meant as a tap costs you nothing, which is the other
+    half of why the delay can be short.
   - **It is the one gesture performed under your own thumb, so it is felt
     rather than watched** — and the two moments get different weights, on the
     haptics ladder in `src/data/haptics.ts`. `buzz.grab` is the hold landing,
@@ -654,7 +850,11 @@ Keep these; they're decisions, not drift. Each is commented at its site.
     `setJSResponder` with the native responder blocked — which gesture-handler
     also answers by cancelling everything it owns. That would leave the drag
     working only while the keyboard is down, which is exactly when it isn't
-    wanted. Nothing is lost: Enter on reps still blurs and closes it.
+    wanted. What it costs is tap-away-to-dismiss, which is why the cell's own
+    second tap blurs it; Enter on reps still closes the keyboard by logging the
+    set, and Android's back key is eaten by the IME before the app hears it —
+    so the focused cell listens for `keyboardDidHide` and blurs itself, or it
+    would sit there drawn as focused with nothing typing into it.
 - Add set is hold-to-confirm — it sits under the last row, right where a thumb
   reaching for the tick lands.
 - **There is no Discard.** Finish is the only way out of a session, so it
@@ -723,12 +923,106 @@ Keep these; they're decisions, not drift. Each is commented at its site.
   and a clock that counts firings simply stops — taking the rest with it. Keep
   it a delta, not a `startedAt` field: `elapsed: 0` is written from four places
   and none of them has to know about this.
-- While the turn is theirs, that same row says so instead, and carries
-  `own: false` so it lets go the moment the turn comes back rather than running
-  its full length — the guest of a fresh session must not be held three minutes
-  for a set they never did. Like every other buddy cue it only changes how the
-  row *looks* — the inputs and the tick never stop working, because a phone in
-  someone else's pocket must not block your set.
+- **While the turn is theirs that same row says so too — dashed, and their
+  name on a line of its own.** `rest` holds a rest you earned and nothing else:
+  their set does not end because a timer said so, it ends when they tick.
+  Writing the wait as a rest of your own was the obvious move and it lied twice
+  over — the guest of a fresh session opened on a three-minute countdown before
+  either phone had lifted anything, and the number was invented. So the row's
+  two holds are separately shaped: your rest is a clock you may cut short,
+  their turn is a dash that lifts the moment their set lands and the row goes
+  solid, which is the whole handover. Like every other buddy cue it only
+  changes how the row *looks* — the inputs and the tick never stop working,
+  because a phone in someone else's pocket must not block your set.
+  - **Their turn carries a clock of its own: the rest they are still on.**
+    Coming off their own set, "their set" means resting for the
+    first minutes of it, and a bare name said nothing about how long. Their
+    remainder rides along in `progress` (`BuddyProgress.rest`) and draws as
+    *{name}'s rest · 1:40*, which is the same fact their name was already
+    standing for, with the number it was missing.
+  - **A remainder, never a stamp.** `rest.at` is a reading of the sender's
+    `elapsed`, and the two session clocks share no origin — a guest joins
+    mid-way, and `restSeconds` is a per-phone setting besides. So the wire
+    carries seconds-left-at-send and the receiver re-anchors it to its own
+    `elapsed` on arrival (`buddyRest`, transient, cleared everywhere
+    `buddyProgress` is and everywhere `elapsed` goes back to zero). It is a
+    protocol *addition*: an older build sends no figure, their rest simply
+    never shows, and the row reads exactly as it always did.
+  - **The rebroadcast is for the skip, not the start.** A rest beginning rides
+    out on the session change that earned it; "start now" changes nothing else,
+    so `s.rest` is in the broadcast effect's deps or the buddy would watch a
+    countdown its owner had already dismissed.
+  - **Every running wait is drawn, and each one names its owner.** Their rest
+    used to be drawn *in place of* your own countdown, on the grounds that two
+    descending numbers in one 12.5px line can't be told apart — they can't, and
+    the fix is to name them rather than to hide one. Hiding one meant the
+    commonest question in a shared session, *whose pause is that*, had no
+    answer anywhere on the screen. So yours is a line (`myRest`) and theirs is
+    a line under it (`theirRest`), and **yours is named only while theirs is
+    there too**: alone it stays the bare `restLeftLabel`, because an owner is
+    worth 5 characters exactly when there is somebody to be told apart from.
+    Three things follow:
+    - **Their rest shows whenever they have one, turn or no turn.** "How long
+      until they're even back on the bar" is a fact about your session while
+      you're both on the exercise, and `buddyLive.rest` is already 0 when
+      you're not. It used to be gated on `theirTurn`, which hid it during the
+      half of an alternating session that is yours.
+    - **`held` is a separate question from what is drawn.** Only your own rest
+      or their turn dashes the box and takes the accent off the index — a buddy
+      resting through a set of *yours* is information, not a reason to make the
+      row you're about to lift into look like it isn't yours.
+    - **"Start now" rides on your line, so it is offered whenever your clock
+      runs** — including under a turn of theirs, where it cuts your countdown
+      (and its notification) short and leaves the row held. It used to be
+      withheld there because the tap would have looked like it did nothing; now
+      the line it sits on is the thing it visibly removes.
+  - **A sealed exercise still shows the wait** (`WaitLines` standing alone
+    under the last row, which is why it is a component rather than markup
+    inside `SetRow`). Ticking your last set starts a rest whose set lives on
+    the next exercise, so the row it would draw on doesn't exist yet — and a
+    countdown that disappears for the length of the countdown is the same
+    opacity in a different place. The `ask` is deliberately not repeated there:
+    who takes the next set of an exercise you have finished is not your
+    question.
+- **One phone's session list never writes to the other's — it offers.** Adding
+  an exercise mid-workout is the one way two shared sessions can drift apart
+  after the invite, and the answer is `adoptBuddyEx`: an offer on the buddy
+  line and a ledger in the overview sheet, each one tap, and nothing crosses
+  without that tap. Auto-adding was the obvious move and it is the wrong one
+  for the reason `bye` doesn't end their session and `removeSessionEx` refuses
+  a ticked set — the other phone does not get to reach into a workout you are
+  standing in the middle of. It would also grow `tot.all` under your thumb,
+  which flips Finish between a tap and a hold, and shift what a swipe lands on.
+  - **The offer is a diff, not an event.** `BuddyProgress.list` already carries
+    every exercise id they hold, so "theirs, not mine" is read out of the
+    message the app was already sending. An `exerciseAdded` event would be one
+    thing in this protocol that a dropped link could lose for good; a diff
+    re-derives itself from whichever message lands next, which is the whole
+    reason `progress` is whole-state. It also covers drift nobody sent an event
+    for — a guest who joined with a stale routine, two free sessions.
+  - **`deps` is the one thing the diff can't derive**, and it is an additive
+    optional field on `progress` exactly like `rest`: an id for a *custom*
+    exercise of theirs is unnameable here, and a row you cannot read is not an
+    offer. It carries `closureFor` — the exercises in their list that aren't
+    seeded, plus the groups and kinds those file under — and it is absent from
+    an all-seeded session, which is nearly all of them, and from an older
+    build, whose extra exercises stay as unnameable as they are today.
+    Receiving it writes nothing; `upsertShared` runs on the tap that accepts,
+    the same place `acceptInvite` and `applyDraft` run it.
+  - **Their set count is adopted, their numbers are not** — `mergeRoutine`'s
+    rule again. The count is what makes the turn arithmetic (`mine <
+    theirDone`) right on the first set rather than after you match rows by
+    hand; the ghost stays your own history, because "last time" was never
+    theirs.
+  - **Two surfaces, and only one of them jumps.** The buddy line's offer sits
+    in `jump`'s slot and is its other half — same errand, same one tap — so it
+    lands you on the exercise, and it only shows while they are actually on it,
+    which is what makes it self-clearing with nothing to dismiss and nothing to
+    remember dismissing. The overview sheet lists *all* of them and does not
+    move you: you may be taking on several, and it is the screen you would come
+    to reconcile on anyway.
+  - **Nothing goes the other way.** An exercise they drop is not dropped here —
+    leaving your list is still your own held ×.
 - Disconnect is explicit and two-sided: the phone that taps it sends `bye` and
   the other tears the pairing down (`endPairing`) instead of hunting for a
   reconnect. Neither side's *session* is touched — the workout keeps running
@@ -891,8 +1185,154 @@ Keep these; they're decisions, not drift. Each is commented at its site.
   above for the rules that hold them together.
 - **Backup is the durable slice in an envelope** (`src/data/backup.ts`),
   stamped with `STORAGE_VERSION` so an old file is migrated forward rather
-  than loaded raw. A restore *replaces*: the seeded defaults go down first, so
-  a key the backup lacks resets instead of surviving.
+  than loaded raw.
+- **A restore has two answers, and they differ in kind rather than in degree**
+  (`RestoreSheet`, `mergePersisted`). Replace *replaces*: the seeded defaults go
+  down first, so a key the backup lacks resets instead of surviving — right for
+  a new phone, wrong every other time, and for a year it was the only thing on
+  offer. **Add what's missing** is the other one, and it is the rule this app
+  already applies to a buddy's library (`upsertShared`) and to the coach's plan:
+  additive, and what is on this phone wins. A backup that has never watched you
+  lift does not get to overwrite what you actually did.
+  - **That rule is why there is no conflict screen.** There is nothing to ask
+    item by item — either the backup fills a gap, in which case take it, or it
+    disagrees with something here, in which case here wins. Wanting the backup's
+    version of everything is what Replace is, one hold away. A screen listing
+    every differing row across nine key types, for an action taken twice a year,
+    buys nothing that pair doesn't.
+  - **Three parts, ticked, and one of them is a bundle on purpose.** Sessions
+    (`history` + `lastLog` + `lastMarks`), the library (routines, custom
+    exercises, *and* the group/equipment lists, because an exercise filed under
+    a group this phone lacks is stranded outside the library's filter row), and
+    the plan. `mergePersisted` returns **only the keys its parts touch**, so
+    every setting, the profile and the whole buddy roster are untouched by
+    construction rather than by being listed — which is what stops a merge
+    handing this phone another phone's `selfId`.
+  - **`lastMarks` moves with the `lastLog` it describes.** They are index for
+    index, so taking one without the other puts a ▲ on a set it was never a
+    verdict about. `lastLog` carries its session's date, so "newer wins" is
+    exact rather than a guess.
+  - **A session's identity is a content key** (`historyKey`), because
+    `HistoryEntry` has no id — it never needed one until something could meet
+    the same session twice. Deliberately not `JSON.stringify`: key order belongs
+    to whichever literal built the object, and a migrated blob doesn't owe you
+    the same one.
+  - **The preview is the merge.** `restoreCounts` runs `mergePersisted` and
+    measures it rather than counting in a second pass, so the sheet cannot
+    promise a number the import then misses.
+  - **An incoming plan rule whose routine didn't come along is dropped**, and so
+    is a skip naming a rule that didn't — a rule names a routine, and one that
+    names nothing would draw a planned day the app can't start. Only the
+    *incoming* rows are filtered: an existing entry whose routine is gone is a
+    state the plan screen already handles, and a merge has no business tidying
+    it.
+- **A Spotter file tapped in another app opens Spotter** (`android.intentFilters`
+  in `app.json`, `src/app/+native-intent.ts`, `<Intake>`). Exporting a backup to
+  a chat app and then tapping it there used to say *no supported app found*;
+  now it comes back in. Six things about it are load-bearing:
+  - **Android has no file *type* to mint.** Nothing lets an app declare that
+    `.spotter` means `application/x-spotter` — the MIME type is decided by
+    whichever app is *sending*, from its own extension table. And a document
+    tapped in a chat arrives as `content://com.whatsapp.provider.media/item/…`,
+    which has no filename in it, so a `pathPattern` on an extension matches
+    nothing. **MIME is the only thing that can match**, so the filter claims
+    three types and the export is named `2026-08-13.sptr` (`EXT` in
+    `backup.ts`) — a name, not a registration. `.sptr` is in no sending app's
+    extension table, so a received one falls back, usually to
+    `application/octet-stream`; claiming that is what makes the tap work, and
+    the price is Spotter appearing in *Open with* for every unknown binary on
+    the phone. **This is the one bet in the feature** — Calvin's call, taken
+    with the fallback known: if a sender guesses some third type, `.sptr.json`
+    doubles the extension instead of replacing it, so the last one is the
+    `.json` every table agrees about, at the cost of the shorter name.
+    `application/json` is claimed because that is what the bytes honestly are
+    and what the share declares on the way out — if a sender honours a declared
+    type rather than re-deriving one, that is the claim that carries it — and
+    `text/plain` for the coach's half, where an AI answering with a `.txt` or a
+    `.md` is answering in the format `parsePlan` already reads. The envelope
+    check is what makes all three harmless.
+  - **`+native-intent` is the only seam that sees the URI.** A `content://` is
+    not a route, and expo-router would go hunting for a screen named after the
+    provider. `redirectSystemPath` gets the raw intent data on a cold start
+    (it becomes the initial URL) and on a warm one, so the URI is lifted out
+    there and the router is answered with `/`. It runs while the bundle is still
+    starting, which is why it knows nothing about backups, plans or the store,
+    and why the handoff is a module slot (`src/data/intake.ts`) rather than
+    state: on a cold start there is no component tree yet to hand it to.
+  - **One entry point, two payloads, and only one of them is provable.** An
+    envelope is a backup; anything else is offered to `parsePlan`, and a plan
+    found in it goes to the coach. So **a plan needs no file format of its
+    own** — the AI already writes that block, and a file containing it, prose
+    and all, is a plan. `readFile` classifies only the half `backup.ts` can
+    prove and hands the rest back as text, which is what keeps the coach out of
+    that module.
+  - **Read the URI now, not later.** The read grant that came with the intent
+    lives and dies with the activity that received it, so a stored
+    `content://` is worth nothing. `<Intake>` still waits for `hydrated` — a
+    restore that beat the phone's own blob back would be overwritten by the
+    hydration a beat later — and that is the only thing it waits for.
+  - **The file is staged in the cache before it is read, always.** `new
+    File(content://…).text()` looks like it should work and does for about half
+    the providers out there, which is the trap: it calls `exists()` on the way
+    in, and expo-file-system resolves a content URI through `DocumentFile` —
+    `fromSingleUri` when the first path segment is `document`, `fromTreeUri`
+    otherwise. A chat app's URI is neither
+    (`content://com.whatsapp.provider.media/item/…`) and `fromTreeUri` throws on
+    a non-tree URI, so a perfectly readable file reports *could not be read*.
+    The stream underneath was never the problem. `expo-file-system/legacy` keeps
+    the branch that works — `contentResolver.openInputStream` for any content
+    scheme — so `readFile` copies through it and reads the text off a `file://`.
+    Unconditionally, not only for the URIs known to break: one path that behaves
+    the same for every provider beats one that works until someone shares from
+    an app nobody tested. It is also exactly what `copyToCacheDirectory` does
+    for the document picker, which is why `pickAndRead` never hit this.
+  - **Neither path writes on its own.** The backup lands on the same
+    hold-to-restore confirm the picker asks through (`RestoreConfirm`, shared
+    rather than written twice — it is the most destructive question in the app,
+    and two copies are two chances for one to soften), and the plan lands on the
+    coach's existing preview with Import still the only thing that commits. A
+    wrong tap costs a sheet.
+  - **Nothing here is persisted.** `coachIntake` is a one-shot handoff like
+    `planFocus`, outside `PERSIST`; the intent filter is native config. No
+    `STORAGE_VERSION` bump, no migration — but it *is* a native change, so it
+    needs `npx expo prebuild --platform android` and a fresh build. Expo Go has
+    no filter and simply never fires it, which degrades rather than breaks.
+
+- **A message shared into Spotter arrives too** (`modules/expo-share-text`,
+  `src/data/share-text.ts`). Hold the AI's reply, Share, Spotter — the coach's
+  loop with no clipboard in it, which is the point: a chat AI produces a
+  *message*, and until this the only way in was copy-and-paste.
+  - **It needs native code, and this is the only thing in the app that needs it
+    for this reason.** A share is `ACTION_SEND` with its payload in
+    `Intent.EXTRA_TEXT`, and neither React Native's linking module nor
+    expo-linking reads intent *extras* — both take only `intent.getData()`,
+    which is null for a share. So the module is forty lines whose whole job is
+    to hand JS a string; it knows nothing about plans, backups or the store,
+    and `<Intake>` classifies it exactly as it classifies a tapped file.
+  - **The lifecycle listener is what makes the warm case work**, and it is not
+    optional. React Native's `onNewIntent` never calls `setIntent`, so
+    `activity.intent` still holds whatever launched the app the first time —
+    read the activity's intent on demand and you get the *first* share
+    forever. `ShareTextPackage` registers the listener; expo autolinking
+    discovers it by scanning for `Package`, so nothing declares it in
+    `expo-module.config.json` (expo-linking does the same). Check
+    `ExpoModulesPackageList.java` after a build if a share ever stops arriving.
+  - **`EXTRA_TEXT` is removed as it is taken**, and the JS slot empties on
+    read for the same reason: an activity keeps its launching intent, so a
+    share left in place is re-offered on every configuration change and every
+    return to the app — which for an import means the same plan offered
+    forever.
+  - **The bridge is optional** (`requireOptionalNativeModule`), like
+    `buddy-radio.ts`: Expo Go has no module and no filter, so every call is a
+    no-op and the paste box is still the way in. Which is why the prompt's
+    rule 3 now leads with Share but **keeps paste as its third step** rather
+    than dropping it — `parsePlan` reads both identically, and the fallback
+    costs one line.
+
+  What this does **not** cover is a *file* shared into Spotter rather than
+  tapped — that is `ACTION_SEND` with an `EXTRA_STREAM`, another extra. Not
+  built because tapping is how a file in a chat is opened anyway, and the two
+  routes already cover both errands.
 - **The muscle-group and equipment lists fold away, and their seeded rows
   keep no ×.** Twenty groups and five kinds unfolded put Data and About a
   screen and a half down, past the settings people actually come back for, so

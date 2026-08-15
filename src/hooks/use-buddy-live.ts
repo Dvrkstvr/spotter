@@ -5,7 +5,7 @@
  */
 import { bidPending, leaderOf } from '@/data/buddy-sync';
 import { Strings } from '@/data/i18n';
-import { useStore } from '@/store/workout-store';
+import { buddyRestLeftOf, useStore } from '@/store/workout-store';
 
 export type BuddyLive = {
   /** one-line status, already localised and name-substituted */
@@ -23,8 +23,26 @@ export type BuddyLive = {
    * question entirely.
    */
   asking: boolean;
+  /**
+   * Seconds left on *their* rest, run down against this phone's clock — 0
+   * when they aren't resting, when the reading is stale, or when their build
+   * doesn't send one. Only meaningful while you're both on the same exercise,
+   * which is the only place it is drawn: it is the answer to "how long before
+   * they even start", and that question only exists while their set is the
+   * one holding your row.
+   */
+  rest: number;
   /** their exercise is in my list too — one tap to reconverge */
   jump: { index: number; name: string } | null;
+  /**
+   * Their exercise isn't in my list at all — the other half of `jump`, and
+   * the offer to take it on. Derived from the progress message rather than
+   * sent as an event when they add one: `list` already carries every exercise
+   * id they hold, so a diff catches every way the two lists can drift apart,
+   * including the ones nobody sent an event for. Never acts by itself — see
+   * `adoptBuddyEx`.
+   */
+  add: { ex: string; name: string } | null;
 };
 
 export function useBuddyLive(): BuddyLive | null {
@@ -40,7 +58,9 @@ export function useBuddyLive(): BuddyLive | null {
     mine: false,
     modeEx: null,
     asking: false,
+    rest: 0,
     jump: null,
+    add: null,
   });
 
   if (!s.buddyEndpoint) return line(nm('stLost'));
@@ -85,12 +105,18 @@ export function useBuddyLive(): BuddyLive | null {
       // Only worth asking while it's genuinely open: taking turns, and level
       // on the exercise. Once one of you is ahead the order is arithmetic.
       asking: mode === 'alternate' && mine === theirDone && bidPending(s.firstUp, myBid),
+      rest: buddyRestLeftOf(s),
       jump: null,
+      // You are both standing at it — there is nothing to add.
+      add: null,
     };
   }
 
   if (bp.active) {
-    const meta = ex(bp.active);
+    // A custom exercise of theirs this phone hasn't got is named from the
+    // closure that travelled with the progress. Nothing of it is written
+    // until the offer below is taken.
+    const meta = ex(bp.active) ?? bp.deps?.custom.find((e) => e.id === bp.active);
     const exName = meta ? exInfo(meta).text : bp.active;
     const myIndex = session.list.findIndex((e) => e.ex === bp.active);
     const prefix = myIndex >= 0 ? `${nm(myIndex > s.active ? 'stAhead' : 'stBehind')} · ` : '';
@@ -100,9 +126,16 @@ export function useBuddyLive(): BuddyLive | null {
       mine: false,
       modeEx: null,
       // You're not even on the same exercise — there is no turn to hand out,
-      // so there is nothing to ask about either.
+      // so there is nothing to ask about either, and their rest is not a wait
+      // of yours.
       asking: false,
+      rest: 0,
       jump: myIndex >= 0 && myIndex !== s.active ? { index: myIndex, name: exName } : null,
+      // Offered while they are actually on it, which is the moment it is
+      // worth anything — and it takes itself away when they move on, so
+      // there is nothing to dismiss and nothing to remember dismissing. Only
+      // when it can be named: an unnameable row is worse than no offer.
+      add: myIndex < 0 && meta ? { ex: bp.active, name: exName } : null,
     };
   }
   return line(nm('stPending'));

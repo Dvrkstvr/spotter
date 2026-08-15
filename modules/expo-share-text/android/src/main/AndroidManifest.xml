@@ -1,0 +1,4 @@
+<!-- No permissions: this module only reads an intent the OS already handed us.
+     The intent filter that makes Spotter a share target lives in app.json,
+     because it belongs to the app's activity rather than to this library. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" />

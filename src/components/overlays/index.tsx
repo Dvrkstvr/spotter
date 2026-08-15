@@ -7,7 +7,7 @@
  *   70 exercise · 75 routine · 76 insights · 77 coach · 78 settings
  *   79 buddy sync · 80 session
  *   83 plan · 84 pick workout · 85 picker · 86 how-to · 87 nearby
- *   88 new exercise · 89 buddy invite / join ask · 90 summary
+ *   88 new exercise · 89 buddy invite / join ask · 90 summary · 91 intake
  *
  * 76 (insights), 77 (coach), 79 (buddy sync), 83 (plan), and 89 (buddy
  * invite, join ask) are not from the design: the plan sheet replaces the
@@ -18,8 +18,15 @@
  * under the summary so "train together?" and "can I join?" can land on top of
  * whatever is open — including the session, which is exactly where the second
  * one arrives.
+ *
+ * 91 (intake) is above the summary because it answers a tap that happened in
+ * another app entirely, which outranks anything this one had open — but below
+ * onboarding, which on a first run *is* the app. Restoring a backup onto a phone
+ * mid-setup would leave the tour running over the restored data and re-applying
+ * its routine picks at the end; the sheet waits, and is still there afterwards.
  */
 import { BuddyRadio } from '@/components/buddy-radio';
+import { Intake } from '@/components/intake';
 import { BuddyInviteSheet } from '@/components/overlays/buddy-invite-sheet';
 import { OnboardingOverlay } from '@/components/overlays/onboarding-overlay';
 import { BuddySyncOverlay } from '@/components/overlays/buddy-sync-overlay';
@@ -56,6 +63,10 @@ export function Overlays() {
           whether or not anyone is training with you, and it has to survive the
           session being tucked behind the tabs. Renders nothing. */}
       <RestAlarm />
+      {/* 91 when it has something to say, nothing at all the rest of the time.
+          Mounted unconditionally because the file it answers for arrives before
+          any flag could be set — on a cold start, before React exists. */}
+      <Intake />
       {s.exOpen && <ExerciseSheet />}
       {s.routineOpen && <RoutineOverlay />}
       {s.statsOpen && <InsightsOverlay />}
