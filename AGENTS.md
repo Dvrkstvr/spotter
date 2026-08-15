@@ -566,6 +566,14 @@ store nothing.
   once normally and twice inside a pair, and it owns the column header too:
   `unitsFor` is per-exercise, so a pair of a plank and a run heads its two
   halves differently.
+- **A drop is inserted, not appended** — after the set you just lifted, which
+  is the row above the live one, or the end of the ledger once the exercise is
+  sealed. That is the one way the two held buttons differ, and it is the
+  difference between them: Add set means one more at the end, where a drop is
+  positional by definition. Appending was the first cut and it is wrong the
+  moment you drop off set 2 of 4 — the drop lands behind two sets you have not
+  done yet. With nothing ticked there is nothing above to drop from, so the
+  button is absent rather than dead.
 - **The chain is drawn between digits, never in one.** The index column already
   belongs to `SetMark` — the mark *takes the digit's place* — so a marked drop
   would have had its own marker erased by its verdict. A hairline in the gutter

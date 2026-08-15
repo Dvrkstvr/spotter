@@ -936,6 +936,17 @@ function Ledger({
   const meta = ex(entry.ex);
   const units = unitsFor(measureOf(meta), L);
 
+  /**
+   * Where a drop would go: immediately after the set you just lifted, which is
+   * the row above the live one — or the end of the ledger once the exercise is
+   * sealed, since then the last set *is* the one you just lifted.
+   *
+   * 0 means there is nothing above to drop from, which is a fresh exercise with
+   * nothing ticked. The button is absent there rather than shown dead: a drop
+   * off a set that hasn't happened is not a thing to offer.
+   */
+  const dropAt = liveJ >= 0 ? liveJ : entry.sets.length;
+
   /** Tick a set, filling an untouched one from last time — as the box does. */
   const logSet = (j: number) => {
     tipDone('tick');
@@ -1075,34 +1086,42 @@ function Ledger({
             style={styles.addSet}
             labelStyle={styles.addSetLabel}
           />
-          {/* A drop is defined against **what you just lifted**, so the weight
-              comes off the row above rather than from last week's ghost —
-              which is also why the row carries no ghost of its own: last
-              time's set N+1 was not this drop, and a figure that isn't about
-              this row is worse than none. */}
-          <HoldBtn
-            label={L.holdAddDrop}
-            onConfirm={() => {
-              mutSession(i, (e) => {
-                const last = e.sets[e.sets.length - 1];
-                const g = last ? prevNums(last.prev) : { w: '', r: '' };
-                e.sets.push({
-                  w: last ? last.w || g.w : '',
-                  reps: '',
-                  done: false,
-                  prev: '—',
-                  prevMark: null,
-                  link: true,
+          {/* A drop goes on **the set you just lifted**, which is the row above
+              the live one — not the end of the ledger. You decide to drop
+              having finished set 2 of 4, and the two sets it would otherwise
+              be filed behind are still ahead of you.
+
+              So it is inserted rather than appended, and that is the one way
+              the two buttons differ: Add set means one more at the end, where
+              a drop is positional by definition. It carries the weight of the
+              row it came off, and no ghost of its own — last week's set N+1
+              was not this drop, and a figure that isn't about this row is
+              worse than none. */}
+          {dropAt > 0 && (
+            <HoldBtn
+              label={L.holdAddDrop}
+              onConfirm={() => {
+                mutSession(i, (e) => {
+                  const src = e.sets[dropAt - 1];
+                  const g = prevNums(src.prev);
+                  e.sets.splice(dropAt, 0, {
+                    w: src.w || g.w,
+                    reps: '',
+                    done: false,
+                    prev: '—',
+                    prevMark: null,
+                    link: true,
+                  });
                 });
-              });
-              // The rest running under it was written by the tick this drop
-              // now says earned none. Its alarm goes with it, through the
-              // scheduling effect's own cleanup — no new cancel path.
-              patch((st) => (st.rest ? { rest: null } : null));
-            }}
-            style={styles.addSet}
-            labelStyle={styles.addSetLabel}
-          />
+                // The rest running under it was written by the tick this drop
+                // now says earned none. Its alarm goes with it, through the
+                // scheduling effect's own cleanup — no new cancel path.
+                patch((st) => (st.rest ? { rest: null } : null));
+              }}
+              style={styles.addSet}
+              labelStyle={styles.addSetLabel}
+            />
+          )}
         </View>
       )}
     </View>
