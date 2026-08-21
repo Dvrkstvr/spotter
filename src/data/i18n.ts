@@ -329,6 +329,7 @@ export const DICT = {
     join: 'Join', notNow: 'Not now',
     pairedBuddies: 'Paired', buddyNearby: 'Nearby', buddyAway: 'Not nearby',
     requestSession: 'Request a session', forgetBuddy: 'Forget this buddy',
+    rejoinWorkout: 'Rejoin the workout',
     askSent: 'Asked {name} — waiting for an answer…', askDeclined: '{name} said not right now',
     joinAskTitle: 'Can I join?', joinAskBody: '{name} would like to join {routine}.',
     joinAskIdleBody: '{name} would like to train with you.',
@@ -385,6 +386,7 @@ export const DICT = {
     restOverTitle: 'Rest is over', restOverBody: 'Your next set is up.',
     // Names the Android notification channel, in the phone's own settings.
     restAlertChannel: 'Rest timer',
+    sessionChannel: 'Active workout', sessionOngoing: 'Workout running — tap to come back.',
     privacy: 'Privacy', trainAlone: 'Train alone',
     trainAloneHint:
       'Hides everything to do with a training partner and switches the radio off. The people you have paired with are remembered.',
@@ -737,6 +739,7 @@ export const DICT = {
     join: 'Mitmachen', notNow: 'Jetzt nicht',
     pairedBuddies: 'Gekoppelt', buddyNearby: 'In der Nähe', buddyAway: 'Nicht in der Nähe',
     requestSession: 'Training anfragen', forgetBuddy: 'Diesen Partner vergessen',
+    rejoinWorkout: 'Wieder einsteigen',
     askSent: '{name} gefragt — warte auf Antwort…', askDeclined: '{name} sagt: gerade nicht',
     joinAskTitle: 'Darf ich mitmachen?', joinAskBody: '{name} möchte bei {routine} mitmachen.',
     joinAskIdleBody: '{name} möchte mit dir trainieren.',
@@ -785,6 +788,7 @@ export const DICT = {
     restAlertHint: 'Erreicht dich auch bei gesperrtem Bildschirm oder in der Tasche. Die Benachrichtigung verschwindet von selbst, sobald du die App wieder öffnest.',
     restOverTitle: 'Pause vorbei', restOverBody: 'Dein nächster Satz steht an.',
     restAlertChannel: 'Pausen-Timer',
+    sessionChannel: 'Laufendes Training', sessionOngoing: 'Training läuft — zurück per Fingertipp.',
     privacy: 'Privatsphäre', trainAlone: 'Allein trainieren',
     trainAloneHint:
       'Blendet alles rund um Trainingspartner aus und schaltet das Radio ab. Wer gekoppelt ist, bleibt gespeichert.',

@@ -251,6 +251,14 @@ export type BuddyProgress = {
   first?: FirstUpChoice;
   bids?: Record<string, Bid>;
   /**
+   * Which side of the shared session the sender is. Read by exactly one
+   * thing: `rejoinSession`, which takes the opposite — a phone whose app died
+   * mid shared workout re-attaches as the complement of whoever kept going,
+   * instead of guessing. Optional like `first` and `bids`: an older build
+   * sends none, and the re-join falls back to the role the session persisted.
+   */
+  role?: 'host' | 'guest';
+  /**
    * Seconds left on the sender's own rest **as this message was built** — 0 or
    * absent when they aren't resting. Deliberately a remainder rather than the
    * `{ at, skipped }` the sender holds: `at` is a stamp on *their* `elapsed`,
@@ -288,7 +296,12 @@ type ProgressSource = {
 export const progressOf = (
   session: ProgressSource,
   activeIndex: number,
-  shared: { modes: Record<string, TurnChoice>; first: FirstUpChoice; bids: Record<string, Bid> },
+  shared: {
+    modes: Record<string, TurnChoice>;
+    first: FirstUpChoice;
+    bids: Record<string, Bid>;
+    role?: 'host' | 'guest' | null;
+  },
   finished = false,
   restLeft = 0,
   deps?: ExClosure
@@ -300,6 +313,7 @@ export const progressOf = (
   modes: shared.modes,
   first: shared.first,
   bids: shared.bids,
+  ...(shared.role ? { role: shared.role } : {}),
   rest: finished ? 0 : Math.max(0, Math.round(restLeft)),
   // Only when there is something to carry: a session of seeded exercises adds
   // nothing to the wire, and the field stays as absent as it is on a build
@@ -798,6 +812,9 @@ const cleanProgress = (v: unknown): BuddyProgress | null => {
   if (first) prog.first = first;
   const bids = cleanBids(v.bids);
   if (bids) prog.bids = bids;
+  // Rebuilt field-by-field like everything here, so the new field has to be
+  // named or an updated sender's role would be stripped on arrival.
+  if (v.role === 'host' || v.role === 'guest') prog.role = v.role;
   const deps = cleanClosure(v.deps);
   if (deps) prog.deps = deps;
   // A day's worth of headroom over any rest anybody sets, which is all this

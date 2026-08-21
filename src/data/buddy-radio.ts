@@ -28,6 +28,14 @@ export type RadioEvents = {
   onDisconnected(e: { endpointId: string }): void;
   onPayload(e: { endpointId: string; data: string }): void;
   onPayloadSent(e: { endpointId: string; payloadId: string }): void;
+  /**
+   * A payload Nearby accepted but could not deliver. `sendPayload` resolving
+   * only means "enqueued", so this is the one signal that a link is dead while
+   * `onDisconnected` still hasn't fired — the zombie case. A locked phone
+   * never trips it: its process still receives natively. An older native
+   * build simply never emits it, and the listener sits idle.
+   */
+  onPayloadFailed(e: { endpointId: string; payloadId: string }): void;
 };
 
 export type Radio = {

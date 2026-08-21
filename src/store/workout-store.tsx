@@ -660,9 +660,11 @@ type Patch = Partial<State> | ((s: State) => Partial<State> | null);
 /* ── persistence ──────────────────────────────────────────────────────────
  *
  * The durable slice of state, as one JSON blob in AsyncStorage. Everything
- * not listed is transient UI (open overlays, the live session, the clock) and
- * deliberately reseeds. `buddy` stays out too: it names a live Bluetooth
- * connection, and a connection does not survive an app restart.
+ * not listed is transient UI (open overlays) and deliberately reseeds. The
+ * live session rides in the blob too — not because it is diary, but because
+ * an accidentally closed app must not cost a workout (see the LIVE keys
+ * below). `buddy` stays out: it names a live Bluetooth connection, and a
+ * connection does not survive an app restart.
  */
 
 // Keeps the pre-Spotter name: this key is where the training already logged on
@@ -690,9 +692,32 @@ const PERSIST = [
   'setups', 'videos', 'lang', 'groups', 'kinds', 'images', 'exEdits', 'cueEdits',
   'knownBuddies', 'buddyIds', 'buddySecrets', 'selfId', 'themeMode', 'theme', 'restSeconds', 'firstUpDefault',
   'haptics', 'restAlert', 'privateMode', 'onboarded', 'style', 'level', 'coach', 'tips',
+  // The LIVE keys — crash recovery, not diary (additive like everything else,
+  // so no version bump). A swiped-away app or a process death mid-workout used
+  // to lose every ticked set; now the session comes back. `elapsed` is special
+  // twice over: the dirty check below skips it so the clock alone never
+  // schedules a write, and `flush` stamps the blob with `savedAt` so hydration
+  // can add the wall gap back — the clock is wall-anchored, so stored plus gap
+  // is the second the interval would have reached. `sessionRole` rides along
+  // for one reader: a session resumes *solo*, and `rejoinSession` needs to
+  // know which side of the shared workout this phone was — the connection
+  // itself is still never persisted.
+  'session', 'active', 'elapsed', 'rest', 'sessionRole',
 ] as const satisfies readonly (keyof State)[];
 
 type Persisted = Pick<State, (typeof PERSIST)[number]>;
+
+/**
+ * The crash-recovery keys, named so backups can refuse them: a backup restored
+ * on another phone must not open a phantom workout, and a restore must not
+ * reach into one in progress. Both directions go through `dropLive`.
+ */
+const dropLive = (
+  o: Persisted
+): Omit<Persisted, 'session' | 'active' | 'elapsed' | 'rest' | 'sessionRole'> => {
+  const { session: _s, active: _a, elapsed: _e, rest: _r, sessionRole: _o, ...durable } = o;
+  return durable;
+};
 
 const pickPersisted = (s: State): Persisted => {
   const out = {} as Persisted;
@@ -721,6 +746,12 @@ const PERSIST_SHAPE: Record<
   firstUpDefault: 'string', haptics: 'boolean', restAlert: 'boolean',
   privateMode: 'boolean', onboarded: 'boolean', style: 'string',
   level: 'string', coach: 'object', tips: 'object',
+  // `session` and `rest` are object-or-null, and 'object' is exactly the
+  // right filter for that: a stored null fails it, the key is dropped, and
+  // the seeded null stands — which is what null meant. `sessionRole`'s
+  // 'string' does the same for its null.
+  session: 'object', active: 'number', elapsed: 'number', rest: 'object',
+  sessionRole: 'string',
 };
 
 const fitsShape = (v: unknown, shape: (typeof PERSIST_SHAPE)[keyof typeof PERSIST_SHAPE]) =>
@@ -744,7 +775,46 @@ const filterPersisted = (raw: unknown): Partial<State> => {
   // The plan's two sub-keys are load-bearing where every other durable key's
   // rows are the mutators' business — see `asPlan`.
   if ('plan' in out) out.plan = asPlan(out.plan);
+  // A session's `list` is load-bearing the same way — everything that resumes
+  // one maps over it. And the three companion keys describe a session: with
+  // none to resume they are stale readings from one already finished, and the
+  // seeded defaults stand instead.
+  if (out.session && !Array.isArray((out.session as { list?: unknown }).list))
+    delete out.session;
+  if (!out.session) {
+    delete out.active;
+    delete out.elapsed;
+    delete out.rest;
+    delete out.sessionRole;
+  }
+  // The role is a closed pair, not any string a mangled blob happens to hold.
+  if ('sessionRole' in out && out.sessionRole !== 'host' && out.sessionRole !== 'guest')
+    delete out.sessionRole;
   return out as Partial<State>;
+};
+
+/**
+ * Wake a session that survived the process. `savedAt` is the wall moment the
+ * blob was written (stamped by `flush`); the clock is wall-anchored, so
+ * elapsed-at-last-write plus the gap since is the second the interval would
+ * have reached — and `rest`, measured in `elapsed` ticks, comes back
+ * mid-countdown for free. Resumed *minimized*: the app opens on Today with
+ * the hero's "Back to workout ›" — exactly where backing out of a live
+ * session lands — rather than teleporting into the overlay.
+ */
+const resumeSession = (raw: unknown, data: Partial<State>): Partial<State> => {
+  if (!data.session) return data;
+  const savedAt = (raw as Record<string, unknown>).savedAt;
+  const gap =
+    typeof savedAt === 'number' && Number.isFinite(savedAt)
+      ? Math.max(0, Math.floor((Date.now() - savedAt) / 1000))
+      : 0;
+  return {
+    ...data,
+    elapsed: (data.elapsed ?? 0) + gap,
+    active: Math.min(data.active ?? 0, Math.max(0, data.session.list.length - 1)),
+    sessionMin: true,
+  };
 };
 
 /**
@@ -1328,8 +1398,10 @@ function useWorkoutState() {
       let held: string | null = null;
       try {
         held = await AsyncStorage.getItem(STORAGE_KEY);
-        if (held) data = filterPersisted(JSON.parse(held));
-        else {
+        if (held) {
+          const raw: unknown = JSON.parse(held);
+          data = resumeSession(raw, filterPersisted(raw));
+        } else {
           // No v4 blob yet — walk back through the older keys, lifting
           // whatever is there through every migration since. Each key is left
           // where it is; the next save writes v4 alongside it.
@@ -1383,7 +1455,13 @@ function useWorkoutState() {
     if (!slice) return;
     pendingRef.current = null;
     savedRef.current = slice;
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(slice)).catch(() => {});
+    // `savedAt` rides beside the durable keys: the wall moment this blob was
+    // written, which is what lets `resumeSession` advance the clock by the
+    // time spent dead. Not a State key — nothing renders it, and stamping it
+    // here keeps it honest about *this* write rather than some earlier tick.
+    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ ...slice, savedAt: Date.now() })).catch(
+      () => {}
+    );
   }, []);
 
   useEffect(() => {
@@ -1391,9 +1469,13 @@ function useWorkoutState() {
     const slice = pickPersisted(state);
     const last = pendingRef.current ?? savedRef.current;
     // Every mutator is copy-on-write, so per-key reference equality is exact.
-    // Without it the session clock — durable in nothing — cost a full-blob
-    // serialize and disk write every second of every workout.
-    if (!last || PERSIST.some((k) => slice[k] !== last[k])) pendingRef.current = slice;
+    // `elapsed` is skipped on purpose: the clock ticks every second, and a
+    // full-blob serialize and disk write per second is the cost this check
+    // exists to avoid. Every write something else earns carries the clock as
+    // of that moment, and `savedAt` plus the wall gap at hydration makes up
+    // whatever the last one missed (see `resumeSession`).
+    if (!last || PERSIST.some((k) => k !== 'elapsed' && slice[k] !== last[k]))
+      pendingRef.current = slice;
     if (!pendingRef.current) return;
     const id = setTimeout(flush, 400);
     return () => clearTimeout(id);
@@ -2091,9 +2173,13 @@ function useWorkoutState() {
 
   /* — backup — */
 
-  /** The durable slice, ready to be wrapped in an envelope and written out. */
+  /**
+   * The durable slice, ready to be wrapped in an envelope and written out.
+   * Minus the LIVE keys: they are crash recovery, not diary, and a backup
+   * restored on another phone must not open a phantom workout there.
+   */
   const exportState = (): Record<string, unknown> =>
-    pickPersisted(state) as unknown as Record<string, unknown>;
+    dropLive(pickPersisted(state)) as unknown as Record<string, unknown>;
 
   /**
    * Take a backup's word for everything durable.
@@ -2113,7 +2199,10 @@ function useWorkoutState() {
     // "migrate forward" has no backward direction. Refused rather than loaded
     // raw; the app updates, the file doesn't. The screen says so.
     if (env.v > STORAGE_VERSION) return null;
-    const restored = { ...pickPersisted(initialState), ...migrateBlob(env.data, env.v) };
+    // `dropLive` on the way in too: the seeded side now carries the LIVE keys
+    // (session: null included), and patching those through would end a workout
+    // in progress — the one thing a restore has always promised not to touch.
+    const restored = dropLive({ ...pickPersisted(initialState), ...migrateBlob(env.data, env.v) });
     patch(restored);
     // The envelope proves the file is ours, not that every key inside it
     // survived whatever edited it since.
@@ -2264,6 +2353,45 @@ function useWorkoutState() {
    */
   const requestSession = (name: string) =>
     patch({ buddy: name, joinSent: { to: name, state: 'waiting' } });
+
+  /**
+   * Re-attach the live session to the buddy's still-running shared one — the
+   * way back in after this phone's app died mid shared workout. A session
+   * resumes *solo* on purpose (the LIVE keys carry no connection), so
+   * re-joining is an act: a button on the buddy's roster row, drawn while
+   * their shared broadcasts are flowing. Local state only — the buddy's phone
+   * never dropped anything, so the moment `sessionShared` flips, this phone's
+   * own broadcasts resume and the two screens converge: their next progress
+   * message is whole state by design, and `mergeTurns` / `mergeFirstUp`
+   * already decide which side's reset defaults yield.
+   *
+   * The role comes from their broadcast first — they say which side they are,
+   * this phone takes the other. An older build sends none, and the role the
+   * session persisted stands in (right whenever the resumed session is the
+   * one that was shared); 'guest' is the last resort rather than a coin flip,
+   * because the survivor kept the session running the whole time this phone
+   * was gone.
+   */
+  const rejoinSession = () =>
+    patch((s) => {
+      if (!s.session || s.sessionShared || !s.buddy || !s.buddyProgress) return null;
+      const theirs = s.buddyProgress.role;
+      const role: 'host' | 'guest' = theirs
+        ? theirs === 'host'
+          ? 'guest'
+          : 'host'
+        : (s.sessionRole ?? 'guest');
+      return {
+        sessionShared: true,
+        sessionRole: role,
+        buddyJoin: 'joined' as const,
+        myBids: {},
+        // Land in the workout, not on the row that was tapped — the overlay
+        // reappearing over whatever tab this is, buddy lines and all, is the
+        // whole confirmation the tap needs.
+        sessionMin: false,
+      };
+    });
 
   /* — co-created routines (build one together) — */
 
@@ -2795,6 +2923,7 @@ function useWorkoutState() {
     endPairing,
     forgetBuddy,
     requestSession,
+    rejoinSession,
     applyOnboarding,
     addPlan,
     editPlan,

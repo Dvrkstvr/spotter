@@ -41,7 +41,41 @@ import {
 import { myName, restLeftOf, Session, State, Store, useStore } from '@/store/workout-store';
 
 /** The shared registers a progress message carries beside the set counts. */
-const sharedOf = (s: State) => ({ modes: s.turnModes, first: s.firstUp, bids: s.myBids });
+const sharedOf = (s: State) => ({
+  modes: s.turnModes,
+  first: s.firstUp,
+  bids: s.myBids,
+  // Which side this phone is, for a crashed buddy's re-join to take the
+  // opposite of — see `rejoinSession`. Broadcasts only run while the session
+  // is shared, where the role is always set.
+  role: s.sessionRole,
+});
+
+/**
+ * How often the reconnect ticker re-tries, and how often a failed
+ * advertising/discovery start is re-kicked. Nearby operations are cheap;
+ * five seconds is fast enough that a healed link feels automatic and slow
+ * enough not to spam a Bluetooth stack that is still settling.
+ */
+const RETRY_MS = 5000;
+/**
+ * Ticks the non-preferred side waits before requesting anyway. Long enough
+ * that the preferred side almost always gets there first, short enough that
+ * one-sided discovery — common over Bluetooth — never becomes a deadlock.
+ */
+const GRACE_TICKS = 3;
+
+/**
+ * Which side opens the reconnect. Both phones run the same code, so both used
+ * to request the moment they saw each other, and Nearby fails a crossed pair
+ * of requests more often than it resolves one — each failure edge-triggered
+ * into another round of the same collision. One side is *preferred*: the
+ * lexicographically smaller install id, which both phones can compute alone
+ * because both ids are in the advertised names. The other side holds back for
+ * `GRACE_TICKS` and then tries too (see the ticker) — a preference, not a
+ * veto. A peer advertising no id (an older build) is never deferred to.
+ */
+const initiator = (s: State, peer: PeerIdentity) => !peer.id || s.selfId < peer.id;
 
 export function BuddyRadio() {
   const store = useStore();
@@ -83,19 +117,64 @@ export function BuddyRadio() {
     const r = radio;
     if (!r || !active) return;
     let alive = true;
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    // Nearby can refuse a start in the seconds after a link drops — the
+    // Bluetooth stack is still settling — and a swallowed failure used to
+    // leave the radio silent until `active` next toggled, which after a
+    // mid-workout drop is never. So each half re-kicks itself until it takes;
+    // a late double-start fails with STATUS_ALREADY_ADVERTISING and is
+    // swallowed like every other refusal.
+    const kick = (go: () => Promise<void>) => {
+      go().catch(() => {
+        if (alive) timers.push(setTimeout(() => kick(go), RETRY_MS));
+      });
+    };
     ensureRadioPermissions().then((ok) => {
       if (!ok || !alive) return;
-      const st = ref.current.s;
-      r.startAdvertising(encodePeerName(st.selfId, myName(st))).catch(() => {});
-      r.startDiscovery().catch(() => {});
+      kick(() => r.startAdvertising(encodePeerName(ref.current.s.selfId, myName(ref.current.s))));
+      kick(() => r.startDiscovery());
     });
     return () => {
       alive = false;
+      timers.forEach(clearTimeout);
       r.stopAdvertising().catch(() => {});
       r.stopDiscovery().catch(() => {});
       ref.current.patch({ nearbyPeers: [] });
     };
   }, [active]);
+
+  /* — reconnection: a ticker, because the found-event fires once — */
+
+  // The only connection this phone opens by itself is back to the buddy of
+  // the live pairing. `onEndpointFound` covers the buddy *reappearing*, but
+  // the event is edge-triggered: a link that drops while the endpoint stays
+  // in Nearby's found-set never fires it again, and a `requestConnection`
+  // that failed was simply swallowed. The ticker is the level-triggered half:
+  // while the pairing stands and the link is down, whoever is visible in
+  // `nearbyPeers` and matches the buddy gets re-requested until one attempt
+  // lands. The non-preferred side (see `initiator`) sits out the first
+  // `GRACE_TICKS` visible ticks so the crossed-request collision that used to
+  // eat most reconnects can't happen, then tries anyway.
+  const wantBuddy = radio !== null && store.s.buddy !== null && store.s.buddyEndpoint === null;
+
+  useEffect(() => {
+    const r = radio;
+    if (!r || !wantBuddy) return;
+    let seen = 0;
+    const id = setInterval(() => {
+      const st = ref.current;
+      const name = st.s.buddy;
+      if (!name || st.s.buddyEndpoint !== null) return;
+      const peer = st.s.nearbyPeers.find((p) => matchesBuddy(name, st.s.buddyIds[name], p));
+      if (!peer) return;
+      seen += 1;
+      if (!initiator(st.s, peer) && seen <= GRACE_TICKS) return;
+      r.requestConnection(encodePeerName(st.s.selfId, myName(st.s)), peer.endpointId).catch(
+        () => {}
+      );
+    }, RETRY_MS);
+    return () => clearInterval(id);
+  }, [wantBuddy]);
 
   /* — shared-session transitions: host on start, notify on end — */
 
@@ -263,6 +342,36 @@ export function BuddyRadio() {
     const r = radio;
     if (!r) return;
 
+    // Consecutive undelivered payloads per endpoint, reset by anything that
+    // proves the link alive (a delivery, a receive). Effect-local like the
+    // listeners that share it: the wiring mounts once.
+    const flaky = new Map<string, number>();
+
+    // A link is gone — Nearby said so (onDisconnected), or this phone stopped
+    // believing in it (undelivered payloads, see onPayloadFailed). One
+    // teardown for both, so the two paths cannot drift: the handshake state
+    // dies with the link — a fresh connection re-derives digits and must
+    // re-prove the secret — and clearing buddyEndpoint is what flips `active`
+    // back on, which restarts advertising, discovery and the ticker.
+    const dropLink = (endpointId: string) => {
+      meta.current.delete(endpointId);
+      authed.current.delete(endpointId);
+      flaky.delete(endpointId);
+      ref.current.patch((s) =>
+        s.buddyEndpoint === endpointId
+          ? {
+              buddyEndpoint: null,
+              buddySyncPending: false,
+              // An ask that ended in a dropped link is not a yes. Let the
+              // pairing go rather than chase them down and ask again —
+              // this is also the backstop for a refusal that never arrived.
+              ...(s.joinSent?.state === 'waiting' ? { buddy: null, joinSent: null } : {}),
+              ...(s.sessionShared ? {} : { buddySnapshot: null }),
+            }
+          : null
+      );
+    };
+
     // Trust an endpoint: mark it authenticated, make it the buddy link, and
     // send the two things that used to go out unconditionally on connect — our
     // snapshot and any pending join-ask. Called on a code-gated first pairing
@@ -302,11 +411,15 @@ export function BuddyRadio() {
         // connection this phone ever opens by itself: everyone else on the
         // roster is seen and listed, and stays that way until one of the two
         // asks for a session and the other one answers. Matched by install
-        // id first, so a renamed buddy is still recognised.
+        // id first, so a renamed buddy is still recognised. Only the
+        // preferred side requests here — the other waits for the ticker's
+        // grace to run out, so the two found-events firing together can't
+        // cross requests (see `initiator`).
         if (
           !st.s.buddyEndpoint &&
           st.s.buddy !== null &&
-          matchesBuddy(st.s.buddy, st.s.buddyIds[st.s.buddy], peer)
+          matchesBuddy(st.s.buddy, st.s.buddyIds[st.s.buddy], peer) &&
+          initiator(st.s, peer)
         ) {
           r.requestConnection(encodePeerName(st.s.selfId, myName(st.s)), e.endpointId).catch(
             () => {}
@@ -429,27 +542,37 @@ export function BuddyRadio() {
         ).catch(() => {});
       }),
 
-      r.addListener('onDisconnected', (e) => {
-        // The handshake state for this link dies with it — a fresh connection
-        // re-derives digits and must re-prove the secret.
-        meta.current.delete(e.endpointId);
-        authed.current.delete(e.endpointId);
-        ref.current.patch((s) =>
-          s.buddyEndpoint === e.endpointId
-            ? {
-                buddyEndpoint: null,
-                buddySyncPending: false,
-                // An ask that ended in a dropped link is not a yes. Let the
-                // pairing go rather than chase them down and ask again —
-                // this is also the backstop for a refusal that never arrived.
-                ...(s.joinSent?.state === 'waiting' ? { buddy: null, joinSent: null } : {}),
-                ...(s.sessionShared ? {} : { buddySnapshot: null }),
-              }
-            : null
-        );
+      r.addListener('onDisconnected', (e) => dropLink(e.endpointId)),
+
+      // Anything delivered proves the link alive.
+      r.addListener('onPayloadSent', (e) => flaky.delete(e.endpointId)),
+
+      // A FAILURE transfer update is Nearby admitting the bytes never arrived
+      // — transport-level, so a locked phone (whose process still receives
+      // natively) never trips it. This is the zombie case: the peer died
+      // without a clean disconnect, `onDisconnected` never fired, and a set
+      // buddyEndpoint keeps `active` false — no advertising, no discovery,
+      // and a buddy who comes back can never find this phone again. Two in a
+      // row with nothing delivered between them and the failure is believed
+      // over the connection: tear the link down ourselves, which is exactly
+      // what restarts the radio and the reconnect ticker. A false positive
+      // costs a silent re-link seconds later; the old behaviour cost the rest
+      // of the workout.
+      r.addListener('onPayloadFailed', (e) => {
+        const n = (flaky.get(e.endpointId) ?? 0) + 1;
+        flaky.set(e.endpointId, n);
+        if (n < 2) return;
+        // Any endpoint, not just the buddy link: a hello that can't be
+        // delivered is a handshake that will never finish, and dropLink's
+        // patch already limits itself to the link that was the buddy's.
+        r.disconnectFrom(e.endpointId).catch(() => {});
+        // Nearby may not echo a disconnect for an endpoint it has already
+        // lost track of, so don't wait for one.
+        dropLink(e.endpointId);
       }),
 
       r.addListener('onPayload', (e) => {
+        flaky.delete(e.endpointId);
         const msg = parseBuddyMessage(e.data);
         if (!msg) return;
         const st = ref.current;

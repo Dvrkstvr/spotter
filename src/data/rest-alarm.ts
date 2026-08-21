@@ -106,6 +106,13 @@ function init(): Promise<Api | null> {
       // of the first frame. Android covers the common half by itself: content is
       // auto-cancel, so a tapped alarm has already gone.
       await mod.dismissAllNotificationsAsync();
+      // Same argument one step earlier in an alarm's life: anything still
+      // *scheduled* now was scheduled by a previous process, whose rest either
+      // resumed with the session (its re-arm schedules a fresh alarm right
+      // after this — without the sweep, two announce one rest) or died with
+      // it. A pending alarm this process owns can't be caught here: `init`
+      // runs once, before the first `scheduleRestAlarm` ever resolves.
+      await mod.cancelAllScheduledNotificationsAsync();
       api = mod;
       return mod;
     } catch {

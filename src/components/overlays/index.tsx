@@ -44,6 +44,7 @@ import { SessionOverlay } from '@/components/overlays/session-overlay';
 import { SettingsOverlay } from '@/components/overlays/settings-overlay';
 import { SummaryModal } from '@/components/overlays/summary-modal';
 import { RestAlarm } from '@/components/rest-alarm';
+import { SessionKeepalive } from '@/components/session-keepalive';
 import { useStore } from '@/store/workout-store';
 
 export function Overlays() {
@@ -63,6 +64,10 @@ export function Overlays() {
           whether or not anyone is training with you, and it has to survive the
           session being tucked behind the tabs. Renders nothing. */}
       <RestAlarm />
+      {/* Same footing as <RestAlarm> and for the same reasons: the foreground
+          service belongs to the session, not to the buddy half or to whether
+          the overlay is showing. Renders nothing. */}
+      <SessionKeepalive />
       {/* 91 when it has something to say, nothing at all the rest of the time.
           Mounted unconditionally because the file it answers for arrives before
           any flag could be set — on a cold start, before React exists. */}

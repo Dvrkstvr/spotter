@@ -42,6 +42,12 @@ class NearbyBuddyModule : Module() {
     override fun onPayloadTransferUpdate(endpointId: String, update: PayloadTransferUpdate) {
       if (update.status == PayloadTransferUpdate.Status.SUCCESS) {
         sendEvent("onPayloadSent", mapOf("endpointId" to endpointId, "payloadId" to update.payloadId.toString()))
+      } else if (update.status == PayloadTransferUpdate.Status.FAILURE) {
+        // Delivery failed at the transport. sendPayload's own Task resolving
+        // only means the payload was enqueued, so this update is the one place
+        // Nearby admits the bytes never arrived — which the JS side reads as
+        // "this link is dead even though onDisconnected hasn't fired".
+        sendEvent("onPayloadFailed", mapOf("endpointId" to endpointId, "payloadId" to update.payloadId.toString()))
       }
     }
   }
@@ -98,7 +104,8 @@ class NearbyBuddyModule : Module() {
       "onConnectionFailed",
       "onDisconnected",
       "onPayload",
-      "onPayloadSent"
+      "onPayloadSent",
+      "onPayloadFailed"
     )
 
     AsyncFunction("startAdvertising") { name: String, promise: Promise ->

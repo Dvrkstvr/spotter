@@ -1259,6 +1259,57 @@ Keep these; they're decisions, not drift. Each is commented at its site.
   outlive a `no` — decline disconnects. Nobody ends up connected to anybody
   they didn't answer for, which is why the roster button asks for a session
   rather than offering to connect.
+- **The reconnect is level-triggered, tie-broken, and believed over the
+  connection.** Three fixes to a heal that used to be one swallowed attempt,
+  all in `<BuddyRadio>`:
+  - **A ticker, because the found-event fires once.** `onEndpointFound` covers
+    the buddy *reappearing*; a link that drops while the endpoint stays in
+    Nearby's found-set never fires it again, and a failed `requestConnection`
+    was simply swallowed. While the pairing stands and the link is down, the
+    ticker re-requests whoever in `nearbyPeers` matches the buddy, every
+    `RETRY_MS`, until one attempt lands. Failed advertising/discovery starts
+    re-kick themselves the same way — Nearby refuses starts while the
+    Bluetooth stack is still settling after a drop, and a swallowed refusal
+    left the radio silent until `active` next toggled, which mid-workout is
+    never.
+  - **One side initiates** (`initiator`): both phones running the same code
+    used to request the moment they saw each other, and Nearby fails a
+    crossed pair more often than it resolves one. The lexicographically
+    smaller install id is preferred — computable alone on both phones, since
+    both ids are in the advertised names — and the other side holds back for
+    `GRACE_TICKS` before trying anyway: a preference, not a veto, because
+    Bluetooth discovery is not symmetric and a veto would be a deadlock.
+  - **Two undelivered payloads kill a link** (`onPayloadFailed`, a new native
+    event forwarding Nearby's FAILURE transfer update — `sendPayload`
+    resolving only ever meant *enqueued*). This is the zombie case: the peer
+    died without a clean disconnect, `onDisconnected` never fired, and a set
+    `buddyEndpoint` kept `active` false — no advertising, no discovery, and a
+    buddy who came back could never find this phone again. A locked phone
+    never trips it (its process still receives natively, so deliveries
+    succeed). `dropLink` is the one teardown both paths share; a false
+    positive costs a silent re-link seconds later. Native change — both
+    phones rebuild — but not a protocol change: an older peer sends nothing
+    new and is sent nothing new.
+- **Re-joining a shared workout is a button, not a resurrection.** A phone
+  whose app died mid shared session resumes it *solo* (see the LIVE keys),
+  while the pairing heals by itself: the survivor's ticker re-requests, the
+  secret authenticates silently, and their broadcasts — still flowing, because
+  a link drop never cleared their `sessionShared` — fill this phone's
+  `buddyProgress` even though it is solo. That standing state is what the
+  roster row reads: **Rejoin the workout** shows while the link is up, this
+  phone holds an unshared session, and their unfinished shared broadcasts are
+  arriving. The tap (`rejoinSession`) is local state only — `sessionShared`
+  back on, `buddyJoin` joined, and the session surfaced — because the whole
+  protocol is whole-state: this phone's broadcasts resume on the flip, their
+  next message resyncs everything else, and `mergeTurns` / `mergeFirstUp`
+  already decide which side's reset registers yield. The role is taken as the
+  *opposite* of the one their progress now carries (`BuddyProgress.role`, an
+  additive field with the usual older-build story), falling back to the
+  persisted `sessionRole`, then 'guest' — the survivor kept the session
+  running, so the tie honours them. Auto-re-attaching was considered and
+  turned down for the reason `adoptBuddyEx` offers instead of writing: the
+  other phone does not get to decide that your resumed workout is shared
+  again.
 - **Joining goes both ways.** `sessionInvite` is the host offering; `joinAsk` is
   the other side asking, and it doubles as the request that opens the link.
   Mid-routine the *invite is the yes* (no `joinReply` — sending one would clear
@@ -1339,9 +1390,59 @@ Keep these; they're decisions, not drift. Each is commented at its site.
   in; lazy alone only moves the bar from launch to the first workout. What that
   costs is `cancelRestAlarm` / `dismissRestAlarms`, which run at mount and may
   therefore never load it: they clear through an already-loaded module, and
-  `init` sweeps the tray itself to cover the cold start after a process death.
-  Known hole: the live session still isn't persisted, so a process death while
-  the phone is locked loses the workout even though the alarm still fires.
+  `init` sweeps the tray itself to cover the cold start after a process death —
+  the *scheduled* alarms too, because a resumed rest (see the live-session
+  bullet below) re-arms its remainder, and without the sweep the dead
+  process's pending alarm would announce the same rest twice.
+- **The live session survives the process** (`session` / `active` / `elapsed` /
+  `rest` / `sessionRole` ride in `PERSIST` — the LIVE keys, additive, so no
+  version bump). An
+  accidentally closed app or a process death mid-workout used to cost every
+  ticked set. Four rules hold it together:
+  - **The clock alone never schedules a write.** `elapsed` is skipped by the
+    saver's dirty check — a write per second is exactly what that check exists
+    to avoid — and rides along on the writes other keys earn. `flush` stamps
+    the blob with `savedAt`, and `resumeSession` adds the wall gap back: the
+    clock is wall-anchored, so stored plus gap is the second the interval
+    would have reached, and `rest`, measured in `elapsed` ticks, comes back
+    mid-countdown for free.
+  - **A resumed session lands minimized** (`sessionMin`): the app opens on
+    Today with the hero's **Back to workout ›** — the same place backing out
+    of a live session lands — rather than teleporting into the overlay.
+  - **Resume is solo on purpose.** The buddy link was never persisted and
+    still isn't; re-linking is the radio's business, and a session that was
+    shared simply comes back as yours. The way back into the *shared* half is
+    an act — **Rejoin the workout** on the buddy's roster row (see the buddy
+    bullets) — which is why `sessionRole` is the one buddy-shaped LIVE key:
+    the resumed session has to remember which side of the workout it was.
+  - **Backups carry none of it** (`dropLive`, both directions): the LIVE keys
+    are crash recovery, not diary. A backup restored on another phone must not
+    open a phantom workout, and a restore must not end one in progress — which
+    matters now that the seeded side of `importState` holds `session: null`.
+- **A live session runs under a foreground service**
+  (`modules/expo-session-service`, `<SessionKeepalive>` in `Overlays` — beside
+  `<RestAlarm>`, outside the `social` gate and the session overlay, because
+  the service belongs to the session, not to the buddy half or to whether the
+  overlay is showing). Three things it buys, in order: the process survives
+  backgrounding, the screen locking and even an accidental swipe-away — RN's
+  JS lives in the process, not the activity, so the clock, the countdown and
+  the radio keep running in a pocket; a **partial wakelock keeps the CPU on
+  only while the pairing needs the radio breathing** (`keepAwake` =
+  shared-or-buddy — a suspended JS thread can't broadcast or heal a link,
+  where a solo session's clock is wall-anchored and its alarm is already
+  Android's, so there the battery would buy nothing); and the ongoing
+  notification is the way back in — silent, low importance, the system
+  chronometer counting from `now − elapsed` so it matches the in-app clock
+  without ever re-posting. Repeated starts re-post the same notification id,
+  which is how the title, a language switch and the wakelock follow state;
+  stopping is the session ending, and an orphan is impossible because the
+  service dies with the process it shares. The FGS type is `specialUse` — the
+  same sideload bet as `USE_EXACT_ALARM`: `connectedDevice` would be the
+  honest label but requires a *granted* Bluetooth runtime permission, which a
+  solo lifter needn't have. Optional-bridged (`src/data/session-service.ts`),
+  so Expo Go degrades to the LIVE keys alone. Native, but self-contained: the
+  permissions and the `<service>` live in the module's own manifest, so no
+  prebuild — autolinking finds it, both phones just rebuild.
 - **Train alone** (`privateMode`) hides *and disables* the buddy half: the
   gate is `Overlays` unmounting `<BuddyRadio>` and the four buddy sheets, not
   hidden buttons, because the radio is what advertises and answers. Turning it

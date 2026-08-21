@@ -31,6 +31,7 @@ export default function YouScreen() {
     adoptBuddyEx,
     endPairing,
     forgetBuddy,
+    rejoinSession,
     requestSession,
   } = useStore();
   const buddyLive = useBuddyLive();
@@ -211,6 +212,19 @@ export default function YouScreen() {
                 // while this phone is connected to nobody. (That's every row —
                 // a link stops discovery, so nobody else is in range either.)
                 const canAsk = radio !== null && s.buddyEndpoint === null && !!peer;
+                // The way back into a shared workout this phone's app died out
+                // of. The gates read as a sentence: the link healed (step 2's
+                // ticker), this phone holds a resumed session that is no
+                // longer shared, and *their* shared broadcasts are flowing —
+                // which is the only way buddyProgress fills while this side is
+                // solo, so it doubles as "they are still mid-workout". Shares
+                // the action slot with canAsk, which needs the link down.
+                const canRejoin =
+                  linked &&
+                  s.session !== null &&
+                  !s.sessionShared &&
+                  s.buddyProgress !== null &&
+                  !s.buddyProgress.finished;
                 return (
                   <View key={name} style={styles.knownRow}>
                     <Text style={styles.knownName} numberOfLines={1}>
@@ -242,6 +256,14 @@ export default function YouScreen() {
                               )
                               .catch(() => {});
                         }}
+                      />
+                    )}
+                    {canRejoin && (
+                      <Btn
+                        variant="ghost"
+                        label={L.rejoinWorkout}
+                        labelStyle={styles.knownAction}
+                        onPress={() => rejoinSession()}
                       />
                     )}
                     <Pressable
