@@ -74,6 +74,74 @@ const openAt = (sets: readonly Row[]) => {
 };
 
 /**
+ * One **set** of a ledger: a row and the drops taken off it, as indexes into
+ * `sets`. `head` is the row the chain hangs from, and `ids` always starts with
+ * it.
+ *
+ * This is the unit a set number counts and a tick belongs to. A drop is not a
+ * set being logged, it is a set still being finished — so the ledger draws one
+ * block and one tick per chain, and `+ Drop set` visibly takes that tick off
+ * simply by putting an unticked line in the block.
+ *
+ * `link` is adjacency, exactly as `with` is: a `link` on row 0 has nothing
+ * above it to continue and opens a chain of its own rather than being swept
+ * from the data — the same way an orphaned pair resolves where it is read.
+ */
+export type Chain = { head: number; ids: number[] };
+
+/** Every set in a ledger, in order. `chainsOf(sets).length` is the set count. */
+export const chainsOf = (sets: readonly Row[]): Chain[] => {
+  const out: Chain[] = [];
+  for (let j = 0; j < sets.length; j++) {
+    if (j > 0 && sets[j].link && out.length) out[out.length - 1].ids.push(j);
+    else out.push({ head: j, ids: [j] });
+  }
+  return out;
+};
+
+/** The chain a row belongs to — its head, or the set it is a drop of. */
+export const chainAt = (sets: readonly Row[], j: number): Chain | null =>
+  chainsOf(sets).find((c) => c.ids.includes(j)) ?? null;
+
+/**
+ * A set is done when every line of it is.
+ *
+ * Which is the whole of "adding a drop takes the tick off": nothing writes to
+ * the row above, the new line is simply open, and one unticked line makes the
+ * set unticked. The tick that seals it is the one on the last line, and
+ * `liveIn` walks to it by itself because it already answers with the first row
+ * nobody has ticked.
+ */
+export const chainDone = (sets: readonly Row[], c: Chain) => c.ids.every((j) => sets[j].done);
+
+/**
+ * The number of the set a row belongs to, 1-based — a drop answering with the
+ * number of the set it is a line of.
+ *
+ * Anything that prints a set number reads it here rather than counting rows.
+ * `index + 1` was right only until a drop could sit in the array: after one, it
+ * counts the drop as a set and every row below it is off by one, in the digit,
+ * in *Drop from set 3*, and in the mark sheet's *Straight after set 3*.
+ */
+export const setNumberOf = (sets: readonly Row[], j: number) =>
+  chainsOf(sets).findIndex((c) => c.ids.includes(j)) + 1;
+
+/**
+ * How many sets an exercise holds, and how many are finished — chains, not
+ * rows.
+ *
+ * `n of m sets` is progress against a plan, so a drop must not inflate the
+ * denominator: an exercise that moved further from finishing every time you
+ * dropped would be measuring the wrong thing. The diary's count is the other
+ * question — a tally of efforts, with no plan to measure against — and counts
+ * every row.
+ */
+export const setCounts = (sets: readonly Row[]) => {
+  const chains = chainsOf(sets);
+  return { all: chains.length, done: chains.filter((c) => chainDone(sets, c)).length };
+};
+
+/**
  * Which round a pair is on: the lowest set index still open in either half.
  *
  * Derived, never stored — the same "first unlogged row" arithmetic the plan

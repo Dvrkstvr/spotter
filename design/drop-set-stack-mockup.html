@@ -1,0 +1,661 @@
+<title>Spotter — The drop set as one set (mockup)</title>
+<style>
+  /* Nocturne, verbatim from src/design/tokens.ts — blurple · dark, which is
+     byte-identical to the ported design palette. Ledger geometry mirrors
+     session-overlay.tsx, as in the two mockups before this one. */
+  :root {
+    --bg: #161826; --surface: #232532; --text: #e9e9ed; --accent: #9184d9;
+    --a100: #f5f4ff; --a200: #e7e5fe; --a300: #d2cefd; --a400: #b5abfc;
+    --a500: #968ae0; --a600: #796cbf; --a700: #5d5294; --a800: #423a6a; --a900: #2b2741;
+    --n100: #f3f5fe; --n300: #cfd3e5; --n400: #b2b6ca; --n500: #9397ab; --n600: #75798c;
+    --n700: #595d6c; --n800: #3f424d; --n900: #292b31;
+    --scrim: #0b0c14;
+    --divider: rgba(233, 233, 237, 0.16);
+    --rule: rgba(233, 233, 237, 0.09);
+    --wash-t8: rgba(233, 233, 237, 0.08);
+    --wash-t5: rgba(233, 233, 237, 0.05);
+    --wash-a16: rgba(145, 132, 217, 0.16);
+    --wash-a7: rgba(145, 132, 217, 0.07);
+    --warn: #f89a92;
+    --sans: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--scrim); color: var(--text); font-family: var(--sans); font-size: 15px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
+  .page { max-width: 1180px; margin: 0 auto; padding: 56px 28px 96px; }
+
+  .kicker { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); }
+  h1 { font-weight: 500; font-size: 40px; line-height: 1.12; letter-spacing: -0.015em; margin: 10px 0 14px; text-wrap: balance; }
+  h1 em { font-style: normal; color: var(--a300); }
+  h2.sec { font-weight: 500; font-size: 24px; letter-spacing: -0.015em; margin: 0 0 6px; }
+  h2.sec .n { color: var(--n700); }
+  .lede { color: var(--n400); max-width: 68ch; }
+  .lede.wide { max-width: 88ch; }
+  .lede strong { color: var(--text); font-weight: 500; }
+  .lede em, .notes em, .settled em { font-style: normal; color: var(--a300); }
+  code { font-family: var(--mono); font-size: 12.5px; color: var(--a300); background: var(--n900); border-radius: 4px; padding: 1px 5px; }
+
+  .settled { margin: 26px 0 0; border: 1px solid var(--divider); border-left: 2px solid var(--accent); border-radius: 8px; padding: 13px 16px; max-width: 88ch; }
+  .settled .h { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); }
+  .settled ul { margin: 9px 0 0; padding-left: 18px; color: var(--n400); font-size: 13.5px; display: grid; gap: 7px; }
+  .settled li::marker { color: var(--n700); }
+  .settled strong { color: var(--text); font-weight: 500; }
+  .settled.warn { border-left-color: var(--warn); }
+  .settled.warn .h { color: var(--warn); }
+
+  hr.fade { border: 0; height: 1px; margin: 54px 0; background: linear-gradient(90deg, transparent, var(--divider) 48px, var(--divider) calc(100% - 48px), transparent); }
+
+  .quad { display: grid; grid-template-columns: repeat(4, 262px); gap: 18px; margin-top: 26px; align-items: start; }
+  .duo { display: grid; grid-template-columns: repeat(2, 348px); gap: 30px; margin-top: 26px; align-items: start; }
+  .step { font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--n700); }
+  .cap { font-size: 13px; font-weight: 500; margin: 2px 0 4px; color: var(--a300); }
+  .sub { font-size: 11.5px; color: var(--n500); margin-bottom: 11px; min-height: 74px; }
+  .duo .sub { min-height: 58px; font-size: 12px; }
+  .sub b { color: var(--n300); font-weight: 500; }
+  .notes { margin-top: 24px; max-width: 86ch; }
+  .notes ul { margin: 10px 0 0; padding-left: 18px; color: var(--n400); font-size: 14px; display: grid; gap: 10px; }
+  .notes li::marker { color: var(--n700); }
+  .notes strong { color: var(--text); font-weight: 500; }
+  @media (max-width: 1140px) { .quad, .duo { grid-template-columns: 1fr; } }
+
+  /* phone frame — 262px variant for the four-up sequence */
+  .phone { background: var(--bg); border: 1px solid var(--n800); border-radius: 26px; padding: 10px 10px 0; overflow: hidden; position: relative; width: 262px; height: 520px; }
+  .phone.wide { width: 348px; height: 600px; border-radius: 30px; padding: 12px 12px 0; }
+  .phone .status { display: flex; justify-content: space-between; align-items: center; font-size: 9px; color: var(--n700); padding: 2px 5px 7px; }
+  .scr { padding: 0 3px; }
+
+  .topbar { display: flex; align-items: center; gap: 8px; padding: 2px 0 9px; }
+  .topbar .back { font-size: 15px; color: var(--n400); }
+  .chip { font-size: 10.5px; color: var(--a300); border: 1px solid var(--a700); background: var(--wash-a7); border-radius: 999px; padding: 2px 8px; font-variant-numeric: tabular-nums; }
+  .topbar .clock { margin-left: auto; font-size: 11px; color: var(--n500); font-variant-numeric: tabular-nums; }
+  .exname { font-size: 17px; font-weight: 500; letter-spacing: -0.01em; }
+  .phone.wide .exname { font-size: 19px; }
+  .exmeta { font-size: 10px; color: var(--n600); margin-top: 2px; }
+
+  /* the ledger: 16 index · 8 · 66 last · 8 · flex · 8 · flex · 8 · 34 check */
+  .colhead, .setrow { display: grid; grid-template-columns: 16px 60px 1fr 1fr 30px; gap: 7px; align-items: center; }
+  .phone.wide .colhead, .phone.wide .setrow { grid-template-columns: 16px 66px 1fr 1fr 34px; gap: 8px; }
+  .colhead { padding: 12px 2px 5px; }
+  .colhead span { font-size: 9px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--n700); }
+  .colhead .c { text-align: center; }
+  .rowwrap { margin-bottom: 5px; position: relative; }
+  .idx { font-size: 11.5px; color: var(--n600); font-variant-numeric: tabular-nums; }
+  .idx.live { color: var(--a400); }
+  .prev { font-size: 11px; color: var(--n500); font-variant-numeric: tabular-nums; }
+  .prev.dash { color: var(--n700); }
+  .cell { text-align: center; font-size: 14.5px; color: var(--text); border-bottom: 1px solid var(--n800); padding: 5px 0 4px; font-variant-numeric: tabular-nums; }
+  .cell.big { font-size: 21px; padding: 3px 0 2px; }
+  .cell.ghost { color: var(--n700); }
+  .tick { width: 21px; height: 21px; border-radius: 6px; border: 1px solid var(--n700); justify-self: center; display: grid; place-items: center; }
+  .tick.on { border-color: var(--accent); background: var(--wash-a16); }
+  .tick.live { border-color: var(--a600); height: 42px; }
+  .livebox { margin: 3px 0; padding: 7px; border: 1px solid var(--a700); border-radius: 10px; background: var(--wash-a7); }
+  .waitrow { margin-top: 6px; padding-top: 5px; border-top: 1px solid var(--rule); font-size: 11px; color: var(--n500); }
+  .waitrow .chain { color: var(--a400); }
+  .waitrow .go { color: var(--a400); }
+  .markline { display: flex; gap: 6px; margin-top: 5px; padding-left: 2px; font-size: 10.5px; }
+  .markline .empty { color: var(--n700); }
+  .addrow { display: flex; gap: 7px; margin-top: 11px; }
+  .addbtn { flex: 1; text-align: center; font-size: 11px; color: var(--n500); border: 1px dashed var(--n800); border-radius: 8px; padding: 6px 0; }
+  .addbtn.held { border-style: solid; border-color: var(--a600); color: var(--a300); background: var(--wash-a16); }
+  .cta { position: absolute; left: 10px; right: 10px; bottom: 12px; text-align: center; font-size: 13px; color: var(--accent); border: 1px solid var(--accent); border-radius: 10px; padding: 10px 0; background: var(--wash-a7); }
+  .phone.wide .cta { left: 12px; right: 12px; bottom: 14px; font-size: 14px; }
+  .summary { font-size: 10.5px; color: var(--n600); text-align: center; margin-top: 9px; font-variant-numeric: tabular-nums; }
+  .summary b { color: var(--a300); font-weight: 400; }
+  .summary s { color: var(--warn); text-decoration-color: var(--warn); }
+
+  /* ── THE STACK ──────────────────────────────────────────────────────
+     One set, however many lines it took. The block is the grid's outer
+     row: [everything else | 34px tick], and the two number lines sit in
+     the left cell sharing one tick on the right.
+
+     The columns still line up with a plain row, and that is arithmetic
+     rather than luck: a plain row spends 16 + 60 + F + F + 30 with four
+     7px gaps; the block spends (16 + 60 + F' + F' + three gaps) + 30 with
+     one gap. Both come to the same width, so F' == F exactly. */
+  .stack {
+    display: grid; grid-template-columns: 1fr 30px; gap: 7px; align-items: center;
+    border: 1px solid var(--n900); border-radius: 9px; background: var(--wash-t5);
+    /* The block bleeds 7px past the ledger on both sides — border 1 plus 6 of
+       padding — so its *content* box is the plain row's content box and every
+       column lands on the same x. Aligning by eye instead puts the stack's kg
+       4px off the column above it, which on tabular figures is visible. */
+    padding: 3px 6px; margin: 0 -7px 5px;
+  }
+  .phone.wide .stack { grid-template-columns: 1fr 34px; gap: 8px; }
+  .sline { display: grid; grid-template-columns: 16px 60px 1fr 1fr; gap: 7px; align-items: center; padding: 3px 0; }
+  .phone.wide .sline { grid-template-columns: 16px 66px 1fr 1fr; gap: 8px; }
+  .sline + .sline { border-top: 1px solid var(--rule); }
+  .sline .cell { border-bottom: none; }
+  /* The dropped line: same columns, quieter figures. It is a continuation of
+     the line above, not a second entry. */
+  .sline.drop .cell { font-size: 13.5px; color: var(--n300); }
+  .sline.drop .cell.big { font-size: 21px; color: var(--text); }
+  .fell { font-size: 11px; color: var(--a400); font-variant-numeric: tabular-nums; }
+  .phone.wide .fell { font-size: 11.5px; }
+  /* The one tick, vertically centred across however many lines the set took —
+     which is what says the set is the thing being ticked. */
+  .stack .tick { align-self: center; }
+  .stack.live { border-color: var(--a700); background: var(--wash-a7); padding: 6px; }
+  /* Only the open line wears the field's rule. A sealed line is a record and
+     an underline under it would read as somewhere still to type; the line you
+     are lifting into is the one that has to look like a field, which is the
+     same distinction the live row already draws against the rows above it. */
+  .stack.live .sline.drop .cell { border-bottom: 1px solid var(--a800); }
+
+  table.cmp { border-collapse: collapse; margin-top: 20px; font-size: 13px; width: 100%; max-width: 88ch; }
+  table.cmp th, table.cmp td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  table.cmp th { font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--n700); font-weight: 400; }
+  table.cmp td:first-child { color: var(--text); }
+  table.cmp td { color: var(--n400); }
+  table.cmp .was { color: var(--n600); }
+  table.cmp .now { color: var(--a300); }
+</style>
+
+<div class="page">
+
+<div class="kicker">Spotter · session ledger</div>
+<h1>One set, however many <em>lines it took</em></h1>
+<p class="lede wide">
+  The stack with the delta on it — and the thing that makes the stack the right
+  answer rather than a nicer drawing: <strong>a drop has no tick of its own,
+  because it is not a set being logged. It is a set still being finished.</strong>
+  Which moves the tick from the row to the set, and that is the change with
+  teeth in it.
+</p>
+
+<div class="settled">
+  <div class="h">What one tick per set decides for you</div>
+  <ul>
+    <li><strong>Adding a drop re-opens the set.</strong> If the tick belongs to
+      the set and the set is not over, the tick comes off — which is exactly
+      what pressing <i>+ Drop set</i> means: <i>I'm not done with this one</i>.
+      Nothing else in the app has to learn a new state; the block is simply
+      unticked again, and one tick at the bottom of the chain seals the whole
+      thing.</li>
+    <li><strong>A drop stops counting as a set, everywhere.</strong> The
+      progress bar, <i>3 of 4 sets</i>, the Finish button's hold, and the
+      diary's <i>4 sets</i> all count rows today, so one drop makes a four-set
+      exercise say five. Under this model they count <em>stacks</em>, and the
+      number goes back to being the one the routine asked for.</li>
+    <li><strong>Volume still counts every line.</strong> A drop is work
+      performed — 50 × 8 is 400 kg whatever it is part of — so
+      <code>totals()</code> keeps adding it. Sets are a count of efforts;
+      volume is a measure of work, and only one of them is affected by
+      the regrouping.</li>
+    <li><strong>Marks stay per line, ticks go per set.</strong> Each line keeps
+      its own left cell, so a verdict on the drop and a verdict on the working
+      set are still two different things you can record. That was the open
+      question against the stack in the last mockup, and one-tick-per-set is
+      what answers it.</li>
+  </ul>
+</div>
+
+<hr class="fade">
+
+<h2 class="sec"><span class="n">1 ·</span> The sequence</h2>
+<p class="lede wide">
+  Bench Press, four sets. Set 3 goes at 65, then drops to 50. Watch the tick.
+</p>
+
+<div class="quad">
+
+  <!-- 1 -->
+  <div>
+    <div class="step">step one</div>
+    <div class="cap">Set 3, live</div>
+    <div class="sub">
+      An ordinary row, exactly as today. Nothing about the ledger knows a drop
+      is coming, because <b>you don't know either</b> — that is the decision a
+      drop is, and it is made after the set.
+    </div>
+    <div class="phone">
+      <div class="status"><span>9:41</span><span>▮▮▮</span></div>
+      <div class="scr">
+        <div class="topbar"><span class="back">‹</span><span class="chip">3 / 4</span><span class="clock">28:14</span></div>
+        <div class="exname">Bench Press</div>
+        <div class="exmeta">Chest · Barbell</div>
+        <div class="colhead"><span>#</span><span>Last time</span><span class="c">kg</span><span class="c">Reps</span><span></span></div>
+
+        <div class="rowwrap"><div class="setrow">
+          <span class="idx">1</span><span class="prev">70 × 8</span>
+          <span class="cell">70</span><span class="cell">8</span>
+          <span class="tick on"><svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+        </div></div>
+        <div class="rowwrap"><div class="setrow">
+          <span class="idx">2</span><span class="prev">70 × 8</span>
+          <span class="cell">70</span><span class="cell">7</span>
+          <span class="tick on"><svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+        </div></div>
+
+        <div class="rowwrap">
+          <div class="livebox"><div class="setrow">
+            <span class="idx live">3</span><span class="prev">65 × 8</span>
+            <span class="cell big">65</span><span class="cell big ghost">8</span>
+            <span class="tick live"></span>
+          </div></div>
+          <div class="markline"><span class="empty">+ Note</span></div>
+        </div>
+
+        <div class="rowwrap"><div class="setrow">
+          <span class="idx">4</span><span class="prev">65 × 8</span>
+          <span class="cell ghost">65</span><span class="cell ghost">6</span>
+          <span class="tick"></span>
+        </div></div>
+
+        <div class="addrow"><span class="addbtn">+ Add set</span><span class="addbtn">+ Drop set</span></div>
+        <div class="summary">2 of 4 sets · 1 190 kg</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2 -->
+  <div>
+    <div class="step">step two</div>
+    <div class="cap">Ticked — six, not eight</div>
+    <div class="sub">
+      The set is logged and the rest is running. This is the moment the drop is
+      decided in, and the app is currently in a state it would be perfectly
+      happy to stay in.
+    </div>
+    <div class="phone">
+      <div class="status"><span>9:41</span><span>▮▮▮</span></div>
+      <div class="scr">
+        <div class="topbar"><span class="back">‹</span><span class="chip">3 / 4</span><span class="clock">29:02</span></div>
+        <div class="exname">Bench Press</div>
+        <div class="exmeta">Chest · Barbell</div>
+        <div class="colhead"><span>#</span><span>Last time</span><span class="c">kg</span><span class="c">Reps</span><span></span></div>
+
+        <div class="rowwrap"><div class="setrow">
+          <span class="idx">1</span><span class="prev">70 × 8</span>
+          <span class="cell">70</span><span class="cell">8</span>
+          <span class="tick on"><svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+        </div></div>
+        <div class="rowwrap"><div class="setrow">
+          <span class="idx">2</span><span class="prev">70 × 8</span>
+          <span class="cell">70</span><span class="cell">7</span>
+          <span class="tick on"><svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+        </div></div>
+        <div class="rowwrap"><div class="setrow">
+          <span class="idx">3</span><span class="prev">65 × 8</span>
+          <span class="cell">65</span><span class="cell">6</span>
+          <span class="tick on"><svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+        </div></div>
+
+        <div class="rowwrap">
+          <div class="livebox">
+            <div class="setrow">
+              <span class="idx live">4</span><span class="prev">65 × 8</span>
+              <span class="cell big">65</span><span class="cell big ghost">6</span>
+              <span class="tick live"></span>
+            </div>
+            <div class="waitrow">Rest · 2:47 &nbsp;·&nbsp; <span class="go">start now</span></div>
+          </div>
+          <div class="markline"><span class="empty">+ Note</span></div>
+        </div>
+
+        <div class="addrow"><span class="addbtn">+ Add set</span><span class="addbtn held">+ Drop set</span></div>
+        <div class="summary">3 of 4 sets · 1 580 kg</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3 -->
+  <div>
+    <div class="step">step three</div>
+    <div class="cap">The drop — and the tick comes off</div>
+    <div class="sub">
+      Set 3 becomes a block, its numbers move to the top line, and the drop
+      opens under them at the weight it came off. <b>The tick is empty again</b>,
+      because the set is not finished. The rest it earned is cancelled — it
+      earned none.
+    </div>
+    <div class="phone">
+      <div class="status"><span>9:41</span><span>▮▮▮</span></div>
+      <div class="scr">
+        <div class="topbar"><span class="back">‹</span><span class="chip">3 / 4</span><span class="clock">29:20</span></div>
+        <div class="exname">Bench Press</div>
+        <div class="exmeta">Chest · Barbell</div>
+        <div class="colhead"><span>#</span><span>Last time</span><span class="c">kg</span><span class="c">Reps</span><span></span></div>
+
+        <div class="rowwrap"><div class="setrow">
+          <span class="idx">1</span><span class="prev">70 × 8</span>
+          <span class="cell">70</span><span class="cell">8</span>
+          <span class="tick on"><svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+        </div></div>
+        <div class="rowwrap"><div class="setrow">
+          <span class="idx">2</span><span class="prev">70 × 8</span>
+          <span class="cell">70</span><span class="cell">7</span>
+          <span class="tick on"><svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+        </div></div>
+
+        <div class="rowwrap">
+          <div class="stack live">
+            <div>
+              <div class="sline">
+                <span class="idx live">3</span><span class="prev">65 × 8</span>
+                <span class="cell">65</span><span class="cell">6</span>
+              </div>
+              <div class="sline drop">
+                <span class="idx"></span><span class="fell">−15 kg</span>
+                <span class="cell big">50</span><span class="cell big ghost"></span>
+              </div>
+            </div>
+            <span class="tick live"></span>
+          </div>
+          <div class="waitrow" style="margin-top:5px;border-top:none;padding-top:0"><span class="chain">Drop from set 3 — no rest</span></div>
+          <div class="markline"><span class="empty">+ Note</span></div>
+        </div>
+
+        <div class="rowwrap"><div class="setrow">
+          <span class="idx">4</span><span class="prev">65 × 8</span>
+          <span class="cell ghost">65</span><span class="cell ghost">6</span>
+          <span class="tick"></span>
+        </div></div>
+
+        <div class="addrow"><span class="addbtn">+ Add set</span><span class="addbtn">+ Drop set</span></div>
+        <div class="summary">2 of 4 sets · 1 190 kg</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4 -->
+  <div>
+    <div class="step">step four</div>
+    <div class="cap">Sealed — one tick, two lines</div>
+    <div class="sub">
+      The tick spans the block, which is what says <b>the set</b> is the thing
+      that got ticked. Set 4 is next and the ledger still counts to four; the
+      volume counts all of it.
+    </div>
+    <div class="phone">
+      <div class="status"><span>9:41</span><span>▮▮▮</span></div>
+      <div class="scr">
+        <div class="topbar"><span class="back">‹</span><span class="chip">3 / 4</span><span class="clock">30:05</span></div>
+        <div class="exname">Bench Press</div>
+        <div class="exmeta">Chest · Barbell</div>
+        <div class="colhead"><span>#</span><span>Last time</span><span class="c">kg</span><span class="c">Reps</span><span></span></div>
+
+        <div class="rowwrap"><div class="setrow">
+          <span class="idx">1</span><span class="prev">70 × 8</span>
+          <span class="cell">70</span><span class="cell">8</span>
+          <span class="tick on"><svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+        </div></div>
+        <div class="rowwrap"><div class="setrow">
+          <span class="idx">2</span><span class="prev">70 × 8</span>
+          <span class="cell">70</span><span class="cell">7</span>
+          <span class="tick on"><svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+        </div></div>
+
+        <div class="rowwrap">
+          <div class="stack">
+            <div>
+              <div class="sline">
+                <span class="idx">3</span><span class="prev">65 × 8</span>
+                <span class="cell">65</span><span class="cell">6</span>
+              </div>
+              <div class="sline drop">
+                <span class="idx"></span><span class="fell">−15 kg</span>
+                <span class="cell">50</span><span class="cell">8</span>
+              </div>
+            </div>
+            <span class="tick on"><svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+          </div>
+        </div>
+
+        <div class="rowwrap">
+          <div class="livebox">
+            <div class="setrow">
+              <span class="idx live">4</span><span class="prev">65 × 8</span>
+              <span class="cell big">65</span><span class="cell big ghost">6</span>
+              <span class="tick live"></span>
+            </div>
+            <div class="waitrow">Rest · 2:31 &nbsp;·&nbsp; <span class="go">start now</span></div>
+          </div>
+          <div class="markline"><span class="empty">+ Note</span></div>
+        </div>
+
+        <div class="addrow"><span class="addbtn">+ Add set</span><span class="addbtn">+ Drop set</span></div>
+        <div class="summary">3 of 4 sets · 1 980 kg</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="notes">
+  <ul>
+    <li><strong>The number under each phone is the whole argument.</strong>
+      Today step four reads <s>4 of 5 sets</s> — the drop bought you a set you
+      never programmed, and the exercise stays one short of itself until you
+      finish. Here it reads <b>3 of 4</b> throughout, and the volume climbs
+      1 190 → 1 580 → 1 980 with every kilo counted.</li>
+    <li><strong>Step three is the one to look at twice.</strong> The tick going
+      <i>off</i> is unusual — the app never takes a tick back on its own. But
+      the alternative is a block that is half-ticked, which needs a third state
+      drawn and a rule for what it means, and <i>+ Drop set</i> already said in
+      words that the set is not over.</li>
+  </ul>
+</div>
+
+<hr class="fade">
+
+<h2 class="sec"><span class="n">2 ·</span> A chain, and a verdict on one line of it</h2>
+
+<div class="duo">
+
+  <div>
+    <div class="cap">65 → 50 → 40, one set</div>
+    <div class="sub">
+      The delta reads from the top of the chain, not from the line above:
+      <b>how far down from the working weight</b> is the question, and each line
+      answers it on its own.
+    </div>
+    <div class="phone wide">
+      <div class="status"><span>9:41</span><span>▮▮▮</span></div>
+      <div class="scr">
+        <div class="topbar"><span class="back">‹</span><span class="chip">3 / 4</span><span class="clock">31:12</span></div>
+        <div class="exname">Bench Press</div>
+        <div class="exmeta">Chest · Barbell</div>
+        <div class="colhead"><span>#</span><span>Last time</span><span class="c">kg</span><span class="c">Reps</span><span></span></div>
+
+        <div class="rowwrap"><div class="setrow">
+          <span class="idx">1</span><span class="prev">70 × 8</span>
+          <span class="cell">70</span><span class="cell">8</span>
+          <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+        </div></div>
+        <div class="rowwrap"><div class="setrow">
+          <span class="idx">2</span><span class="prev">70 × 8</span>
+          <span class="cell">70</span><span class="cell">7</span>
+          <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+        </div></div>
+
+        <div class="rowwrap">
+          <div class="stack">
+            <div>
+              <div class="sline">
+                <span class="idx">3</span><span class="prev">65 × 8</span>
+                <span class="cell">65</span><span class="cell">6</span>
+              </div>
+              <div class="sline drop">
+                <span class="idx"></span><span class="fell">−15 kg</span>
+                <span class="cell">50</span><span class="cell">8</span>
+              </div>
+              <div class="sline drop">
+                <span class="idx"></span><span class="fell">−25 kg</span>
+                <span class="cell">40</span><span class="cell">6</span>
+              </div>
+            </div>
+            <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+          </div>
+        </div>
+
+        <div class="rowwrap">
+          <div class="livebox">
+            <div class="setrow">
+              <span class="idx live">4</span><span class="prev">65 × 8</span>
+              <span class="cell big">65</span><span class="cell big ghost">6</span>
+              <span class="tick live"></span>
+            </div>
+            <div class="waitrow">Rest · 2:52 &nbsp;·&nbsp; <span class="go">start now</span></div>
+          </div>
+          <div class="markline"><span class="empty">+ Note</span></div>
+        </div>
+
+        <div class="addrow"><span class="addbtn">+ Add set</span><span class="addbtn">+ Drop set</span></div>
+        <div class="summary">3 of 4 sets · 2 220 kg</div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="cap">A verdict, and words, on one line</div>
+    <div class="sub">
+      Each line keeps its own left cell, so <b>go lighter</b> lands on the drop
+      it is about and set 3's own digit is untouched. Words break to full width
+      under the block, as they already do under a row.
+    </div>
+    <div class="phone wide">
+      <div class="status"><span>9:41</span><span>▮▮▮</span></div>
+      <div class="scr">
+        <div class="topbar"><span class="back">‹</span><span class="chip">3 / 4</span><span class="clock">31:40</span></div>
+        <div class="exname">Bench Press</div>
+        <div class="exmeta">Chest · Barbell</div>
+        <div class="colhead"><span>#</span><span>Last time</span><span class="c">kg</span><span class="c">Reps</span><span></span></div>
+
+        <div class="rowwrap"><div class="setrow">
+          <span class="idx">1</span><span class="prev">70 × 8</span>
+          <span class="cell">70</span><span class="cell">8</span>
+          <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+        </div></div>
+        <div class="rowwrap"><div class="setrow">
+          <span class="idx">2</span><span class="prev">70 × 8</span>
+          <span class="cell">70</span><span class="cell">7</span>
+          <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+        </div></div>
+
+        <div class="rowwrap">
+          <div class="stack">
+            <div>
+              <div class="sline">
+                <span class="idx">3</span><span class="prev">65 × 8</span>
+                <span class="cell">65</span><span class="cell">6</span>
+              </div>
+              <div class="sline drop">
+                <span class="idx" style="line-height:0"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 4.8v14M5.8 12.6l6.2 6.2 6.2-6.2" stroke="#b5abfc" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+                <span class="fell">−15 kg</span>
+                <span class="cell">50</span><span class="cell">8</span>
+              </div>
+            </div>
+            <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+          </div>
+          <div class="markline"><span style="color:var(--n400)">drop further next time — 45</span></div>
+        </div>
+
+        <div class="rowwrap">
+          <div class="livebox">
+            <div class="setrow">
+              <span class="idx live">4</span><span class="prev">65 × 8</span>
+              <span class="cell big">65</span><span class="cell big ghost">6</span>
+              <span class="tick live"></span>
+            </div>
+            <div class="waitrow">Rest · 2:38 &nbsp;·&nbsp; <span class="go">start now</span></div>
+          </div>
+          <div class="markline"><span class="empty">+ Note</span></div>
+        </div>
+
+        <div class="addrow"><span class="addbtn">+ Add set</span><span class="addbtn">+ Drop set</span></div>
+        <div class="summary">3 of 4 sets · 1 980 kg</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<hr class="fade">
+
+<h2 class="sec"><span class="n">3 ·</span> What changes underneath</h2>
+<p class="lede wide">
+  No stored shape moves — <code>link?: true</code> on a <code>LoggedSet</code> is
+  still the whole model, and the delta is derived from the line the chain hangs
+  from. What moves is what a <em>set</em> means to the six places that count
+  them.
+</p>
+
+<table class="cmp">
+  <tr><th>Where</th><th>Today</th><th>Under one tick per set</th></tr>
+  <tr>
+    <td><code>totals().all</code> / <code>.done</code></td>
+    <td class="was">every row, drops included</td>
+    <td class="now">skip <code>link</code>ed rows — a drop is not a set</td>
+  </tr>
+  <tr>
+    <td><code>totals().vol</code></td>
+    <td class="was">every ticked row</td>
+    <td class="now">unchanged — every line is work performed</td>
+  </tr>
+  <tr>
+    <td>the tick box</td>
+    <td class="was">one per row</td>
+    <td class="now">one per stack; writes <code>done</code> to every line in it</td>
+  </tr>
+  <tr>
+    <td><code>+ Drop set</code></td>
+    <td class="was">inserts a row</td>
+    <td class="now">inserts a row <i>and</i> unticks the set it hangs from</td>
+  </tr>
+  <tr>
+    <td>the diary's <i>n sets</i></td>
+    <td class="was"><code>e.sets.length</code> — counts drops</td>
+    <td class="now">counts unlinked rows; old entries re-report, nothing stored changes</td>
+  </tr>
+  <tr>
+    <td><code>superset.ts</code> · whose turn</td>
+    <td class="was">a live <code>link</code>ed row makes the turn yours outright, because a drop was two sets that both had to be yours</td>
+    <td class="now">the special case goes away — a drop is one set now, so counting stacks is already right</td>
+  </tr>
+  <tr>
+    <td>the mark sheet's remove</td>
+    <td class="was">unticked rows only</td>
+    <td class="now">same rule, one scope up: the stack is unticked or nothing in it leaves</td>
+  </tr>
+  <tr>
+    <td><code>lastLog</code> / <code>saveAsRoutine</code></td>
+    <td class="now">already working-sets-only, as of this week</td>
+    <td class="now">unchanged — they were fixed for exactly this reason</td>
+  </tr>
+</table>
+
+<div class="settled warn">
+  <div class="h">Three things I'd want you to say yes to before I build it</div>
+  <ul>
+    <li><strong>Adding a drop takes the tick off.</strong> It is the only place
+      in the app where a tick comes off without you tapping it. I think it is
+      right — the set genuinely isn't over — but it is the one thing here you
+      will feel on the phone before you can judge it.</li>
+    <li><strong>Deleting a set that has drops under it deletes the drops.</strong>
+      They are lines of that set; there is no set for them to belong to
+      afterwards. The alternative is promoting the first drop to be the set,
+      which quietly rewrites what you lifted.</li>
+    <li><strong>The diary's set counts on past sessions will change.</strong> A
+      day that said <i>17 sets</i> may say <i>15</i> tomorrow. Nothing stored
+      moves and the new number is the truer one, but it is history changing its
+      mind, which this app otherwise never does.</li>
+  </ul>
+</div>
+
+<div class="notes">
+  <ul>
+    <li><strong>The delta is doing the job you described.</strong> −15 then −25
+      against reps of 8 then 6 is a readable fatigue curve — how much the weight
+      had to fall for the muscle to keep producing reps. That is also an
+      argument for measuring it from the top of the chain rather than line to
+      line: the reference has to stay fixed for the numbers to be a curve.</li>
+    <li><strong>Nothing new crosses to a buddy, and nothing needs a
+      version bump.</strong> <code>BuddyProgress</code> carries <code>done</code>
+      per row; the lines of a stack share their parent's, so the wire is
+      unchanged and an older build simply draws the rows flat.</li>
+  </ul>
+</div>
+
+</div>

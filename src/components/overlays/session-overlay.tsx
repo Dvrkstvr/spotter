@@ -47,7 +47,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 
 import { HoldBtn } from '@/components/hold-btn';
-import { CHECK_D, Icon, MARK_D } from '@/components/icon';
+import { CHECK_D, GripIcon, Icon, MARK_D } from '@/components/icon';
 import { FullScreen, Sheet } from '@/components/sheet';
 import { Tip } from '@/components/tip';
 import type { Bid } from '@/data/buddy-sync';
@@ -55,13 +55,15 @@ import { FIRST_UPS } from '@/data/buddy-sync';
 import { isSingle, MarkNote, Measure, measureOf, SET_MARKS, SetMark } from '@/data/exercises';
 import { buzz } from '@/data/haptics';
 import { Strings } from '@/data/i18n';
-import { liveIn, restEarned, roundOf, roundsOf, stopAt, stopsOf } from '@/data/superset';
+import {
+  chainsOf, liveIn, restEarned, roundOf, roundsOf, setNumberOf, stopAt, stopsOf,
+} from '@/data/superset';
 import { pickTip, tipLive, type TipId } from '@/data/tips';
 import { useBackClose } from '@/hooks/use-back-close';
 import { useBuddyLive } from '@/hooks/use-buddy-live';
 import { themed, useColors, useThemed } from '@/design/theme';
 import {
-  color, fill as absFill, font, linger, motion, radius, slop, t, tracking, wash,
+  color, fill as absFill, font, linger, motion, radius, slop, space, t, tracking, wash,
 } from '@/design/tokens';
 import { Btn, CardKicker, Field, H3, H4, Input, missingName, Seg, Tag } from '@/design/ui';
 import {
@@ -134,6 +136,16 @@ const GLIDE_TAU = 0.15;
 const GLIDE_MIN = 2;
 /** How many steps the drag demo travels — three, so its figure moves three times. */
 const DEMO_STEPS = 3;
+
+/**
+ * The refused tick's answer, in px per leg — each one `linger.shake` long.
+ *
+ * Out, back past centre, then twice more at a shrinking reach: the shape of a
+ * head shaking, rather than of something that has been knocked and is
+ * settling. `space[2]` is far enough to be unmissable beside the column next
+ * to it and near enough that the row never looks like it is coming apart.
+ */
+const SHAKE = [1, -1, 0.6, -0.6, 0].map((n) => n * space[2]);
 
 /**
  * What one pixel of drag is worth right now, as a multiple of the cell's own
@@ -511,8 +523,9 @@ export function SessionOverlay() {
    */
   const queued =
     liveSet?.link && live
-      ? // `live.j` is 0-based, so it is already the *previous* row's number.
-        L.dropAfter.replace('{n}', String(live.j))
+      ? // The set it is a line *of* — `setNumberOf`, never the row index. With
+        // an earlier drop anywhere above, counting rows names the wrong set.
+        L.dropAfter.replace('{n}', String(setNumberOf(list[live.i].sets, live.j)))
       : paired && live && live.i === mateIdx && list[i].sets[live.j]?.done && meta
         ? L.noRestFrom.replace('{name}', exInfo(meta).text)
         : null;
@@ -842,7 +855,10 @@ export function SessionOverlay() {
           that no longer exists would be a sheet with nothing behind it. */}
       {markAt && list[markAt.i] && markAt.j < list[markAt.i].sets.length && (
         <MarkSheet
-          index={markAt.j}
+          n={setNumberOf(list[markAt.i].sets, markAt.j)}
+          isDrop={!!list[markAt.i].sets[markAt.j].link}
+          after={setNumberOf(list[markAt.i].sets, markAt.j - 1)}
+          removeLabel={removeSetLabel(list[markAt.i].sets, markAt.j, L)}
           set={list[markAt.i].sets[markAt.j]}
           exName={(() => {
             const m = ex(list[markAt.i].ex);
@@ -882,6 +898,33 @@ export function SessionOverlay() {
                   })
               : undefined
           }
+          /* The undo for a set that isn't going to happen — a routine that
+             asked for more than today has in it, or a drop added by mistake.
+             Two rules, and `removeRows` is the one reading of both:
+
+             *Unticked only*, which is `removeSessionEx`'s rule one scope down:
+             a set that was lifted is a fact, and facts don't leave through a
+             held button. Untick it first and it stops being one. Taking a
+             *set* means every line of it, so the test is over the whole chain —
+             a drop you already logged protects the set it hangs from.
+
+             *Never the last set*, because an exercise with no sets at all is a
+             state nothing draws; that case is the overview's ×. Counted in
+             chains like everything else here, so an exercise of one set and
+             its drop still refuses. */
+          onRemove={
+            removeRows(list[markAt.i].sets, markAt.j)
+              ? () => {
+                  const rows = removeRows(list[markAt.i].sets, markAt.j)!;
+                  setMarkAt(null);
+                  // Back to front, or each splice moves the indexes under the
+                  // ones still to go.
+                  mutSession(markAt.i, (e) => {
+                    for (const j of [...rows].reverse()) e.sets.splice(j, 1);
+                  });
+                }
+              : undefined
+          }
         />
       )}
     </FullScreen>
@@ -889,6 +932,64 @@ export function SessionOverlay() {
 }
 
 /* ── one exercise's ledger ───────────────────────────────────────────────── */
+
+/**
+ * Which rows a held remove would actually take, or null when it may not run.
+ *
+ * Removing a **drop** takes that line. Removing a **set** takes the set — the
+ * row and every drop hanging off it — because a drop is a line of that set and
+ * there is nothing for it to be a line of afterwards. Promoting the first drop
+ * to be the set instead was the alternative and it quietly rewrites what you
+ * lifted: your 65 × 6 becomes a 50 × 8 you never programmed.
+ *
+ * Null means the control is absent rather than shown dead, and it is null in
+ * two cases: anything in the chain has been ticked (a lifted set is a fact, and
+ * unticking first is what makes removing it a two-step decision), or this is
+ * the exercise's last set (an exercise with no sets is a state nothing draws —
+ * that one is the overview sheet's ×).
+ *
+ * One reading, because the label above the button has to describe exactly what
+ * the button does; two would be two chances for the warning to be wrong.
+ */
+const removeRows = (sets: LoggedSet[], j: number): number[] | null => {
+  const chains = chainsOf(sets);
+  const c = chains.find((x) => x.ids.includes(j));
+  if (!c) return null;
+  const rows = j === c.head ? c.ids : [j];
+  if (rows.some((k) => sets[k].done)) return null;
+  if (j === c.head && chains.length < 2) return null;
+  return rows;
+};
+
+/** What that remove is about to take, said before the hold rather than after. */
+const removeSetLabel = (sets: LoggedSet[], j: number, L: Strings) => {
+  const rows = removeRows(sets, j);
+  const drops = rows ? rows.length - 1 : 0;
+  if (drops === 1) return L.holdRemoveSetDrops;
+  if (drops > 1) return L.holdRemoveSetDropsN.replace('{n}', String(drops));
+  return L.holdRemoveSet;
+};
+
+/**
+ * **A logged set whose reps reach zero stops being logged.** Written on the
+ * draft, after whatever just changed the cell.
+ *
+ * The tick refuses to write a row with nothing in the right-hand cell; a row
+ * that is *already* ticked can be emptied down to the same nothing afterwards,
+ * and the two have to answer alike or the rule only ever held for sets you
+ * had not lifted yet. So the tick comes off rather than the edit being
+ * blocked — blocking cannot be done kindly, because the cell is a text field
+ * and an empty string is the first keystroke of every retype: refusing it
+ * would mean never being able to clear a 12 to make it an 8. And it is the
+ * gentler answer besides, since the way back is the tap it always was.
+ *
+ * One reading of it, because there are three doors into that cell — typing,
+ * dragging, and copying the ghost onto the row — and a rule kept at two of
+ * them is a rule for two of them.
+ */
+const keepLogged = (cur: LoggedSet) => {
+  if (cur.done && !num(cur.reps, 0)) cur.done = false;
+};
 
 /**
  * The column header, the rows, and the two held buttons under them — for one
@@ -932,7 +1033,7 @@ function Ledger({
 }) {
   const styles = useThemed(sheet);
   const c = useColors();
-  const { L, patch, ex, exInfo, gInfo, kInfo, setup, mutSession, tipDone } = useStore();
+  const { s, L, patch, ex, exInfo, gInfo, kInfo, setup, mutSession, tipDone } = useStore();
   const meta = ex(entry.ex);
   const units = unitsFor(measureOf(meta), L);
 
@@ -947,20 +1048,71 @@ function Ledger({
    */
   const dropAt = liveJ >= 0 ? liveJ : entry.sets.length;
 
-  /** Tick a set, filling an untouched one from last time — as the box does. */
+  /**
+   * The last tick this ledger turned down, as a row and a count.
+   *
+   * A count rather than a flag, because the likeliest way this is ever met is
+   * twice running — you tap, nothing logs, you tap again — and a flag that is
+   * already set has nothing to say the second time.
+   */
+  const [refused, setRefused] = useState({ j: -1, n: 0 });
+
+  /**
+   * Say no where the no is about.
+   *
+   * The reps cell is the only thing that could have been wrong: the left one
+   * is allowed to end up empty, which is how bodyweight and an unrecorded
+   * distance are written. So the answer is drawn on that one cell and nowhere
+   * else, and it is drawn rather than written — a line of copy under the row
+   * would outlive the moment it explains and settle into furniture, on the
+   * screen working hardest not to have any. It shakes, it goes `warn`, and a
+   * third of a second later the row is exactly as it was.
+   */
+  const refuse = (j: number) => {
+    if (s.haptics) buzz.refused();
+    setRefused((r) => ({ j, n: r.n + 1 }));
+  };
+
+  /**
+   * Tick a set, filling whatever is still empty from last time.
+   *
+   * **The two fields are filled one at a time.** Testing them as a pair was
+   * enough while every row had a ghost behind it, and a drop is the row that
+   * has none: it arrives carrying the weight of the set it came off, so the
+   * pair-wise test saw a filled cell and let the row through with the right
+   * one still empty — logging `65 × 0`, which is exactly the record this
+   * refuses everywhere else.
+   *
+   * The right-hand figure is what makes a set a set — reps, the seconds of a
+   * hold, the minutes of a run — so with nothing typed there and nothing to
+   * copy, the tick is refused. The left one may legitimately end up empty:
+   * that is how bodyweight and an unrecorded distance are written.
+   *
+   * This is the one reading of what a tick may record; the box and Enter on
+   * the reps field both come through here.
+   *
+   * **The test is made out here rather than inside the updater**, which is
+   * where it used to sit. A `patch` updater is pure and its early return is
+   * silent, so a refused tick was a tap that did nothing at all — on the one
+   * screen where doing nothing is indistinguishable from a missed tap. Out
+   * here the refusal has somewhere to go: `refuse` shakes the cell that has
+   * to be filled, which is the only thing that could have been wrong.
+   */
   const logSet = (j: number) => {
+    const cur = entry.sets[j];
+    const g = prevNums(cur.prev);
+    const w = cur.w || g.w;
+    const reps = cur.reps || g.r;
+    // Nothing to record and nothing to copy: refuse, rather than write the
+    // "× 0" that would haunt next session as the last-time ghost.
+    if (!num(reps, 0)) return refuse(j);
+    // Only now — the gesture is taught by having worked, and a tap the app
+    // turned down teaches nothing.
     tipDone('tick');
     mutSession(i, (e) => {
-      const cur = e.sets[j];
-      if (!cur.w && !cur.reps) {
-        const g = prevNums(cur.prev);
-        // Nothing typed and nothing to copy: refuse rather than log the
-        // "BW × 0" that would haunt next session as the last-time ghost.
-        if (!g.w && !g.r) return;
-        cur.w = g.w;
-        cur.reps = g.r;
-      }
-      cur.done = true;
+      e.sets[j].w = w;
+      e.sets[j].reps = reps;
+      e.sets[j].done = true;
     });
   };
 
@@ -1015,49 +1167,69 @@ function Ledger({
         <View style={styles.colCheck} />
       </View>
 
-      {entry.sets.map((set, j) => (
-        <SetRow
-          key={j}
-          index={j}
-          set={set}
+      {/* Sets, not rows. `chainsOf` is the one place the ledger is grouped,
+          so the number a block carries, the tick it gets and the `n of m` in
+          the summary can never disagree about what a set is. */}
+      {chainsOf(entry.sets).map((chain, k) => (
+        <SetStack
+          key={chain.head}
+          n={k + 1}
+          lines={chain.ids.map((j) => ({ j, set: entry.sets[j] }))}
+          liveJ={liveJ}
           single={units.single}
-          live={j === liveJ}
-          waiting={j === liveJ ? waiting : null}
-          asking={j === liveJ ? asking : null}
-          queued={j === liveJ ? queued : null}
-          // Every tip about a set row draws under the live one, and the drag's
+          units={units}
+          waiting={chain.ids.includes(liveJ) ? waiting : null}
+          asking={chain.ids.includes(liveJ) ? asking : null}
+          queued={chain.ids.includes(liveJ) ? queued : null}
+          // Every tip about a set draws under the live one, and the drag's
           // demo draws on its left-hand cell.
-          demo={j === liveJ && !!demo}
-          tip={j === liveJ ? tip : null}
-          onLog={() => logSet(j)}
+          demo={!!demo}
+          tip={chain.ids.includes(liveJ) ? tip : null}
+          onLog={logSet}
           onScrub={onScrub}
           // Opening the sheet is the whole of what the tip was for — it
           // teaches what the line does, not where it is — and what you then
           // decide about the set is your business. Every way in lands here:
           // the `+ Note` line, your own note line, and the index cell.
-          onMark={() => onMark(j)}
-          onCopy={(w, r) => {
+          onMark={onMark}
+          onCopy={(j, w, r) => {
             tipDone('ghost');
             mutSession(i, (e) => {
               e.sets[j].w = w;
               e.sets[j].reps = r;
+              // The third door, and the one nobody would go looking for: a
+              // ghost with no figure in it, copied onto a set already ticked.
+              keepLogged(e.sets[j]);
             });
           }}
-          onW={(v) => mutSession(i, (e) => { e.sets[j].w = v; })}
-          onReps={(v) => mutSession(i, (e) => { e.sets[j].reps = v; })}
-          onToggle={(w, r) => {
-            tipDone('tick');
+          // The refused tick's answer, drawn on the line it is about.
+          warn={refused}
+          onW={(j, v) => mutSession(i, (e) => { e.sets[j].w = v; })}
+          // Typing and dragging are two of `keepLogged`'s three doors — the
+          // clamp at zero is the drag's own end of the same edit.
+          onReps={(j, v) =>
             mutSession(i, (e) => {
-              const cur = e.sets[j];
-              // Ticking an untouched set logs last time's numbers — and when
-              // there are none either, refuses: a "BW × 0" record helps
-              // nobody and becomes next time's ghost.
-              if (!cur.done && !cur.w && !cur.reps) {
-                if (!w && !r) return;
-                cur.w = w;
-                cur.reps = r;
-              }
-              cur.done = !cur.done;
+              e.sets[j].reps = v;
+              keepLogged(e.sets[j]);
+            })
+          }
+          /* The block's one tick, and it moves one line at a time.
+             Logging is `logSet`, which is also what Enter on the reps field
+             runs — the box used to carry a second copy of the
+             fill-from-last-time rule, and a second copy is how the two came to
+             disagree about what an untouched drop may record.
+             Unticking takes the *last* logged line back rather than the whole
+             set: the commonest reason to untick a set you dropped is that the
+             drop's figures are wrong, and clearing the working set with them
+             would cost you a correct row to fix an incorrect one. Two taps
+             down, two taps back up — the same gesture read both ways. */
+          onToggle={() => {
+            const open = chain.ids.find((j) => !entry.sets[j].done);
+            if (open !== undefined) return logSet(open);
+            tipDone('tick');
+            const last = chain.ids[chain.ids.length - 1];
+            mutSession(i, (e) => {
+              e.sets[last].done = false;
             });
           }}
         />
@@ -1071,7 +1243,12 @@ function Ledger({
             label={L.holdAddSet}
             onConfirm={() =>
               mutSession(i, (e) => {
-                const last = e.sets[e.sets.length - 1];
+                // The last *working* row, not the last row. A drop carries no
+                // ghost by construction, so copying from one hands the new set
+                // a blank where last week's figures should be — and with the
+                // last set now the usual place to drop from, that is the
+                // common case rather than the odd one.
+                const last = [...e.sets].reverse().find((x) => !x.link) ?? e.sets[e.sets.length - 1];
                 e.sets.push({
                   w: '',
                   reps: '',
@@ -1143,23 +1320,45 @@ function Ledger({
  * screen with room to read a note in full: the row itself only has a glyph.
  */
 function MarkSheet({
-  index,
+  n,
+  isDrop,
+  after,
   set,
   exName,
+  removeLabel,
   onClose,
   onPick,
   onNote,
   onLink,
+  onRemove,
 }: {
-  index: number;
+  /** the number of the set this row belongs to — `setNumberOf`, not the row */
+  n: number;
+  /** a line of the set above rather than the head of one */
+  isDrop: boolean;
+  /** the set the link switch would hang this row off */
+  after: number;
   set: LoggedSet;
   exName: string;
+  /**
+   * What the held remove is about to take.
+   *
+   * The caller writes it because the caller is what knows whether this row has
+   * drops hanging off it, and taking a set removes them with it — they are
+   * lines of it, and there is no set for them to belong to afterwards. Saying
+   * so in the label is the warning: it is read *before* the hold rather than
+   * discovered after it, which is the same place every other destructive act
+   * in the app puts its warning.
+   */
+  removeLabel: string;
   onClose: () => void;
   /** null clears the mark */
   onPick: (m: SetMark | null) => void;
   onNote: (v: string) => void;
   /** absent on set 1, which has nothing above it to be taken straight after */
   onLink?: (on: boolean) => void;
+  /** absent on a ticked set and on an exercise's last remaining set */
+  onRemove?: () => void;
 }) {
   const styles = useThemed(sheet);
   const c = useColors();
@@ -1168,7 +1367,7 @@ function MarkSheet({
 
   return (
     <Sheet zIndex={84} maxHeight="70%" onClose={onClose}>
-      <H4>{L.setLabel.replace('{n}', String(index + 1))}</H4>
+      <H4>{(isDrop ? L.dropLabel : L.setLabel).replace('{n}', String(n))}</H4>
       <Text style={styles.markSub} numberOfLines={1}>
         {exName}
       </Text>
@@ -1248,7 +1447,7 @@ function MarkSheet({
         >
           <View style={styles.linkText}>
             <Text style={styles.linkLabel}>
-              {L.linkLabel.replace('{n}', String(index))}
+              {L.linkLabel.replace('{n}', String(after))}
             </Text>
             <Text style={styles.linkSub}>{L.linkSub}</Text>
           </View>
@@ -1259,6 +1458,20 @@ function MarkSheet({
             thumbColor={set.link ? c.accent : c.neutral500}
           />
         </Pressable>
+      )}
+
+      {/* Taking the row out of the ledger — destructive, so it wears the hold
+          grammar like every other × in the app. It closes the sheet itself:
+          the set this sheet was about is gone, and the row now under its
+          index is a different one. */}
+      {onRemove && (
+        <HoldBtn
+          destructive
+          label={removeLabel}
+          onConfirm={onRemove}
+          style={styles.markRemove}
+          labelStyle={styles.markRemoveLabel}
+        />
       )}
 
       <Btn variant="secondary" block label={L.close} style={styles.markClose} onPress={onClose} />
@@ -1345,13 +1558,66 @@ function Overview({ onClose, onJump }: { onClose: () => void; onJump: (to: numbe
     finishSession,
     setFirstUp,
     removeSessionEx,
+    moveSessionStop,
     adoptBuddyEx,
   } = useStore();
   useBackClose(onClose);
 
+  // The reorder drag, in ReorderRows' grammar — grip, accent landing line,
+  // release commits. What it can't borrow is the uniform row pitch: a pair's
+  // block is taller than a lone row, so each stop's height is measured where
+  // it lays out and the landing walks the real heights instead.
+  const [drag, setDrag] = useState<{ from: number; to: number } | null>(null);
+  const [dy] = useState(() => new Animated.Value(0));
+  const heights = useRef<number[]>([]);
+
   const session = s.session;
   if (!session) return null;
   const tot = totals();
+
+  const stops = stopsOf(session.list);
+  const stopH = (n: number) => heights.current[n] ?? 48;
+  const landing = (from: number, offset: number) => {
+    let to = from;
+    let acc = 0;
+    if (offset > 0)
+      while (to < stops.length - 1 && offset > acc + stopH(to + 1) / 2) {
+        acc += stopH(to + 1);
+        to++;
+      }
+    else
+      while (to > 0 && -offset > acc + stopH(to - 1) / 2) {
+        acc += stopH(to - 1);
+        to--;
+      }
+    return to;
+  };
+  // Rebuilt every render so the closures always see the current stops —
+  // React Native reads handler props at event time (the ReorderRows pattern).
+  const gripFor = (from: number) =>
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 2,
+      onPanResponderGrant: () => {
+        dy.setValue(0);
+        setDrag({ from, to: from });
+      },
+      onPanResponderMove: (_, g) => {
+        dy.setValue(g.dy);
+        const to = landing(from, g.dy);
+        setDrag((d) => (d && d.to !== to ? { ...d, to } : d));
+      },
+      onPanResponderRelease: (_, g) => {
+        const to = landing(from, g.dy);
+        if (to !== from) moveSessionStop(from, to);
+        dy.setValue(0);
+        setDrag(null);
+      },
+      onPanResponderTerminate: () => {
+        dy.setValue(0);
+        setDrag(null);
+      },
+    });
 
   // Where the two lists have drifted apart — the same diff the buddy line
   // reads, over the whole of their session rather than the one exercise they
@@ -1386,8 +1652,10 @@ function Overview({ onClose, onJump }: { onClose: () => void; onJump: (to: numbe
         {/* By stop rather than by exercise, so a pair reads here as the one
             thing it is on the screen behind. There is no pairing control:
             a superset is made in the routine and only ever read in a session,
-            so this sheet can show one and never offer one. */}
-        {stopsOf(session.list).map((stop) => {
+            so this sheet can show one and never offer one — which is also why
+            the drag moves a whole stop: a grip that could pull a pair apart
+            would be an unpairing control wearing a reorder's clothes. */}
+        {stops.map((stop, n) => {
           const rows = stop.ids.map((k) => {
             const entry = session.list[k];
             const meta = ex(entry.ex);
@@ -1445,8 +1713,8 @@ function Overview({ onClose, onJump }: { onClose: () => void; onJump: (to: numbe
             </Pressable>
           );
           });
-          return paired ? (
-            <View key={`pair-${stop.head}`} style={styles.ovPair}>
+          const inner = paired ? (
+            <View style={styles.ovPair}>
               <View style={styles.ovPairRule} />
               <View style={styles.ovPairBody}>
                 <Text style={styles.ovPairTag}>{L.superset}</Text>
@@ -1455,6 +1723,41 @@ function Overview({ onClose, onJump }: { onClose: () => void; onJump: (to: numbe
             </View>
           ) : (
             body
+          );
+          const isDragging = drag?.from === n;
+          const isTarget = !!drag && drag.to === n && drag.from !== n;
+          return (
+            <Animated.View
+              key={`${session.list[stop.head].ex}-${stop.head}`}
+              onLayout={(e) => {
+                heights.current[n] = e.nativeEvent.layout.height;
+              }}
+              style={[
+                styles.ovStop,
+                { borderTopColor: isTarget ? c.accent : 'transparent' },
+                // The surface's own colour, so the row in flight covers what
+                // it slides over instead of printing through it.
+                isDragging && {
+                  transform: [{ translateY: dy }],
+                  zIndex: 2,
+                  elevation: 2,
+                  backgroundColor: c.surface,
+                },
+              ]}
+            >
+              {/* One grip per stop, absent on a list of one: a drag with
+                  nowhere to go is furniture. */}
+              {stops.length > 1 && (
+                <View
+                  {...gripFor(n).panHandlers}
+                  accessibilityLabel={L.dragReorder}
+                  style={styles.ovGrip}
+                >
+                  <GripIcon color={isDragging ? c.accent : c.neutral700} />
+                </View>
+              )}
+              <View style={styles.ovStopBody}>{inner}</View>
+            </Animated.View>
           );
         })}
       </View>
@@ -1719,6 +2022,7 @@ function NumCell({
   step,
   px,
   live,
+  warn,
   style,
   onText,
   onScrub,
@@ -1732,6 +2036,12 @@ function NumCell({
   /** travel per step at aiming speed — `PX_PER_STEP` or the coarser `PX_PER_REP` */
   px: number;
   live: boolean;
+  /**
+   * A refusal this cell is the answer to, as a counter — every change to a
+   * non-zero value runs the shake once. Only the reps column is ever handed
+   * one; see `refuse` in `Ledger`.
+   */
+  warn?: number;
   style?: StyleProp<ViewStyle>;
   onText: (v: string) => void;
   onScrub: (on: boolean) => void;
@@ -1740,6 +2050,13 @@ function NumCell({
   const styles = useThemed(sheet);
   const { s, tipDone } = useStore();
   const [dragging, setDragging] = useState(false);
+  // Whether this cell is currently answering a refusal — it wears `warn` for
+  // exactly as long as the shake runs, and no longer. Keeping the colour until
+  // the reps were filled in was the other option and it is wrong: an empty
+  // reps cell is the ordinary state of every set you have not lifted yet, so a
+  // standing mark would light up rows that are merely in the future.
+  const [warned, setWarned] = useState(false);
+  const [shake] = useState(() => new Animated.Value(0));
   // Whether the editor is focused. Not what opens this cell to touches any
   // more — nothing does, see the note above — but what the tap toggles.
   const [editing, setEditing] = useState(false);
@@ -1784,6 +2101,35 @@ function NumCell({
   useEffect(() => () => {
     if (raf.current != null) cancelAnimationFrame(raf.current);
   }, []);
+
+  // The refusal, drawn. Native driver, which is what rules the colour out of
+  // the animation: `translateX` is a transform and rides the UI thread, where
+  // a border colour cannot, so the colour is a plain state flip that lives and
+  // dies with the travel rather than a fade of its own. Cross-fading two
+  // layers is the usual way around that and would be two more views per cell,
+  // for a third of a second, on the busiest list in the app.
+  useEffect(() => {
+    if (!warn) return;
+    setWarned(true);
+    const run = Animated.sequence(
+      SHAKE.map((to) =>
+        Animated.timing(shake, {
+          toValue: to,
+          duration: linger.shake,
+          easing: motion.tap.easing,
+          useNativeDriver: true,
+        })
+      )
+    );
+    run.start(({ finished }) => finished && setWarned(false));
+    // A cell that is refused again mid-shake starts the new one from rest, and
+    // one that leaves the screen takes its own animation with it.
+    return () => {
+      run.stop();
+      shake.setValue(0);
+      setWarned(false);
+    };
+  }, [warn, shake]);
 
   const toggleFocus = () => {
     if (editing) ref.current?.blur();
@@ -1922,13 +2268,19 @@ function NumCell({
     <GestureDetector gesture={Gesture.Race(drag, tap)}>
       {/* Never `auto`, focused or not: the editor must not see an ACTION_DOWN
           or the drag is cancelled before it starts. */}
-      <View style={style} pointerEvents="box-only">
+      <Animated.View
+        style={[style, { transform: [{ translateX: shake }] }]}
+        pointerEvents="box-only"
+      >
         <Input
           ref={ref}
           style={[
             styles.setInput,
             live && styles.setInputLive,
             dragging && styles.setInputDragging,
+            // Last, so it wins over both: while the cell is being refused it
+            // is the only thing the row is about.
+            warned && styles.setInputWarn,
           ]}
           placeholder={ghost}
           value={value}
@@ -1943,7 +2295,7 @@ function NumCell({
             input.onBlur?.(e);
           }}
         />
-      </View>
+      </Animated.View>
     </GestureDetector>
   );
 }
@@ -2048,50 +2400,66 @@ function WaitLines({
   );
 }
 
-/** One set row: dim on done, accent flash on tick, ghost figures that fly. */
-function SetRow({
-  index,
+/**
+ * One **line** of a set: dim on done, accent flash on tick, ghost figures that
+ * fly.
+ *
+ * A set is a chain — the row and the drops taken off it (`chainsOf`) — and
+ * `SetStack` is what draws one. This draws a line inside it, and deliberately
+ * owns nothing that belongs to the set as a whole: no tick, no wait lines, no
+ * note line, not even the raised box. What it does own is every measurement,
+ * which is why the tick left rather than the geometry moving — see the
+ * `inputW` / `flyDx` note below, where every number is a column width.
+ */
+function SetLine({
+  n,
+  isDrop,
+  drop,
   set,
   single,
   live,
-  waiting,
-  asking,
-  queued,
+  held,
   demo,
-  tip,
+  warn,
   onCopy,
   onW,
   onReps,
-  onToggle,
   onLog,
   onScrub,
   onMark,
 }: {
-  index: number;
+  /**
+   * The number of the set this line belongs to — printed on the head, and on
+   * a drop line only spoken, in `dropLabel`.
+   *
+   * A **chain ordinal**, never the row index: with a drop in the array
+   * `index + 1` counts it as a set, so a drop off set 3 drew as 4 and the
+   * working set under it as 5 — a four-set exercise counting to five in its
+   * own ledger, for the rest of the workout.
+   */
+  n: number;
+  /** a line of the set above rather than the head of one */
+  isDrop: boolean;
+  /** How far this line fell from the top of its chain — `−15 kg`, or null. */
+  drop: string | null;
   set: LoggedSet;
-  /** the sentence standing in for the countdown this row didn't earn */
-  queued?: string | null;
   /** `duration` — one wide field instead of two, and no weight to walk to */
   single: boolean;
   /** the set you're on — raised, with numbers at thumb size */
   live: boolean;
-  /** What is being waited on, whose it is, and the way out of your own half. */
-  waiting: Waiting | null;
-  /**
-   * Nobody has said who takes this one yet. Takes your own line's place and
-   * wins it — an open question outranks a countdown, and carries the same
-   * clock — but never gates the row: the fields and the tick above it keep
-   * working whether it is answered or not.
-   */
-  asking: Asking | null;
+  /** live, but not yours yet: your own rest, their turn, or an open question */
+  held?: boolean;
   /** Play the taught hold-and-drag over this row's left cell — see `DragDemo`. */
   demo?: boolean;
-  /** The one tip this screen is carrying, when it belongs under this row. */
-  tip?: ReactNode;
   onCopy: (w: string, r: string) => void;
   onW: (v: string) => void;
   onReps: (v: string) => void;
-  onToggle: (w: string, r: string) => void;
+  /**
+   * A refused tick, as a bare counter — the reps cell shakes whenever it
+   * changes to something non-zero. A counter and not a flag because the
+   * same row is most likely to be refused twice running.
+   */
+  warn?: number;
   /** enter on the reps field — log it, don't toggle it */
   onLog: () => void;
   onScrub: (on: boolean) => void;
@@ -2159,22 +2527,7 @@ function SetRow({
   const flyDx = 74 + inputW / 2;
 
   return (
-    <View style={[styles.rowWrap, set.link && styles.rowWrapLinked]}>
-      {/* The chain: this set was taken straight off the one above it. Drawn in
-          the gutter *between* the two digits rather than in either of them,
-          because the index column already belongs to the mark — a marked drop
-          would otherwise erase the fact that it was one. Two hairlines at the
-          live box's own weight: structure, not a thing to press. */}
-      {set.link && (
-        <View
-          pointerEvents="none"
-          style={[styles.chainRiser, live && styles.chainRiserLive]}
-        />
-      )}
-      <View
-        style={[live && styles.liveBox, live && (waiting?.held || asking) && styles.liveBoxWaiting]}
-      >
-        <View onLayout={(e) => setRowW(e.nativeEvent.layout.width)}>
+    <View onLayout={(e) => setRowW(e.nativeEvent.layout.width)}>
           <Animated.View pointerEvents="none" style={[styles.rowFlash, { opacity: flash }]} />
           <Animated.View style={[styles.setRow, { opacity: dim }]}>
             {/* The row's number is also where its verdict lives, and the two
@@ -2186,24 +2539,42 @@ function SetRow({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={
-                set.mark ? markLabel(set.mark, L) : L.setLabel.replace('{n}', String(index + 1))
+                set.mark
+                  ? markLabel(set.mark, L)
+                  : isDrop
+                    ? L.dropLabel.replace('{n}', String(n))
+                    : L.setLabel.replace('{n}', String(n))
               }
               onPress={onMark}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 4 }}
               style={styles.markCell}
             >
+              {/* A drop line has no digit — it is not a set being counted —
+                  but it keeps the cell, and a verdict still takes it. That is
+                  what a drop can say for itself that the old gutter riser
+                  could not: judge it and the judgement lands on the line it
+                  is about, with nothing of the drop erased, because what says
+                  it is a drop is the block around it. */}
               {set.mark ? (
                 <Icon d={MARK_D[set.mark]} size={15} color={c.accent400} strokeWidth={2.2} />
-              ) : (
-                <Text
-                  style={[styles.setIndex, live && !waiting?.held && !asking && styles.setIndexLive]}
-                >
-                  {index + 1}
-                </Text>
+              ) : isDrop ? null : (
+                <Text style={[styles.setIndex, live && !held && styles.setIndexLive]}>{n}</Text>
               )}
             </Pressable>
+            {/* A drop has no ghost by construction — last week's set N + 1 was
+                not this drop — so the column is free on exactly the lines that
+                have something else to say, and what they say is how far the
+                weight fell. Deliberately no arrow beside it: `MARK_D.down` is
+                a down arrow at `accent400`, drawn in the cell immediately to
+                the left for *go lighter next time*, and two of them meaning
+                two things on one line is worse than none. The minus already
+                says which way it went. */}
             <Pressable onPress={copy} style={styles.colPrev}>
-              <Text style={styles.prevText}>{prevLabel(set.prev, single)}</Text>
+              {drop ? (
+                <Text style={styles.dropText}>{drop}</Text>
+              ) : (
+                <Text style={styles.prevText}>{prevLabel(set.prev, single)}</Text>
+              )}
             </Pressable>
             {!single && (
               <NumCell
@@ -2235,17 +2606,21 @@ function SetRow({
               // hold, minutes of a run. All of them are the bigger fact, and
               // all of them get the longer travel.
               px={PX_PER_REP}
+              // The one cell a refusal can be about: the left one is allowed
+              // to be empty, this one is what makes a set a set.
+              warn={warn}
               onText={onReps}
               onScrub={onScrub}
               keyboardType="number-pad"
               returnKeyType="done"
               onSubmitEditing={onLog}
             />
-            <AnimatedCheck
-              done={set.done}
-              live={live}
-              onPress={() => onToggle(ghost.w, ghost.r)}
-            />
+            {/* The tick belongs to the *set*, so `SetStack` draws one over
+                the block. What stays here is its footprint — same width, same
+                height — because `inputW` and `flyDx` above are written out of
+                this row's column widths, and a column leaving the flow would
+                have moved every one of them. */}
+            <View style={[styles.check, live && styles.checkLive, styles.checkSlot]} />
           </Animated.View>
           <Animated.View pointerEvents="none" style={[styles.inputCatch, { opacity: catchV }]} />
           {/* Drawn over the left-hand number cell, and writing nothing: the
@@ -2285,56 +2660,187 @@ function SetRow({
               </Animated.Text>
             </View>
           )}
+    </View>
+  );
+}
+
+/**
+ * One **set**: the row you lifted, and the drops you took off it.
+ *
+ * A drop is not a set being logged — it is a set still being finished — so the
+ * unit the ledger draws, numbers and ticks is the chain (`chainsOf`), not the
+ * row. Three things follow, and they are the whole feature:
+ *
+ * - **One tick, centred across however many lines the set took.** Which is what
+ *   says the *set* is the thing being ticked. It acts on one line at a time —
+ *   logging the first still open, and on a sealed set taking the last one
+ *   back — so ticking a two-line set is two taps and unticking it is two, which
+ *   is one gesture read in both directions.
+ * - **Adding a drop takes the tick off, and nothing writes it off.** A set is
+ *   done when every line of it is (`chainDone`), so one fresh unticked line is
+ *   the whole of it. The row above keeps its own `done`, which is what lets
+ *   `liveIn` walk straight to the drop instead of back to the set you have
+ *   already lifted.
+ * - **The block is the only thing saying these were one effort**, so it has to
+ *   survive the tick — which the wait line's *Drop from set 3* does not, that
+ *   being furniture which leaves with the countdown it stands in for.
+ *
+ * It draws the raised box, the note lines and the wait lines, because all three
+ * are about the set rather than about a line of it. `SetLine` keeps every
+ * measurement, and that is why the tick is drawn *over* the block on the
+ * footprint each line still reserves for it rather than being lifted out of the
+ * row: `inputW` and `flyDx` are written out of that row's column widths.
+ */
+function SetStack({
+  n,
+  lines,
+  liveJ,
+  single,
+  units,
+  waiting,
+  asking,
+  queued,
+  demo,
+  tip,
+  warn,
+  onCopy,
+  onW,
+  onReps,
+  onToggle,
+  onLog,
+  onScrub,
+  onMark,
+}: {
+  /** the set's number — its position among chains, never among rows */
+  n: number;
+  /** the head and its drops, as row indexes into the exercise's `sets` */
+  lines: { j: number; set: LoggedSet }[];
+  /** the row index of the live set, or -1 */
+  liveJ: number;
+  single: boolean;
+  /** the exercise's units, for writing a drop's delta in the right one */
+  units: { left: string; right: string; single: boolean };
+  waiting: Waiting | null;
+  asking: Asking | null;
+  queued?: string | null;
+  demo?: boolean;
+  tip?: ReactNode;
+  /** the refused tick's answer — see `refuse` in `Ledger` */
+  warn: { j: number; n: number };
+  onCopy: (j: number, w: string, r: string) => void;
+  onW: (j: number, v: string) => void;
+  onReps: (j: number, v: string) => void;
+  /** the block's one tick — logs the open line, or takes the last one back */
+  onToggle: () => void;
+  onLog: (j: number) => void;
+  onScrub: (on: boolean) => void;
+  onMark: (j: number) => void;
+}) {
+  const styles = useThemed(sheet);
+  const c = useColors();
+  const { L } = useStore();
+  const head = lines[0].j;
+  const stacked = lines.length > 1;
+  const live = lines.some((l) => l.j === liveJ);
+  const held = live && (!!waiting?.held || !!asking);
+  const done = lines.every((l) => l.set.done);
+
+  /**
+   * How far a line fell — against the top of the chain, not the line above it.
+   *
+   * The reference has to stay fixed for the figures to be a curve: −15 then
+   * −25 against 8 then 6 reps says how much weight had to come off for the
+   * muscle to keep producing reps, which is the thing a drop set is for.
+   * Measured line to line it would read −15 then −10, and the second number
+   * would be about a different weight than the first.
+   *
+   * Absent when there is nothing to report — an equal or heavier line, which
+   * includes the moment a drop is added, since it opens carrying the weight it
+   * came off — and absent on any measure whose left-hand cell is not a weight:
+   * a `distance` row's is kilometres and a `duration` row has none at all.
+   */
+  const fell = (set: LoggedSet) => {
+    if (units.single || units.left !== L.unitKg) return null;
+    const d = num(lines[0].set.w, 0) - num(set.w, 0);
+    return d > 0 ? `−${fmt(d)} ${L.unitKg}` : null;
+  };
+
+  /**
+   * The way in to the mark sheet, offered **once per set** and on its last
+   * logged line.
+   *
+   * Per line it would draw `+ Note` twice under a two-line set, which is the
+   * furniture this whole arrangement exists to avoid. The last line is the
+   * right one: it is the effort you have just finished, so it is the one you
+   * have an opinion about. Words already written stay on the line they were
+   * written about, however many of them there are.
+   */
+  const offerAt = [...lines].reverse().find((l) => l.set.done && !l.set.note?.trim())?.j ?? -1;
+
+  return (
+    <View style={styles.rowWrap}>
+      <View style={[live && styles.liveBox, held && styles.liveBoxWaiting]}>
+        {/* The block: a hairline and the faintest wash in the palette — enough
+            to read as one thing at arm's length, quiet enough that a ledger of
+            ordinary sets is the ledger it always was. It bleeds past the rows
+            on both sides by its own border plus padding, so its *content* box
+            is their content box and every column lands on the same x. Aligning
+            it by eye instead puts a stacked set's kilos out by the padding,
+            which on tabular figures reads as a broken column. */}
+        <View style={[stacked && styles.stackBox, stacked && live && styles.stackBoxLive]}>
+          {lines.map(({ j, set }) => (
+            <View key={j} style={stacked && j !== head ? styles.stackLine : undefined}>
+              <SetLine
+                n={n}
+                isDrop={j !== head}
+                drop={j !== head ? fell(set) : null}
+                set={set}
+                single={single}
+                live={j === liveJ}
+                held={held}
+                demo={j === liveJ && !!demo}
+                warn={warn.j === j ? warn.n : 0}
+                onCopy={(w, r) => onCopy(j, w, r)}
+                onW={(v) => onW(j, v)}
+                onReps={(v) => onReps(j, v)}
+                onLog={() => onLog(j)}
+                onScrub={onScrub}
+                onMark={() => onMark(j)}
+              />
+            </View>
+          ))}
+          {/* Over the footprint every line still reserves for it, centred down
+              the block's whole height. Absolute rather than in the flow, so a
+              set of one line is drawn exactly where it has always been. */}
+          <View style={styles.stackCheck} pointerEvents="box-none">
+            <AnimatedCheck done={done} live={live} onPress={onToggle} />
+          </View>
         </View>
 
-        {/* The row's one note line: your own words, else — on a set you have
-            *ticked* — the way in. Nothing on a set still ahead of you.
-
-            **Both other arrangements were built and tried on a real phone**,
-            and the order matters because the reasoning does. Reaching the mark
-            sheet by tapping the 16px index digit was the original, and it is
-            unlabelled and unfindable — the complaint that started this. Drawing
-            the line under *every* row answered that and gave back too much
-            screen: eight rows of a five-set exercise is 130px of mostly
-            `+ Note`, measured in the hand rather than argued about, and the set
-            you are working on sits that much further down.
-
-            So the tick. It is the moment the two things coincide: a set you
-            have lifted is a set you have an opinion about, and it is also the
-            only set you could be writing about. Row 4 is a plan — an offer
-            standing on it is furniture on the screen working hardest not to
-            become furniture. What it costs, honestly, is that the way in
-            arrives rather than being always there; what it buys is that it
-            arrives on every set you could use it on, which is the part the
-            index digit never managed.
-
-            What used to sit here as well was last time's verdict, drawn on
-            the live row. It has moved to `LastNotes` at the top of the
-            exercise, where it arrives *before* set 1 rather than on the row it
-            happened to be written on last week — see that component. Leaving
-            a copy here would put the same sentence on screen twice, and this
-            row can already be carrying a rest countdown or the buddy's turn
-            underneath. */}
-        {set.mark && set.note?.trim() ? (
-          <Pressable onPress={onMark} style={styles.markLine}>
-            <Icon d={MARK_D[set.mark]} size={12} color={c.accent400} strokeWidth={2.2} />
-            <Text style={[styles.markLineText, styles.markLineOwn]} numberOfLines={2}>
-              {set.note.trim()}
-            </Text>
-          </Pressable>
-        ) : set.done ? (
-          // The quietest thing on the screen — dimmer than the ghost figures
-          // beside it, because it is an offer and everything else on the row
-          // is the workout. No fill and above all no dash: dashed means *this
-          // one is held* at three sites, and a hint drawn as a control you
-          // must press and hold is the exact confusion it exists to end.
-          <Pressable onPress={onMark} style={styles.markLine}>
-            <Icon d={MARK_D.note} size={12} color={c.neutral700} strokeWidth={2.2} />
-            <Text style={[styles.markLineText, styles.markLineAdd]} numberOfLines={1}>
-              {L.addNote}
-            </Text>
-          </Pressable>
-        ) : null}
+        {/* Words already written, on the line they are about — then the way in,
+            once. See `offerAt` for why the offer is not drawn per line. */}
+        {lines.map(({ j, set }) =>
+          set.mark && set.note?.trim() ? (
+            <Pressable key={j} onPress={() => onMark(j)} style={styles.markLine}>
+              <Icon d={MARK_D[set.mark]} size={12} color={c.accent400} strokeWidth={2.2} />
+              <Text style={[styles.markLineText, styles.markLineOwn]} numberOfLines={2}>
+                {set.note.trim()}
+              </Text>
+            </Pressable>
+          ) : j === offerAt ? (
+            // The quietest thing on the screen — dimmer than the ghost figures
+            // beside it, because it is an offer and everything else on the row
+            // is the workout. No fill and above all no dash: dashed means *this
+            // one is held* at three sites, and a hint drawn as a control you
+            // must press and hold is the exact confusion it exists to end.
+            <Pressable key={j} onPress={() => onMark(j)} style={styles.markLine}>
+              <Icon d={MARK_D.note} size={12} color={c.neutral700} strokeWidth={2.2} />
+              <Text style={[styles.markLineText, styles.markLineAdd]} numberOfLines={1}>
+                {L.addNote}
+              </Text>
+            </Pressable>
+          ) : null
+        )}
 
         {live && <WaitLines waiting={waiting} asking={asking} queued={queued} />}
       </View>
@@ -2807,26 +3313,12 @@ const sheet = themed(() => ({
   colCheck: { width: 34 },
 
   rowWrap: { marginBottom: 5 },
-  /* A drop sits tight to the set it came off — the gap closing is half of what
-     says they were one effort, and the hairline below is the other half. */
-  rowWrapLinked: { marginTop: -2 },
-  /**
-   * The chain, drawn in the gutter *between* two rows rather than inside
-   * either index cell: that cell already belongs to `SetMark`, so a marked
-   * drop would otherwise have its own marker replaced by its verdict. It sits
-   * on the index column's centre — 8px in normally, 16 when the live box's own
-   * padding has moved the digit — at the live border's weight, because it is
-   * structure and not something to press.
-   */
-  chainRiser: {
-    position: 'absolute',
-    left: 8,
-    top: -8,
-    width: 1,
-    height: 16,
-    backgroundColor: color.accent700,
-  },
-  chainRiserLive: { left: 16, height: 24 },
+  /* The gutter riser that used to draw the chain lived here — one absolutely
+     positioned hairline between two rows, kept out of the index cell because
+     that cell belongs to `SetMark`. It is gone with the whole idea of a
+     connector: a drop was drawn with a working set's row and then annotated,
+     so the annotation was arguing with everything else on the line. What says
+     it now is `stackBox`, which is the row's own shape. */
   setRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   /** The set you're on: raised out of the ledger, numbers at thumb size. */
   liveBox: {
@@ -2984,6 +3476,13 @@ const sheet = themed(() => ({
     color: color.neutral500,
     fontVariant: ['tabular-nums'],
   },
+  /** How far a drop fell, in the cell a drop is guaranteed not to be using. */
+  dropText: {
+    fontFamily: font.regular,
+    fontSize: 11.5,
+    color: color.accent400,
+    fontVariant: ['tabular-nums'],
+  },
   setInput: {
     textAlign: 'center',
     paddingVertical: 6,
@@ -3000,6 +3499,60 @@ const sheet = themed(() => ({
   },
   /** While a hold-drag is stepping the number. */
   setInputDragging: { borderColor: color.accent, backgroundColor: wash.accent(10) },
+
+  /**
+   * A set that took more than one line — see `SetStack`.
+   *
+   * The negative margins are the point rather than a tweak: the block's own
+   * border and padding would push its columns in by 7px, and a stacked set
+   * whose kilos sit 7px right of the kilos above it reads as a broken column,
+   * not as a group. Bleeding the block back out by exactly that much makes its
+   * *content* box the plain row's content box, so every figure stays in its
+   * column and only the card moves.
+   *
+   * The faintest wash the palette has, and a hairline one step below the
+   * ledger's own: it has to read as one thing at arm's length without turning
+   * a ledger of ordinary sets into a stack of cards.
+   */
+  stackBox: {
+    borderWidth: 1,
+    borderColor: color.neutral900,
+    borderStyle: 'solid',
+    borderRadius: radius.md,
+    backgroundColor: wash.text(4),
+    paddingHorizontal: 6,
+    marginHorizontal: -7,
+  },
+  /** Inside the live box the block sits on the accent wash, not the text one. */
+  stackBoxLive: { borderColor: color.accent800, backgroundColor: 'transparent' },
+  /** Between two lines of one set — the app's own in-sheet separator weight. */
+  stackLine: { borderTopWidth: 1, borderTopColor: t.rule },
+  /**
+   * The set's one tick, over the footprint each line reserves for it.
+   *
+   * Absolute, so a set of a single line is drawn exactly where it always was
+   * and every measurement in `SetLine` is untouched; `box-none` so the block
+   * behind it keeps taking touches everywhere the check itself is not.
+   */
+  stackCheck: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  /** What the line leaves behind where its tick used to be. */
+  checkSlot: { borderWidth: 0, backgroundColor: 'transparent' },
+  /**
+   * While a tick this cell is the reason for is being refused. The one place
+   * `warn` is drawn in the app — and it is drawn on the edge and the figure
+   * rather than as a fill, because the cell is usually *empty* at this moment
+   * (that being the whole complaint) and a fill would have nothing to sit
+   * behind.
+   */
+  setInputWarn: { borderColor: color.warn, color: color.warn },
   check: {
     width: 34,
     height: 32,
@@ -3101,6 +3654,12 @@ const sheet = themed(() => ({
 
   ovSub: { fontFamily: font.regular, fontSize: 11.5, color: color.neutral500, marginTop: 3 },
   ovList: { marginTop: 12 },
+  /* One stop of the drag list: grip beside content, and ReorderRows' landing
+     cue — a 2px top border, transparent until targeted so the layout never
+     shifts. */
+  ovStop: { flexDirection: 'row', alignItems: 'center', gap: 6, borderTopWidth: 2 },
+  ovStopBody: { flex: 1 },
+  ovGrip: { width: 20, height: 26, alignItems: 'center', justifyContent: 'center' },
   /* A pair, bracketed — one unit here because it is one stop on the screen
      behind, and tapping either row lands on the same place. */
   ovPair: { flexDirection: 'row', gap: 9, marginVertical: 6 },
@@ -3213,5 +3772,7 @@ const sheet = themed(() => ({
   linkText: { flex: 1 },
   linkLabel: { fontFamily: font.regular, fontSize: 13.5, color: color.text },
   linkSub: { fontFamily: font.regular, fontSize: 11, color: color.neutral600, marginTop: 1 },
+  markRemove: { marginTop: 14, height: 40 },
+  markRemoveLabel: { color: color.neutral500 },
   markClose: { marginTop: 16, height: 40 },
 }));

@@ -60,6 +60,7 @@ import {
   V2_GROUP_KEYS,
 } from '@/data/exercises';
 import { DEFAULT_COACH, type CoachOptions, type ResolvedPlan } from '@/data/coach';
+import { setCounts, stopsOf } from '@/data/superset';
 import type { TipId, Tips } from '@/data/tips';
 import { deviceLang, DICT, fmtDayLong, Lang, LangMap, Strings } from '@/data/i18n';
 import { isThemeName, ThemeMode, ThemeName } from '@/design/tokens';
@@ -1734,6 +1735,37 @@ function useWorkoutState() {
     });
 
   /**
+   * Reorder the live session — the overview's drag, by *stop*: a superset pair
+   * is one thing on the screen behind, so it travels as one thing here, which
+   * is also what keeps `with` adjacency true by construction and keeps this a
+   * reorder rather than a pairing control (a running workout still has none).
+   * A `with` that already resolved to no pair — only the last row can carry
+   * one — is cleared rather than handed whatever lands after it:
+   * `appendSessionEx`'s rule, met from the other side. `active` keeps naming
+   * the exercise it named, wherever that exercise lands.
+   */
+  const moveSessionStop = (from: number, to: number) =>
+    patch((s) => {
+      if (!s.session) return null;
+      const stops = stopsOf(s.session.list);
+      if (from === to || !stops[from] || !stops[to]) return null;
+      const list = s.session.list.map((e, k) =>
+        e.with && stops.some((st) => st.head === k && st.ids.length === 1)
+          ? { ...e, with: undefined }
+          : e
+      );
+      const order = stops.map((st) => st.ids.map((k) => list[k]));
+      const [moved] = order.splice(from, 1);
+      order.splice(to, 0, moved);
+      const next = order.flat();
+      const held = list[Math.max(0, Math.min(s.active, list.length - 1))];
+      return {
+        session: { ...s.session, list: next },
+        active: Math.max(0, next.indexOf(held)),
+      };
+    });
+
+  /**
    * A fresh copy of a seed routine at an experience level — what onboarding
    * installs for a pick and what the collection's + installs for one, so the
    * two can never write different shapes. Scaled numbers are marked `planned`
@@ -2527,6 +2559,17 @@ function useWorkoutState() {
   /**
    * Ticked sets, total sets, and total volume for the live session.
    *
+   * **Sets are chains and volume is rows**, and the two differ for exactly one
+   * reason. `n of m sets` is progress against what the routine asked for, so a
+   * drop must not inflate the denominator — an exercise that moved further
+   * from being finished every time you dropped would be reporting the opposite
+   * of what happened. Volume is a measure of work performed, and a drop is
+   * work: 50 × 8 is 400 kg whatever it is part of.
+   *
+   * (The diary's `n sets` is the third reading and counts rows, because there
+   * it is a tally of efforts rather than progress against a plan. Calvin's
+   * call, and the two numbers answer different questions.)
+   *
    * Only `load` exercises reach the volume: kg × seconds and km × minutes are
    * not units, so adding a plank or a run into that total would quietly make
    * the summary's one number mean nothing.
@@ -2538,13 +2581,13 @@ function useWorkoutState() {
     let vol = 0;
     list.forEach((e) => {
       const counts = measureOf(ex(e.ex)) === 'load';
-      e.sets.forEach((s) => {
-        all++;
-        if (s.done) {
-          done++;
-          if (counts) vol += num(s.w, 0) * num(s.reps, 0);
-        }
-      });
+      const n = setCounts(e.sets);
+      all += n.all;
+      done += n.done;
+      if (counts)
+        e.sets.forEach((s) => {
+          if (s.done) vol += num(s.w, 0) * num(s.reps, 0);
+        });
     });
     return { done, all, vol };
   };
@@ -2578,7 +2621,6 @@ function useWorkoutState() {
           (x) => `${num(x.w, 0) ? fmt(num(x.w, 0)) : blank} × ${Math.round(num(x.reps, 0))}`
         );
         if (sets.length) {
-          lastLog[e.ex] = { date: today, sets };
           // The verdicts ride alongside, one slot per string above — built in
           // the same pass as `sets`, off the same `ticked` array, because two
           // loops are two chances for the indexes to stop describing each
@@ -2589,6 +2631,27 @@ function useWorkoutState() {
               : null
           );
           const marked = marks.some(Boolean);
+          // **The ghost is the working sets only.** `lastLog` is read back
+          // index for index by `sessionFrom`, and a drop is an extra row that
+          // the routine asking for next week's sets knows nothing about — so
+          // one taken off set 2 of 4 would hand set 3 the drop's figure and
+          // shift every ghost below it, permanently, for that exercise.
+          // `lastMarks` is the same array's verdicts and has to be cut in the
+          // same place, or the arrow would be a verdict on a different set.
+          //
+          // Nothing is lost by it: a drop is a fact about the *day*, and the
+          // day keeps its own complete copy below (`sets` / `links`). This
+          // one is only the answer to "what did I lift last time", which is a
+          // question about the working set.
+          //
+          // An exercise where nothing but a drop was ticked has no working
+          // set to offer, so it falls back to what there is — a ghost of the
+          // wrong shape beats no ghost at all, and both keys fall back
+          // together so they stay describing each other.
+          const work = ticked.flatMap((x, j) => (x.link ? [] : [j]));
+          const ghostAt = work.length ? work : ticked.map((_, j) => j);
+          const ghostSets = ghostAt.map((j) => sets[j]);
+          const ghostMarks = ghostAt.map((j) => marks[j]);
           // Which of the ticked rows were drops, in the same pass off the same
           // array for the same reason. A drop is a fact about how the day went
           // and the numbers alone misreport it: 50 × 8 under 65 × 6 reads as a
@@ -2611,7 +2674,11 @@ function useWorkoutState() {
             // drawn over a single block would be describing nothing.
             ...(e.with && s.session.list[k + 1]?.sets.some((x) => x.done) ? { with: e.with } : {}),
           });
-          if (marked) lastMarks[e.ex] = marks;
+          lastLog[e.ex] = { date: today, sets: ghostSets };
+          // Read off `ghostMarks`, not `marked`: a verdict left on a drop
+          // alone is a verdict on no row this map still holds, and writing
+          // the key for it would put an arrow beside a set nobody judged.
+          if (ghostMarks.some(Boolean)) lastMarks[e.ex] = ghostMarks;
           else delete lastMarks[e.ex];
         }
       }
@@ -2672,13 +2739,21 @@ function useWorkoutState() {
   const saveAsRoutine = (name: string) => {
     patch((s) => {
       if (!s.summary?.saveable) return null;
-      const kept = s.summary.saveable.filter((e) => e.sets.length > 0);
-      const items = kept.map((e, k) => {
-        const src = [...e.sets].reverse().find((x) => x.done) ?? e.sets[e.sets.length - 1];
+      // **A drop is not a set a routine can ask for.** `RoutineItem` has no
+      // `link` twin — a drop is a decision about how that set went, which
+      // nobody makes a week early — so one carried in here would come back
+      // next week as an ordinary planned row, *and* at the drop's weight,
+      // since it is also the last row the numbers are read off. Both the
+      // count and the figures are taken over the working sets only.
+      const kept = s.summary.saveable
+        .map((e) => ({ e, sets: e.sets.filter((x) => !x.link) }))
+        .filter((x) => x.sets.length > 0);
+      const items = kept.map(({ e, sets }, k) => {
+        const src = [...sets].reverse().find((x) => x.done) ?? sets[sets.length - 1];
         const ghost = prevNums(src.prev);
         return {
           ex: e.ex,
-          sets: e.sets.length,
+          sets: sets.length,
           reps: Math.round(num(src.reps || ghost.r, 8)),
           w: num(src.w || ghost.w, 0),
           // As above: the pair survives into the routine, but only where its
@@ -2718,12 +2793,18 @@ function useWorkoutState() {
   const saveDayAsRoutine = (i: number, name: string) =>
     patch((s) => {
       const h = s.history[i];
-      const kept = (h?.list ?? []).filter((e) => e.sets.length > 0);
-      const items = kept.map((e, k) => {
-        const n = prevNums(e.sets[e.sets.length - 1]);
+      // The working sets only, for the reason `saveAsRoutine` gives: a routine
+      // cannot hold a drop, and the day's last row is usually one — so its
+      // weight would become the routine's. `links` is index for index with
+      // `sets`, and absent on every entry logged before drops existed.
+      const kept = (h?.list ?? [])
+        .map((e) => ({ e, sets: e.sets.filter((_, j) => !e.links?.[j]) }))
+        .filter((x) => x.sets.length > 0);
+      const items = kept.map(({ e, sets }, k) => {
+        const n = prevNums(sets[sets.length - 1]);
         return {
           ex: e.ex,
-          sets: e.sets.length,
+          sets: sets.length,
           reps: Math.round(num(n.r, 8)),
           w: num(n.w, 0),
           // The day was taken as a superset, so the routine made from it is
@@ -2899,6 +2980,7 @@ function useWorkoutState() {
     addSessionEx,
     adoptBuddyEx,
     removeSessionEx,
+    moveSessionStop,
     mutRoutine,
     deleteRoutine,
     moveRoutineItem,

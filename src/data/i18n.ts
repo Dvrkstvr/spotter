@@ -86,12 +86,21 @@ export const DICT = {
     // makes them explanations rather than furniture: they leave with the row.
     holdAddDrop: 'Hold to add a drop set', addDrop: '+ Drop set',
     dropAfter: 'Drop from set {n} — no rest',
+    // A drop line has no number of its own — it is a line of the set above,
+    // not the next one — so the screen reader is told what it is instead.
+    dropLabel: 'Drop off set {n}',
+    // Removing a set takes its drops with it: they are lines of it, and there
+    // is no set for them to belong to afterwards. The held label is where that
+    // is said, because it is read before the hold rather than after it.
+    holdRemoveSetDrops: 'Hold to remove this set and its drop',
+    holdRemoveSetDropsN: 'Hold to remove this set and its {n} drops',
     linkLabel: 'Straight after set {n}', linkSub: 'No rest between them.',
     superset: 'Superset', supersetRound: 'Superset · round {n} of {m}',
     noRestFrom: 'No rest — straight from {name}',
     pairNext: 'Superset with the next exercise', unpair: 'Unpair',
     emptySessionNote: 'No exercises yet — add the first one and log as you go.',
     removeExercise: 'Remove exercise',
+    holdRemoveSet: 'Hold to remove this set',
     buddyLeftNote: '{name} disconnected — finishing on your own.',
     holdFinish: 'Hold to finish',
     finishWorkout: 'Finish workout', completedToday: 'Completed today', startAgain: 'Start again', agoToday: 'today',
@@ -530,12 +539,16 @@ export const DICT = {
     // Satz 3“. Reduktionssatz wäre korrekter und sagt niemand.
     holdAddDrop: 'Für einen Dropsatz halten', addDrop: '+ Dropsatz',
     dropAfter: 'Drop aus Satz {n} — keine Pause',
+    dropLabel: 'Drop aus Satz {n}',
+    holdRemoveSetDrops: 'Satz mit Drop zum Entfernen halten',
+    holdRemoveSetDropsN: 'Satz mit {n} Drops zum Entfernen halten',
     linkLabel: 'Direkt nach Satz {n}', linkSub: 'Keine Pause dazwischen.',
     superset: 'Supersatz', supersetRound: 'Supersatz · Runde {n} von {m}',
     noRestFrom: 'Keine Pause — direkt von {name}',
     pairNext: 'Supersatz mit der nächsten Übung', unpair: 'Koppelung lösen',
     emptySessionNote: 'Noch keine Übungen — füg die erste hinzu und trag ein, was du machst.',
     removeExercise: 'Übung entfernen',
+    holdRemoveSet: 'Zum Entfernen halten',
     buddyLeftNote: '{name} hat die Verbindung getrennt — du machst allein weiter.',
     holdFinish: 'Zum Beenden halten',
     finishWorkout: 'Training beenden', completedToday: 'Heute erledigt', startAgain: 'Nochmal starten', agoToday: 'heute',

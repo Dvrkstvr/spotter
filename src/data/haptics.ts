@@ -97,6 +97,21 @@ export const buzz = {
     return () => timers.forEach(clearTimeout);
   },
   /**
+   * A tick the app turned down — a set with no reps in it, which it will not
+   * record. Rare by construction, so on this ladder it may be loud.
+   *
+   * `NotificationFeedbackType.Error` is the reach `gone` explicitly refuses,
+   * and for the reason that makes it right here: its three pulses are the
+   * platform saying *a failure happened*, which is a poor description of a
+   * routine you held a button down to delete and an exact one of a gesture
+   * that did not go through. It is also the one moment on this screen where
+   * nothing changes — the same feeling as a missed tap — so it is the moment
+   * most worth reporting through the finger that made it.
+   */
+  refused: () => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+  },
+  /**
    * Something deleted, at the far end of a hold — the one negative in the
    * vocabulary, and the only thing here that isn't a confirmation. Lands as the
    * final beat of `winding`'s ramp rather than as a separate event: the Heavy

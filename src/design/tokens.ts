@@ -210,6 +210,31 @@ export const isThemeName = (v: unknown): v is ThemeName =>
  */
 const taper = (L: number) => Math.min(1, Math.max(0, (1 - L) / 0.25));
 
+/**
+ * Where a refusal is drawn — the one colour here that is neither a neutral nor
+ * the accent. Nocturne has no such slot, so this is derived rather than
+ * authored beside it, like everything else in this file.
+ *
+ * **It does not turn with the theme.** Every other hue is the accent's,
+ * rotated; this one says *the app would not do that*, which is the same fact
+ * whichever colour you chose the app to be — and under `rose` (8°) or `ember`
+ * (48°) a warning built out of the accent ramp would simply be the accent. So
+ * the hue is fixed, and only the mode's reflection applies: a colour that sat
+ * this far above the dark page sits the same distance below the light one,
+ * exactly as every slot in `buildPalette` does.
+ *
+ * It borrows `accent400`'s own lightness and chroma and turns them to red, so
+ * it lands in this system's register rather than a browser's — understatement
+ * is the voice, and a warning is the last thing that should be shouting.
+ */
+const WARN_HUE = 25;
+
+const warnFor = (dark: boolean) => {
+  const { L, C } = BASE.accent400;
+  const lit = dark ? L : LIGHT_BG_L - (L - BASE.bg.L);
+  return oklchToHex({ L: lit, C: dark ? C : C * taper(lit), H: WARN_HUE });
+};
+
 function buildPalette(name: ThemeName, dark: boolean): Record<Slot, string> {
   const theme = THEMES.find((x) => x.key === name) ?? THEMES[0];
   const dHue = theme.hue - BASE_HUE;
@@ -272,9 +297,10 @@ export const themeSwatch = (name: ThemeName, dark: boolean) => {
  * is hoisted out of the component and computed exactly once. Components read
  * `useColors()` instead — see `./theme`.
  */
-export const color: Record<Slot | 'divider', string> = {
+export const color: Record<Slot | 'divider' | 'warn', string> = {
   ...NOCTURNE,
   divider: mix(NOCTURNE.text, 16),
+  warn: warnFor(true),
 };
 
 /** Translucent washes the design builds with color-mix(). */
@@ -297,7 +323,7 @@ export const wash: Wash = {
 };
 
 /** The palette as a value: colours plus washes, frozen at one generation. */
-export type Palette = Record<Slot | 'divider', string> & { wash: Wash };
+export type Palette = Record<Slot | 'divider' | 'warn', string> & { wash: Wash };
 
 /**
  * A fresh object per theme, which is the whole point — a component memoises on
@@ -372,6 +398,8 @@ export const linger = {
   rise: 100,
   /** a released hold rewinding its fill */
   rewind: 160,
+  /** one leg of the shake a refused tick gives the cell it wanted filled */
+  shake: 60,
   /** one radar ring's flight in the scan sheet */
   radar: 1600,
 } as const;
@@ -509,6 +537,9 @@ export function applyTheme(name: ThemeName, dark: boolean): { gen: number; color
 
   Object.assign(color, paletteFor(name, dark));
   color.divider = mix(color.text, 16);
+  // Not in `paletteFor` — it is the one slot the theme's hue does not reach,
+  // and only the mode changes it.
+  color.warn = warnFor(dark);
 
   elevation.sm.borderColor = color.neutral800;
   elevation.md.borderColor = color.neutral700;

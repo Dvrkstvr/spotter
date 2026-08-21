@@ -182,6 +182,23 @@ with a dark hero card on it.
 Sheets are exempt: `themed()`'s thunk runs outside any component, and
 `useThemed(sheet)` passes the generation in, which is a reactive argument.
 
+### `warn` is the one hue that doesn't turn
+
+Nocturne has no semantic colour at all — neutrals and one accent, and every
+theme is that accent rotated. `warn` is the single exception, added for the
+refused tick, and two things keep it in the system rather than beside it:
+
+- **It is derived, like everything else here.** `accent400`'s own lightness and
+  chroma at a fixed hue, through the same `oklchToHex`, and reflected about the
+  background in light mode exactly as `buildPalette` reflects every slot. So it
+  reads in this system's register — a muted red, not a browser's — which is the
+  colour equivalent of the copy voice's understatement.
+- **The hue is fixed, and the theme does not reach it.** It says *the app would
+  not do that*, which is the same fact whichever colour you chose the app to
+  be; and under `rose` (8°) or `ember` (48°) a warning rotated with the accent
+  would simply *be* the accent. `applyTheme` sets it from the mode alone, which
+  is why it is not in `paletteFor`.
+
 ## The Routines tab
 
 The design's routine list is flat and in insertion order. This one is
@@ -574,11 +591,74 @@ store nothing.
   moment you drop off set 2 of 4 — the drop lands behind two sets you have not
   done yet. With nothing ticked there is nothing above to drop from, so the
   button is absent rather than dead.
-- **The chain is drawn between digits, never in one.** The index column already
-  belongs to `SetMark` — the mark *takes the digit's place* — so a marked drop
-  would have had its own marker erased by its verdict. A hairline in the gutter
-  between two rows can't argue with it. Sub-numbering (`3a` / `3b`) was the
-  clearest thing to read and is exactly the collision this avoids.
+- **A drop is one set that is dropping, so the tick belongs to the set and not
+  to the row.** Calvin's call, and it is the sentence the whole drawing follows
+  from — the first two attempts drew a drop with a working set's row and then
+  annotated it (a hairline in the gutter, at three lengths), which reads as an
+  annotation arguing with everything else on the line. The unit is the **chain**
+  (`chainsOf` in `data/superset.ts` — the row and the drops taken off it), drawn
+  as one block with one tick, and the mockup is
+  `design/drop-set-stack-mockup.html`.
+  - **A drop used to take a set number, which is the bug under the complaint.**
+    The index cell rendered `index + 1`, the raw row index, so a drop off set 3
+    drew as *4* and the working set under it as *5* — a four-set exercise
+    counting to five in its own ledger for the rest of the workout. Every set
+    number now comes from `setNumberOf`, and a drop line prints none at all: it
+    is not a set being counted. It keeps the *cell*, so a verdict still lands on
+    the line it is about — which is the collision the gutter riser was invented
+    to dodge, and the reason sub-numbering (`3a` / `3b`) was rejected.
+  - **Adding a drop takes the tick off, and nothing writes it off.** A set is
+    done when every line of it is (`chainDone`), so one fresh unticked line is
+    the whole of it. The row above keeps its own `done`, which is what lets
+    `liveIn` walk straight to the drop instead of back to the set you have
+    already lifted — and it is why this needed no new state and no third
+    half-ticked thing to draw.
+  - **The tick moves one line at a time, in both directions.** It logs the
+    first line still open, and on a sealed set takes the *last* one back rather
+    than the whole chain: the commonest reason to untick a set you dropped is
+    that the drop's figures are wrong, and clearing the working set with them
+    would cost a correct row to fix an incorrect one.
+  - **Sets are chains, volume is rows, and the diary is rows.** `totals()`
+    counts chains because `n of m sets` is progress against what the routine
+    asked for — an exercise that moved *further* from being finished every time
+    you dropped would report the opposite of what happened. Volume counts every
+    ticked line, because a drop is work: 50 × 8 is 400 kg whatever it is part
+    of. The diary's `n sets` counts rows, because there it is a tally of efforts
+    with no plan to measure against, and it keeps the `↳` fold so the record
+    still says the two were one effort. Three readings of "a set", each
+    answering its own question — Calvin's call on the third.
+  - **The delta is the drop's other half**, in the ghost column: `−15 kg`,
+    measured from the *top of the chain* rather than the line above, because the
+    reference has to stay fixed for the figures to be a curve — −15 then −25
+    against 8 then 6 reps says how much weight had to come off for the muscle to
+    keep producing reps. That column is free by construction (a drop is written
+    `prev: '—'`), and it is absent when there is nothing to report: an equal or
+    heavier line, or any measure whose left cell is not a weight.
+    - **And it carries no arrow.** `MARK_D.down` *is* a down arrow at
+      `accent400`, drawn in the cell immediately to its left for *go lighter
+      next time*. Two of them meaning two things on one line is worse than one;
+      the minus already says which way it went.
+  - **Removing a set removes its drops, and the held label says so before the
+    hold rather than after it** (`removeRows` / `removeSetLabel` — one reading,
+    or the warning could describe something the button doesn't do). They are
+    lines of that set and there is nothing for them to be a line of afterwards;
+    promoting the first drop instead would quietly rewrite what you lifted. The
+    unticked-only rule is now over the whole chain, so a logged drop protects
+    the set it hangs from, and *never the last set* is counted in chains too.
+  - **`SetStack` owns the set, `SetLine` owns the line, and the tick is drawn
+    over a footprint the line still reserves.** `inputW` / `flyDx` are written
+    out of that row's column widths, so a column *leaving the flow* would have
+    moved every one of them; the block bleeds its own border and padding back
+    out in negative margins so its content box is the plain row's and every
+    figure stays in its column. `+ Note` is offered once per set, on its last
+    logged line — per line it draws twice under a two-line set, which is the
+    furniture this arrangement exists to avoid.
+  - **The buddy still counts rows, and `chained` stays.** `BuddyProgress.list`
+    carries a flat `done: boolean[]` with no `link` on the wire, so the
+    receiving phone cannot group *their* rows into chains; both sides inflate
+    symmetrically, which is what the existing comment argues. Nothing about this
+    feature crosses the wire, and no `STORAGE_VERSION` bump — `link?: true` on
+    `LoggedSet` was already the whole model.
 - **The explanation stands where the countdown would have been.** *Drop from
   set 3 — no rest* / *No rest — straight from {name}* live in the wait slot, so
   they leave with the row the way a rest does and nothing permanent is added to
@@ -614,6 +694,29 @@ store nothing.
   when the partner actually got a set ticked, or the bracket would describe
   nothing — and `saveAsRoutine` / `saveDayAsRoutine` carry it back out under
   the same condition.
+- **But everything read back *index for index* takes the working sets only.**
+  The diary is a record of the day and keeps every row; the three maps that
+  answer "what am I doing next" are aligned against a routine that has never
+  heard of a drop, so an extra row in them shifts everything below it:
+  - **`lastLog` and `lastMarks`** are read `last[k]` by `sessionFrom`, so a
+    drop off set 2 of 4 hands set 3 the drop's figure and its verdict — and
+    permanently, since `lastLog` is rewritten from the shifted session next
+    week too. Both are cut in the same place, or the arrow lands on a set
+    nobody judged; an exercise where *only* a drop was ticked falls back to
+    what there is, both keys together.
+  - **`saveAsRoutine` / `saveDayAsRoutine`** take the count *and* the numbers
+    over the unlinked rows. `RoutineItem` has no `link` twin by decision, so a
+    drop cannot come back as a drop — and it must not come back as a set
+    either, least of all as the weight, which it would be: it is the last row
+    the figures are read off.
+  - The tick is what keeps a drop from being empty in the first place. A row
+    is filled from its ghost **one field at a time** — a drop arrives carrying
+    the weight it came off and has no ghost, so the old pair-wise test saw a
+    filled cell and logged `65 × 0`, the exact record the tick refuses
+    everywhere else. The right-hand figure is what makes a set a set; with
+    nothing typed there and nothing to copy, the tick is refused. `logSet` is
+    the one reading of that rule — the box used to carry a second copy, which
+    is how the two came to disagree.
 - **No tip for either.** Both are reached through labelled controls — *+ Drop
   set*, and a routine you paired yourself. The catalogue's admission test is
   whether a careful person could use the app for a month and never find it, and
@@ -836,7 +939,33 @@ Keep these; they're decisions, not drift. Each is commented at its site.
 - **A set is logged in exactly one place: its own tick box.** Enter on the
   weight field moves to reps, Enter on reps logs the set. There is deliberately
   no second "log" button — the box is also the only way to *un*-tick a set, so
-  it's the one that has to stay.
+  it's the one that has to stay. Which is also why `logSet` is the one reading
+  of what a tick may record: both ways in run it, and the box's own inline
+  copy of the fill-from-last-time rule is what let the two disagree about an
+  untouched drop.
+- **The right-hand figure is what makes a set a set, and the app says so twice
+  — once when you tick, once if you take it away again.** Reps, the seconds of
+  a hold, the minutes of a run. The left one may legitimately end up empty:
+  that is how bodyweight and an unrecorded distance are written.
+  - **A tick that would record nothing is refused, visibly.** The test used to
+    live inside the `patch` updater, whose early return is silent — so the
+    refusal was a tap that did nothing at all, on the one screen where doing
+    nothing is exactly what a missed tap looks like. It is made in the screen
+    now, and `refuse` answers it: the reps cell shakes (`SHAKE`, `linger.shake`
+    a leg), wears `warn` for as long as the shake runs, and `buzz.refused`
+    reports it through the thumb that made it. Drawn on that one cell because
+    it is the only thing that could have been wrong, and drawn rather than
+    written — a line of copy would outlive the moment it explains and settle
+    into furniture on the screen working hardest not to have any.
+  - **A logged set whose reps reach zero stops being logged** (`keepLogged`).
+    The same rule from the other side: without it the tick's refusal only ever
+    held for sets you had not lifted yet, and clearing the cell afterwards
+    still filed the `× 0`. It is one reading over three doors — typing,
+    dragging to the clamp, and copying an empty ghost onto a ticked row — and
+    it unticks rather than blocking the edit, because the cell is a text field
+    and an empty string is the first keystroke of every retype: refusing that
+    would mean never being able to clear a 12 to make it an 8. The way back is
+    the tap it always was.
 - **A set can also carry a verdict** (`SetMark`: `up` / `down` / `ok` / `note`)
   — heavier next time, lighter next time, that was the weight, or words. Not in
   the design; the numbers record what you lifted and never what to do about it,
@@ -1037,6 +1166,28 @@ Keep these; they're decisions, not drift. Each is commented at its site.
   a set that was lifted is a fact, and facts don't leave through an ×. Ticks
   are also refused when they would record nothing — empty fields *and* an
   empty ghost would log "BW × 0", which becomes next session's last-time lie.
+- **A set row can leave the same way, from its own sheet.** The routine asked
+  for five and today has four in it — which used to mean a held Finish and a
+  4/5 that read as a failure for the rest of the workout. So the mark sheet
+  (behind the set's index digit) carries a held remove: unticked rows only —
+  `removeSessionEx`'s rule one scope down, and unticking a lifted set first
+  is what makes removing it a two-step decision rather than an accident —
+  and never the last row, because an exercise with no sets is a state
+  nothing draws; that case is the overview's ×. A following drop's `link` is
+  cleared with it, since the set it continued just left. Leaving a row
+  unticked stays legal and logs nothing at Finish; removing is for when the
+  shorter day *is* the plan.
+- **The overview reorders the session, and it moves stops, not exercises.**
+  The same grip-and-landing drag as every other list here, with one
+  difference: the pitch is measured per stop, because a pair's block is
+  taller than a lone row and a uniform pitch would land a long drag rows
+  away from the line it drew. A pair travels whole — a grip that could pull
+  one apart would be an unpairing control, and a running workout has no
+  pairing controls — and `moveSessionStop` clears a dangling `with` rather
+  than handing it the partner it never had (`appendSessionEx`'s rule, met
+  from the other side). `active` keeps naming the exercise it named,
+  wherever that exercise lands; the buddy needs no protocol change, because
+  `progress` is keyed by exercise id and order was never a fact it carried.
 - **A routine deletes from its editor, held.** `deleteRoutine` drops the plan
   rules pointing at it — through `dropEntries`, so the skips that named those
   rules go too — and ends a matching co-draft; `history` is untouched on purpose
@@ -1323,6 +1474,11 @@ Keep these; they're decisions, not drift. Each is commented at its site.
   machine you're standing at.
 - The routine editor has no Edit button. The design's only ever swapped its own
   label; the rows were always editable.
+- **The plain editor's rows reorder too, not just the co-draft's.** Same grip,
+  same `moveRoutineItem`; the dragged slot carries its pair gap along, and the
+  pitch is measured per row for it. A drag out of a pair breaks it with no
+  bookkeeping and a drag back into adjacency remakes it — `with` is adjacency,
+  and the gap glyph right there shows which of the two you just did.
 - **A routine's reps and kg are a plan, and only a plan reaches the session.**
   A row starts life carrying whatever the picker filled in from the exercise —
   nobody's decision — so `sessionFrom` leaves it to the "last time" ghost, the

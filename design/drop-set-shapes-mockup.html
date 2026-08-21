@@ -1,0 +1,975 @@
+<title>Spotter — What a drop set should look like (mockup)</title>
+<style>
+  /* ── Nocturne, verbatim from src/design/tokens.ts ─────────────────────
+     Single-theme on purpose: this mocks the app's default (blurple · dark),
+     which is byte-identical to the ported design palette. The ledger geometry
+     below is copied from `drop-set-audit-mockup.html` so the two documents
+     draw the same rows — that one audited the connector, this one throws the
+     connector away. */
+  :root {
+    --bg: #161826;
+    --surface: #232532;
+    --text: #e9e9ed;
+    --accent: #9184d9;
+    --a100: #f5f4ff; --a200: #e7e5fe; --a300: #d2cefd; --a400: #b5abfc;
+    --a500: #968ae0; --a600: #796cbf; --a700: #5d5294; --a800: #423a6a; --a900: #2b2741;
+    --n100: #f3f5fe; --n300: #cfd3e5; --n400: #b2b6ca; --n500: #9397ab; --n600: #75798c;
+    --n700: #595d6c; --n800: #3f424d; --n900: #292b31;
+    --scrim: #0b0c14;
+    --divider: rgba(233, 233, 237, 0.16);
+    --rule: rgba(233, 233, 237, 0.09);
+    --wash-t8: rgba(233, 233, 237, 0.08);
+    --wash-a16: rgba(145, 132, 217, 0.16);
+    --wash-a12: rgba(145, 132, 217, 0.12);
+    --wash-a7: rgba(145, 132, 217, 0.07);
+    --wash-a5: rgba(145, 132, 217, 0.05);
+    --bad: #d98484;
+    --warn: #f89a92;          /* the new `warn` slot — accent400 turned to 25° */
+    --sans: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--scrim); color: var(--text); font-family: var(--sans);
+    font-size: 15px; line-height: 1.55; -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 1180px; margin: 0 auto; padding: 56px 28px 96px; }
+
+  .kicker { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); }
+  h1 { font-weight: 500; font-size: 40px; line-height: 1.12; letter-spacing: -0.015em; margin: 10px 0 14px; text-wrap: balance; }
+  h1 em { font-style: normal; color: var(--a300); }
+  h2.sec { font-weight: 500; font-size: 24px; letter-spacing: -0.015em; margin: 0 0 6px; }
+  h2.sec .n { color: var(--n700); }
+  h3.opth { font-weight: 500; font-size: 19px; letter-spacing: -0.01em; margin: 0 0 4px; }
+  h3.opth .l { color: var(--n700); }
+  .lede { color: var(--n400); max-width: 68ch; }
+  .lede.wide { max-width: 88ch; }
+  .lede strong { color: var(--text); font-weight: 500; }
+  .lede em, .notes em, .settled em { font-style: normal; color: var(--a300); }
+  code {
+    font-family: var(--mono); font-size: 12.5px; color: var(--a300);
+    background: var(--n900); border-radius: 4px; padding: 1px 5px;
+  }
+
+  .settled { margin: 26px 0 0; border: 1px solid var(--divider); border-left: 2px solid var(--accent); border-radius: 8px; padding: 13px 16px; max-width: 88ch; }
+  .settled .h { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); }
+  .settled ul { margin: 9px 0 0; padding-left: 18px; color: var(--n400); font-size: 13.5px; display: grid; gap: 7px; }
+  .settled li::marker { color: var(--n700); }
+  .settled strong { color: var(--text); font-weight: 500; }
+  .settled.warn { border-left-color: var(--warn); }
+  .settled.warn .h { color: var(--warn); }
+
+  hr.fade { border: 0; height: 1px; margin: 54px 0; background: linear-gradient(90deg, transparent, var(--divider) 48px, var(--divider) calc(100% - 48px), transparent); }
+
+  /* one option: phone on the left, the argument beside it */
+  .opt { display: grid; grid-template-columns: 348px 1fr; gap: 34px; align-items: start; margin-top: 28px; }
+  .opt .arg { padding-top: 2px; }
+  .opt .arg .one { font-size: 14.5px; color: var(--n300); margin-bottom: 14px; max-width: 58ch; }
+  .opt .arg .one b { color: var(--text); font-weight: 500; }
+  .opt .arg ul { padding-left: 18px; color: var(--n400); font-size: 13.5px; display: grid; gap: 8px; max-width: 62ch; }
+  .opt .arg li::marker { color: var(--n700); }
+  .opt .arg strong { color: var(--text); font-weight: 500; }
+  .cost { display: inline-block; font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--n800); color: var(--n500); margin-left: 8px; vertical-align: 3px; }
+  .cost.lo { border-color: var(--a800); color: var(--a400); }
+  .cost.hi { border-color: var(--n700); color: var(--n400); }
+
+  .trio { display: grid; grid-template-columns: repeat(3, 348px); gap: 26px; margin-top: 26px; align-items: start; }
+  .trio .cap { font-size: 13px; font-weight: 500; margin-bottom: 3px; color: var(--a300); }
+  .trio .sub { font-size: 12px; color: var(--n500); margin-bottom: 12px; max-width: 42ch; min-height: 56px; }
+  .trio .sub b { color: var(--n300); font-weight: 500; }
+  .notes { margin-top: 24px; max-width: 84ch; }
+  .notes ul { margin: 10px 0 0; padding-left: 18px; color: var(--n400); font-size: 14px; display: grid; gap: 9px; }
+  .notes li::marker { color: var(--n700); }
+  .notes strong { color: var(--text); font-weight: 500; }
+
+  table.cmp { border-collapse: collapse; margin-top: 22px; font-size: 13px; width: 100%; max-width: 92ch; }
+  table.cmp th, table.cmp td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  table.cmp th { font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--n700); font-weight: 400; }
+  table.cmp td:first-child { color: var(--text); white-space: nowrap; }
+  table.cmp td { color: var(--n400); }
+  table.cmp .y { color: var(--a300); }
+  table.cmp .n { color: var(--n600); }
+
+  @media (max-width: 1140px) { .trio { grid-template-columns: 1fr; } .opt { grid-template-columns: 1fr; } }
+
+  /* ── phone frame ──────────────────────────────────────────────────── */
+  .phone { width: 348px; background: var(--bg); border: 1px solid var(--n800); border-radius: 30px; padding: 12px 12px 0; overflow: hidden; position: relative; }
+  .phone.tall { height: 690px; }
+  .phone.mid { height: 610px; }
+  .phone .status { display: flex; justify-content: space-between; align-items: center; font-size: 10px; color: var(--n700); padding: 2px 6px 8px; }
+  .scr { padding: 0 4px; }
+
+  .topbar { display: flex; align-items: center; gap: 10px; padding: 2px 0 10px; }
+  .topbar .back { font-size: 17px; color: var(--n400); }
+  .chip { font-size: 11.5px; color: var(--a300); border: 1px solid var(--a700); background: var(--wash-a7); border-radius: 999px; padding: 2px 9px; font-variant-numeric: tabular-nums; }
+  .topbar .clock { margin-left: auto; font-size: 12px; color: var(--n500); font-variant-numeric: tabular-nums; }
+  .exname { font-size: 19px; font-weight: 500; letter-spacing: -0.01em; }
+  .exmeta { font-size: 11px; color: var(--n600); margin-top: 2px; }
+
+  /* the set ledger — geometry mirrors session-overlay.tsx:
+     16px index · 8 gap · 66 last · 8 · flex · 8 · flex · 8 · 34 check */
+  .colhead, .setrow { display: grid; grid-template-columns: 16px 66px 1fr 1fr 34px; gap: 8px; align-items: center; }
+  .colhead { padding: 14px 2px 5px; }
+  .colhead span { font-size: 9.5px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--n700); }
+  .colhead .c { text-align: center; }
+  .rowwrap { margin-bottom: 5px; position: relative; }
+  .idx { font-size: 12px; color: var(--n600); font-variant-numeric: tabular-nums; }
+  .idx.live { color: var(--a400); }
+  .prev { font-size: 11.5px; color: var(--n500); font-variant-numeric: tabular-nums; }
+  .prev.dash { color: var(--n700); }
+  .cell { text-align: center; font-size: 15px; color: var(--text); border-bottom: 1px solid var(--n800); padding: 5px 0 4px; font-variant-numeric: tabular-nums; }
+  .cell.big { font-size: 22px; padding: 3px 0 2px; }
+  .cell.ghost { color: var(--n700); }
+  .tick { width: 22px; height: 22px; border-radius: 6px; border: 1px solid var(--n700); justify-self: center; display: grid; place-items: center; }
+  .tick.on { border-color: var(--accent); background: var(--wash-a16); }
+  .tick.live { border-color: var(--a600); }
+  .livebox { margin: 3px 0; padding: 8px; border: 1px solid var(--a700); border-radius: 10px; background: var(--wash-a7); }
+  .waitrow { margin-top: 7px; padding-top: 6px; border-top: 1px solid var(--rule); font-size: 11.5px; color: var(--n500); }
+  .waitrow .chain { color: var(--a400); }
+  .markline { display: flex; gap: 6px; margin-top: 5px; padding-left: 2px; font-size: 11px; }
+  .markline .empty { color: var(--n700); }
+  .addrow { display: flex; gap: 8px; margin-top: 12px; }
+  .addbtn { flex: 1; text-align: center; font-size: 11.5px; color: var(--n500); border: 1px dashed var(--n800); border-radius: 8px; padding: 7px 0; }
+  .cta { position: absolute; left: 12px; right: 12px; bottom: 14px; text-align: center; font-size: 14px; color: var(--accent); border: 1px solid var(--accent); border-radius: 10px; padding: 11px 0; background: var(--wash-a7); }
+
+  /* ── AS SHIPPED — the riser, and the number it steals ─────────────── */
+  .rowwrap.built { margin-top: -2px; }
+  .rowwrap.built::before {
+    content: ''; position: absolute; left: 8px; top: -8px;
+    width: 1px; height: 16px; background: var(--a700);
+  }
+  .numlie { color: var(--warn); }
+
+  /* ── A · THE WHISPER — same grid, less of everything ──────────────── */
+  .rowwrap.whisper { margin-top: -3px; margin-bottom: 6px; }
+  .whisper .cell {
+    font-size: 12.5px; color: var(--n400); padding: 3px 0 2px;
+    border-bottom-color: var(--n900);
+    /* the rule under the figure pulls in from both sides — the cell is the
+       same column, drawn narrower */
+    margin: 0 12px;
+  }
+  .whisper .tick { width: 18px; height: 18px; border-radius: 5px; }
+  .whisper .tick.on { border-color: var(--a600); background: var(--wash-a7); }
+  .whisper .tick svg { transform: scale(0.82); }
+  .whisper .drop { font-size: 10.5px; color: var(--n600); letter-spacing: 0.04em; }
+
+  /* ── B · THE SPINE — a bracket alongside, in the superset's grammar ─ */
+  /* The bar sits at x = 0 and the row is padded 9px clear of it. `padding-left`
+     alone is what keeps the tick column where it was: the grid's last track is
+     a fixed 34px with no right padding, so its right edge is still the row's
+     right edge — only the two flex columns give up 4.5px each. A negative right
+     margin (the obvious first move) does the opposite and walks the tick out of
+     its column. */
+  .rowwrap.spine { margin-top: -2px; }
+  /* `pairRule` verbatim — width 1, accent700, borderRadius 1. This is not a
+     colour picked to resemble the superset's hairline, it is that style. */
+  .rowwrap.spine::before {
+    content: ''; position: absolute; left: 6px; top: -12px; bottom: 3px;
+    width: 1px; border-radius: 1px; background: var(--a700);
+  }
+  .rowwrap.spine .setrow { padding-left: 14px; }
+
+  /* ── C · THE STACK — one set, two lines, one digit ────────────────── */
+  .stack {
+    margin-bottom: 5px; border: 1px solid var(--n900); border-radius: 9px;
+    background: var(--wash-t8); padding: 2px 0;
+  }
+  .stack .setrow { padding: 2px 6px; }
+  .stack .setrow + .setrow { border-top: 1px solid var(--rule); }
+  .stack .cell { border-bottom: none; }
+  .stack .sub .cell { font-size: 13.5px; color: var(--n300); }
+  .stack .sub .drop { font-size: 10.5px; color: var(--n600); }
+  .stack .digit { font-size: 12px; color: var(--n500); font-variant-numeric: tabular-nums; }
+
+  /* ── D · THE DELTA — the row says what fell ───────────────────────── */
+  .delta .fell { font-size: 11.5px; color: var(--a400); font-variant-numeric: tabular-nums; }
+  .rowwrap.delta { margin-top: -2px; }
+
+  /* recommended combination */
+  .rowwrap.both { margin-top: -2px; }
+  .rowwrap.both::before {
+    content: ''; position: absolute; left: 6px; top: -12px; bottom: 3px;
+    width: 1px; border-radius: 1px; background: var(--a700);
+  }
+  .rowwrap.both .setrow { padding-left: 14px; }
+  /* Live, the bar runs just inside the raised box's own left edge, and the box
+     opens its padding from 8 to 15 to clear it. Same x in both states, which is
+     what keeps a chain's spine straight when one of its rows is the live one. */
+  .rowwrap.both.tolive::before { top: -12px; bottom: 26px; }
+  .rowwrap.both.tolive .livebox { padding-left: 15px; }
+  .rowwrap.both.tolive .setrow { padding-left: 0; }
+  .rowwrap.both .fell { font-size: 11.5px; color: var(--a400); font-variant-numeric: tabular-nums; }
+</style>
+
+<div class="page">
+
+<div class="kicker">Spotter · session ledger</div>
+<h1>A drop set should not be drawn as <em>the next set</em></h1>
+<p class="lede wide">
+  The three options in the audit were one option: a connector in the gutter, at
+  three lengths. None of them read, and the reason is structural rather than a
+  matter of taste — <strong>a drop is drawn with exactly the same row as a
+  working set, so a line pointing at it is arguing against everything else on
+  the row.</strong> These four start from the row instead.
+</p>
+
+<div class="settled warn">
+  <div class="h">The thing under the complaint</div>
+  <ul>
+    <li><strong>A drop takes a set number.</strong> The index cell renders
+      <code>index + 1</code> — the raw row index — so a drop off set 3 draws as
+      <b>4</b>, and the working set after it draws as <b>5</b>. A four-set
+      exercise with one drop counts to five in its own ledger, and the count is
+      wrong for the rest of the workout.</li>
+    <li><strong>So the row is not merely un-marked, it is mis-marked.</strong>
+      Every option below begins by taking that digit away. That single change is
+      most of what makes a drop look like a drop, and no connector can do it.</li>
+    <li>The diary already knows this — <code>plan.tsx</code> folds a drop into
+      the set it came off with <code>↳</code> and keeps the count at
+      <i>4 sets</i>. It is the live ledger that disagrees with the record.</li>
+  </ul>
+</div>
+
+<hr class="fade">
+
+<h2 class="sec"><span class="n">0 ·</span> As shipped, for the comparison</h2>
+<p class="lede wide">
+  Bench Press, four sets programmed, a drop taken off set 3 and both ticked, set
+  4 live. Every phone below draws this same state.
+</p>
+
+<div class="trio">
+  <div>
+    <div class="cap" style="color:var(--warn)">The ledger counts to five</div>
+    <div class="sub">
+      The riser is the 1px tick in the gutter above row 4. <b>Row 4 is the
+      drop</b>; the last working set is row 5. Nothing else distinguishes them.
+    </div>
+    <div class="phone mid">
+      <div class="status"><span>9:41</span><span>▮▮▮</span></div>
+      <div class="scr">
+        <div class="topbar"><span class="back">‹</span><span class="chip">3 / 4</span><span class="clock">31:06</span></div>
+        <div class="exname">Bench Press</div>
+        <div class="exmeta">Chest · Barbell</div>
+        <div class="colhead"><span>#</span><span>Last time</span><span class="c">kg</span><span class="c">Reps</span><span></span></div>
+
+        <div class="rowwrap"><div class="setrow">
+          <span class="idx">1</span><span class="prev">70 × 8</span>
+          <span class="cell">70</span><span class="cell">8</span>
+          <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+        </div></div>
+
+        <div class="rowwrap"><div class="setrow">
+          <span class="idx">2</span><span class="prev">70 × 8</span>
+          <span class="cell">70</span><span class="cell">7</span>
+          <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+        </div></div>
+
+        <div class="rowwrap"><div class="setrow">
+          <span class="idx">3</span><span class="prev">65 × 8</span>
+          <span class="cell">65</span><span class="cell">6</span>
+          <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+        </div></div>
+
+        <div class="rowwrap built"><div class="setrow">
+          <span class="idx numlie">4</span><span class="prev dash">—</span>
+          <span class="cell">50</span><span class="cell">8</span>
+          <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+        </div></div>
+
+        <div class="rowwrap">
+          <div class="livebox">
+            <div class="setrow">
+              <span class="idx live numlie">5</span><span class="prev">65 × 8</span>
+              <span class="cell big">65</span><span class="cell big ghost">6</span>
+              <span class="tick live"></span>
+            </div>
+          </div>
+          <div class="markline"><span class="empty">+ Note</span></div>
+        </div>
+
+        <div class="addrow">
+          <span class="addbtn">+ Add set</span>
+          <span class="addbtn">+ Drop set</span>
+        </div>
+      </div>
+      <div class="cta">Finish workout</div>
+    </div>
+  </div>
+</div>
+
+<hr class="fade">
+
+<h2 class="sec"><span class="n">A ·</span> The whisper <span class="cost lo">cheap</span></h2>
+<p class="lede wide">
+  <strong>Same grid, less of everything.</strong> A drop is what happened after
+  the set, so it is printed like a footnote to it rather than entered like an
+  entry of its own.
+</p>
+
+<div class="opt">
+  <div class="phone mid">
+    <div class="status"><span>9:41</span><span>▮▮▮</span></div>
+    <div class="scr">
+      <div class="topbar"><span class="back">‹</span><span class="chip">3 / 4</span><span class="clock">31:06</span></div>
+      <div class="exname">Bench Press</div>
+      <div class="exmeta">Chest · Barbell</div>
+      <div class="colhead"><span>#</span><span>Last time</span><span class="c">kg</span><span class="c">Reps</span><span></span></div>
+
+      <div class="rowwrap"><div class="setrow">
+        <span class="idx">1</span><span class="prev">70 × 8</span>
+        <span class="cell">70</span><span class="cell">8</span>
+        <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+      </div></div>
+
+      <div class="rowwrap"><div class="setrow">
+        <span class="idx">2</span><span class="prev">70 × 8</span>
+        <span class="cell">70</span><span class="cell">7</span>
+        <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+      </div></div>
+
+      <div class="rowwrap"><div class="setrow">
+        <span class="idx">3</span><span class="prev">65 × 8</span>
+        <span class="cell">65</span><span class="cell">6</span>
+        <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+      </div></div>
+
+      <div class="rowwrap whisper"><div class="setrow">
+        <span class="idx"></span><span class="drop">drop</span>
+        <span class="cell">50</span><span class="cell">8</span>
+        <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#796cbf" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+      </div></div>
+
+      <div class="rowwrap">
+        <div class="livebox">
+          <div class="setrow">
+            <span class="idx live">4</span><span class="prev">65 × 8</span>
+            <span class="cell big">65</span><span class="cell big ghost">6</span>
+            <span class="tick live"></span>
+          </div>
+        </div>
+        <div class="markline"><span class="empty">+ Note</span></div>
+      </div>
+
+      <div class="addrow">
+        <span class="addbtn">+ Add set</span>
+        <span class="addbtn">+ Drop set</span>
+      </div>
+    </div>
+    <div class="cta">Finish workout</div>
+  </div>
+
+  <div class="arg">
+    <div class="one">
+      No digit, no ghost figure, a shorter rule under each number, 12.5px instead
+      of 15, a smaller tick at <code>accent600</code> rather than
+      <code>accent</code>. The word <b>drop</b> sits where "last time" would be —
+      a cell that is empty on a drop by construction, since last week's set 4 was
+      not this drop.
+    </div>
+    <ul>
+      <li><strong>It reads at a glance and it costs almost nothing.</strong> One
+        style object, one conditional in the index cell, no geometry change: the
+        column centres all hold, so <code>inputW</code> / <code>flyDx</code> /
+        <code>inputCatch</code> are untouched.</li>
+      <li><strong>Weight is the right axis for this.</strong> The app already
+        uses it — the mark's glyph dims from <code>accent</code> to
+        <code>neutral500</code> in the diary, a pair's hairline steps down to
+        <code>accent800</code> there. Quieter means <i>subordinate</i> here
+        already.</li>
+      <li><strong>But a live drop has to be loud.</strong> This is the whole
+        objection: the row you are about to lift into needs thumb-sized figures
+        and a hittable tick, so the whisper can only apply once the row is done.
+        A shape that changes on tick is a shape you learn twice.</li>
+      <li>The word <b>drop</b> is a fifth string in the ledger, and it needs a
+        German twin (<i>Drop</i> is what a German gym says, so that one is
+        free).</li>
+    </ul>
+  </div>
+</div>
+
+<hr class="fade">
+
+<h2 class="sec"><span class="n">B ·</span> The spine <span class="cost lo">cheap</span></h2>
+<p class="lede wide">
+  <strong>A bracket alongside, not a pointer at.</strong> Two pixels down the
+  left gutter, running the height of every row hanging off one set — the
+  blockquote convention, and the app's own vocabulary for <i>these belong
+  together</i>.
+</p>
+
+<div class="opt">
+  <div class="phone mid">
+    <div class="status"><span>9:41</span><span>▮▮▮</span></div>
+    <div class="scr">
+      <div class="topbar"><span class="back">‹</span><span class="chip">3 / 4</span><span class="clock">31:06</span></div>
+      <div class="exname">Bench Press</div>
+      <div class="exmeta">Chest · Barbell</div>
+      <div class="colhead"><span>#</span><span>Last time</span><span class="c">kg</span><span class="c">Reps</span><span></span></div>
+
+      <div class="rowwrap"><div class="setrow">
+        <span class="idx">1</span><span class="prev">70 × 8</span>
+        <span class="cell">70</span><span class="cell">8</span>
+        <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+      </div></div>
+
+      <div class="rowwrap"><div class="setrow">
+        <span class="idx">2</span><span class="prev">70 × 8</span>
+        <span class="cell">70</span><span class="cell">7</span>
+        <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+      </div></div>
+
+      <div class="rowwrap"><div class="setrow">
+        <span class="idx">3</span><span class="prev">65 × 8</span>
+        <span class="cell">65</span><span class="cell">6</span>
+        <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+      </div></div>
+
+      <div class="rowwrap spine"><div class="setrow">
+        <span class="idx"></span><span class="prev dash">—</span>
+        <span class="cell">50</span><span class="cell">8</span>
+        <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+      </div></div>
+
+      <div class="rowwrap">
+        <div class="livebox">
+          <div class="setrow">
+            <span class="idx live">4</span><span class="prev">65 × 8</span>
+            <span class="cell big">65</span><span class="cell big ghost">6</span>
+            <span class="tick live"></span>
+          </div>
+        </div>
+        <div class="markline"><span class="empty">+ Note</span></div>
+      </div>
+
+      <div class="addrow">
+        <span class="addbtn">+ Add set</span>
+        <span class="addbtn">+ Drop set</span>
+      </div>
+    </div>
+    <div class="cta">Finish workout</div>
+  </div>
+
+  <div class="arg">
+    <div class="one">
+      The drop keeps its full-size row — it is a set you lifted and may still be
+      standing in — and loses only its number. The bar <b>is
+      <code>pairRule</code></b>, the style the superset already draws down the
+      side of its two halves: width 1, <code>accent700</code>, rounded. It
+      <b>runs alongside rather than pointing</b>, which is what stops it reading
+      as the stray tick the riser reads as.
+    </div>
+    <ul>
+      <li><strong>It is the superset's own drawing, one scope down — the same
+        style object, not a lookalike.</strong> Both features mean <i>these were
+        one effort</i>; drawing them two ways would be two languages for one
+        statement, and the diary already dims the same bar to
+        <code>accent800</code> for a pair, which is the step this could borrow
+        too.</li>
+      <li><strong>The variant worth arguing about: bracket the group, not the
+        drop.</strong> A superset's bar runs down <i>both</i> halves, so the
+        exact analogue starts at the parent set and ends at the last drop. It
+        reads better — the bar then says which set the chain came off, instead
+        of leaving adjacency to say it — and it costs one look-ahead
+        (<code>sets[j + 1]?.link</code>) plus the same 9px on the parent row,
+        which puts a visible jog in the number column. Drawn here the narrow
+        way; the wide one is a one-line change either direction.</li>
+      <li><strong>A chain is free.</strong> 65 → 50 → 40 is three rows under one
+        spine, with no sub-numbering and nothing to invent. Each drop draws its
+        own segment overlapping the gap above it, so the bar is continuous
+        without anyone owning the whole group.</li>
+      <li><strong>It survives the mark and it survives the tick.</strong> The
+        spine is left of the index cell, so a verdict can take that cell without
+        erasing the fact that the row was a drop — the exact collision the
+        gutter riser was invented to dodge, solved by moving 2px further
+        out instead of hiding between rows.</li>
+      <li><strong>Live and done are the same drawing.</strong> Only the spine's
+        bottom moves, to clear the live box's radius. Nothing about the row
+        changes shape when it is ticked, which is what A cannot promise.</li>
+      <li>Cost: one absolutely-positioned view and 12px of left padding on the
+        row, with the same 12 taken off the right margin so the tick column and
+        both number columns stay where they are.</li>
+    </ul>
+  </div>
+</div>
+
+<hr class="fade">
+
+<h2 class="sec"><span class="n">C ·</span> The stack <span class="cost hi">expensive</span></h2>
+<p class="lede wide">
+  <strong>One set, two lines, one digit.</strong> Set 3 becomes a block that
+  contains both efforts. The count cannot drift, because the drop is never a row
+  in the first place.
+</p>
+
+<div class="opt">
+  <div class="phone mid">
+    <div class="status"><span>9:41</span><span>▮▮▮</span></div>
+    <div class="scr">
+      <div class="topbar"><span class="back">‹</span><span class="chip">3 / 4</span><span class="clock">31:06</span></div>
+      <div class="exname">Bench Press</div>
+      <div class="exmeta">Chest · Barbell</div>
+      <div class="colhead"><span>#</span><span>Last time</span><span class="c">kg</span><span class="c">Reps</span><span></span></div>
+
+      <div class="rowwrap"><div class="setrow">
+        <span class="idx">1</span><span class="prev">70 × 8</span>
+        <span class="cell">70</span><span class="cell">8</span>
+        <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+      </div></div>
+
+      <div class="rowwrap"><div class="setrow">
+        <span class="idx">2</span><span class="prev">70 × 8</span>
+        <span class="cell">70</span><span class="cell">7</span>
+        <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+      </div></div>
+
+      <div class="stack">
+        <div class="setrow">
+          <span class="digit">3</span><span class="prev">65 × 8</span>
+          <span class="cell">65</span><span class="cell">6</span>
+          <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+        </div>
+        <div class="setrow sub">
+          <span class="digit"></span><span class="drop">drop</span>
+          <span class="cell">50</span><span class="cell">8</span>
+          <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#796cbf" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+        </div>
+      </div>
+
+      <div class="rowwrap">
+        <div class="livebox">
+          <div class="setrow">
+            <span class="idx live">4</span><span class="prev">65 × 8</span>
+            <span class="cell big">65</span><span class="cell big ghost">6</span>
+            <span class="tick live"></span>
+          </div>
+        </div>
+        <div class="markline"><span class="empty">+ Note</span></div>
+      </div>
+
+      <div class="addrow">
+        <span class="addbtn">+ Add set</span>
+        <span class="addbtn">+ Drop set</span>
+      </div>
+    </div>
+    <div class="cta">Finish workout</div>
+  </div>
+
+  <div class="arg">
+    <div class="one">
+      A faint container at <code>wash.text(8)</code> holds both lines with a
+      hairline between them; the digit belongs to the block, not to either line.
+      This is <b>sub-numbering without the sub-numbers</b> — the clearest thing
+      to read in the original mockup, minus the collision that killed it.
+    </div>
+    <ul>
+      <li><strong>It is the only one that makes the count structural.</strong>
+        The others take the digit away by decision; here there is no digit to
+        take, because a drop is never a numbered thing. Nothing can put it back
+        by accident.</li>
+      <li><strong>And the only one that survives a marked drop cleanly</strong>
+        — the drop line has no index cell at all, so a verdict on it needs
+        somewhere new to live. That is a genuine open question, not a solved
+        one: probably the same slot as the working line's, indented.</li>
+      <li><strong>The cost is that a row stops being a row.</strong>
+        <code>SetRow</code>, the live box, the drag cells, the mark sheet's
+        <code>markAt.j</code> and the reorder pitch are all written per row over
+        a flat list. The arithmetic underneath (<code>liveJ</code>,
+        <code>logSet</code>, <code>roundOf</code>) indexes into
+        <code>sets</code> and would not change — this is a rendering change all
+        the way down, but it is a deep one.</li>
+      <li><strong>And the live state is awkward.</strong> When the drop is the
+        row you are lifting into, the block has to raise <i>one of its two
+        lines</i> to thumb size and leave the other at rest, or raise the whole
+        block and take up a third of the screen. The live box is currently a
+        wrapper around one row; here it would have to be a wrapper around part
+        of a block.</li>
+    </ul>
+  </div>
+</div>
+
+<hr class="fade">
+
+<h2 class="sec"><span class="n">D ·</span> The delta <span class="cost lo">cheapest</span></h2>
+<p class="lede wide">
+  <strong>Say what fell.</strong> The row keeps its shape and loses its digit;
+  the ghost column — empty on a drop by construction — carries the one fact a
+  drop set is actually about.
+</p>
+
+<div class="opt">
+  <div class="phone mid">
+    <div class="status"><span>9:41</span><span>▮▮▮</span></div>
+    <div class="scr">
+      <div class="topbar"><span class="back">‹</span><span class="chip">3 / 4</span><span class="clock">31:06</span></div>
+      <div class="exname">Bench Press</div>
+      <div class="exmeta">Chest · Barbell</div>
+      <div class="colhead"><span>#</span><span>Last time</span><span class="c">kg</span><span class="c">Reps</span><span></span></div>
+
+      <div class="rowwrap"><div class="setrow">
+        <span class="idx">1</span><span class="prev">70 × 8</span>
+        <span class="cell">70</span><span class="cell">8</span>
+        <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+      </div></div>
+
+      <div class="rowwrap"><div class="setrow">
+        <span class="idx">2</span><span class="prev">70 × 8</span>
+        <span class="cell">70</span><span class="cell">7</span>
+        <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+      </div></div>
+
+      <div class="rowwrap"><div class="setrow">
+        <span class="idx">3</span><span class="prev">65 × 8</span>
+        <span class="cell">65</span><span class="cell">6</span>
+        <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+      </div></div>
+
+      <div class="rowwrap delta"><div class="setrow">
+        <span class="idx"></span><span class="fell">−15 kg</span>
+        <span class="cell">50</span><span class="cell">8</span>
+        <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+      </div></div>
+
+      <div class="rowwrap">
+        <div class="livebox">
+          <div class="setrow">
+            <span class="idx live">4</span><span class="prev">65 × 8</span>
+            <span class="cell big">65</span><span class="cell big ghost">6</span>
+            <span class="tick live"></span>
+          </div>
+        </div>
+        <div class="markline"><span class="empty">+ Note</span></div>
+      </div>
+
+      <div class="addrow">
+        <span class="addbtn">+ Add set</span>
+        <span class="addbtn">+ Drop set</span>
+      </div>
+    </div>
+    <div class="cta">Finish workout</div>
+  </div>
+
+  <div class="arg">
+    <div class="one">
+      <b>−15 kg</b> at <code>accent400</code>, where <b>—</b> sits today. The
+      only option that adds information rather than only adding shape: the
+      others say <i>this is a drop</i>, this one says <i>this is a drop of
+      fifteen kilos</i>, which is what you would want back in six weeks.
+    </div>
+    <ul>
+      <li><strong>Nothing moves.</strong> Two text substitutions and a colour.
+        No new view, no geometry, no new string that needs a German twin — a
+        number and a unit the app already formats.</li>
+      <li><strong>And no arrow, which is the part worth knowing.</strong> The
+        obvious drawing is a <code>↓</code> in the index cell — and
+        <code>MARK_D.down</code> <i>is</i> a down arrow, drawn at
+        <code>accent400</code> in that exact cell for <i>go lighter next time</i>.
+        Two down arrows meaning two things, and a drop that carries the verdict
+        showing one arrow for both. The minus sign already says which way it
+        went, so the arrow is what gets cut.</li>
+      <li><strong>It fills a cell that is guaranteed free.</strong> A drop is
+        written with <code>prev: '—'</code>, because last week's set 4 was not
+        this drop. So the column is empty on exactly the rows that need
+        something to say.</li>
+      <li><strong>The wrinkle: a live drop has nothing to report yet.</strong> A
+        drop arrives carrying the weight it came off (<code>w: src.w || g.w</code>),
+        so the delta opens at <b>−0 kg</b>, which is worse than blank. It would
+        have to draw the bare <code>↓</code> until the figure actually differs —
+        a small rule, but a rule.</li>
+      <li><strong>And as a <i>shape</i> it is the weakest.</strong> Scanning the
+        ledger from across the gym, the row still has a row's outline. This is
+        the option to combine, not the option to ship alone.</li>
+    </ul>
+  </div>
+</div>
+
+<hr class="fade">
+
+<h2 class="sec"><span class="n">E ·</span> B + D, which is what I would build</h2>
+<p class="lede wide">
+  The spine is the shape and the delta is the fact, and they occupy different
+  parts of the row — nothing about them argues. Three states: the drop live,
+  the drop sealed with a working set under it, and a chain of two.
+</p>
+
+<div class="trio">
+
+  <!-- live -->
+  <div>
+    <div class="cap">Live — the drop is the set you're in</div>
+    <div class="sub">
+      The spine runs inside the live box's own padding, at the same x it keeps
+      on a sealed row. The index cell is empty and the ghost column holds the
+      delta as soon as there is one; the wait slot carries the existing
+      <i>no rest</i> line.
+    </div>
+    <div class="phone tall">
+      <div class="status"><span>9:41</span><span>▮▮▮</span></div>
+      <div class="scr">
+        <div class="topbar"><span class="back">‹</span><span class="chip">3 / 4</span><span class="clock">31:06</span></div>
+        <div class="exname">Bench Press</div>
+        <div class="exmeta">Chest · Barbell</div>
+        <div class="colhead"><span>#</span><span>Last time</span><span class="c">kg</span><span class="c">Reps</span><span></span></div>
+
+        <div class="rowwrap"><div class="setrow">
+          <span class="idx">1</span><span class="prev">70 × 8</span>
+          <span class="cell">70</span><span class="cell">8</span>
+          <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+        </div></div>
+
+        <div class="rowwrap"><div class="setrow">
+          <span class="idx">2</span><span class="prev">70 × 8</span>
+          <span class="cell">70</span><span class="cell">7</span>
+          <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+        </div></div>
+
+        <div class="rowwrap"><div class="setrow">
+          <span class="idx">3</span><span class="prev">65 × 8</span>
+          <span class="cell">65</span><span class="cell">6</span>
+          <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+        </div></div>
+
+        <div class="rowwrap both tolive">
+          <div class="livebox">
+            <div class="setrow">
+              <span class="idx"></span><span class="fell">−15 kg</span>
+              <span class="cell big">50</span><span class="cell big ghost"></span>
+              <span class="tick live"></span>
+            </div>
+            <div class="waitrow"><span class="chain">Drop from set 3 — no rest</span></div>
+          </div>
+          <div class="markline"><span class="empty">+ Note</span></div>
+        </div>
+
+        <div class="rowwrap"><div class="setrow">
+          <span class="idx">4</span><span class="prev">65 × 8</span>
+          <span class="cell ghost">65</span><span class="cell ghost">6</span>
+          <span class="tick"></span>
+        </div></div>
+
+        <div class="addrow">
+          <span class="addbtn">+ Add set</span>
+          <span class="addbtn">+ Drop set</span>
+        </div>
+      </div>
+      <div class="cta">Finish workout</div>
+    </div>
+  </div>
+
+  <!-- sealed -->
+  <div>
+    <div class="cap">Sealed — and it stays legible</div>
+    <div class="sub">
+      The state the current design loses the feature in: once the live box goes,
+      the wait line goes with it. <b>The spine and the delta are row furniture,
+      so they stay.</b>
+    </div>
+    <div class="phone tall">
+      <div class="status"><span>9:41</span><span>▮▮▮</span></div>
+      <div class="scr">
+        <div class="topbar"><span class="back">‹</span><span class="chip">3 / 4</span><span class="clock">33:41</span></div>
+        <div class="exname">Bench Press</div>
+        <div class="exmeta">Chest · Barbell</div>
+        <div class="colhead"><span>#</span><span>Last time</span><span class="c">kg</span><span class="c">Reps</span><span></span></div>
+
+        <div class="rowwrap"><div class="setrow">
+          <span class="idx">1</span><span class="prev">70 × 8</span>
+          <span class="cell">70</span><span class="cell">8</span>
+          <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+        </div></div>
+
+        <div class="rowwrap"><div class="setrow">
+          <span class="idx">2</span><span class="prev">70 × 8</span>
+          <span class="cell">70</span><span class="cell">7</span>
+          <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+        </div></div>
+
+        <div class="rowwrap"><div class="setrow">
+          <span class="idx">3</span><span class="prev">65 × 8</span>
+          <span class="cell">65</span><span class="cell">6</span>
+          <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+        </div></div>
+
+        <div class="rowwrap both"><div class="setrow">
+          <span class="idx"></span><span class="fell">−15 kg</span>
+          <span class="cell">50</span><span class="cell">8</span>
+          <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+        </div></div>
+
+        <div class="rowwrap">
+          <div class="livebox">
+            <div class="setrow">
+              <span class="idx live">4</span><span class="prev">65 × 8</span>
+              <span class="cell big">65</span><span class="cell big ghost">6</span>
+              <span class="tick live"></span>
+            </div>
+            <div class="waitrow">Rest · 2:14 &nbsp;·&nbsp; <span style="color:var(--a400)">start now</span></div>
+          </div>
+          <div class="markline"><span class="empty">+ Note</span></div>
+        </div>
+
+        <div class="addrow">
+          <span class="addbtn">+ Add set</span>
+          <span class="addbtn">+ Drop set</span>
+        </div>
+      </div>
+      <div class="cta">Finish workout</div>
+    </div>
+  </div>
+
+  <!-- chain -->
+  <div>
+    <div class="cap">A chain, and a marked drop</div>
+    <div class="sub">
+      65 → 50 → 40 under one continuous spine, with no sub-numbering to invent.
+      The second drop carries a <b>go lighter</b> verdict in the index cell —
+      <b>the spine and the delta are both still there</b>, which is the exact
+      collision the gutter riser was invented to dodge.
+    </div>
+    <div class="phone tall">
+      <div class="status"><span>9:41</span><span>▮▮▮</span></div>
+      <div class="scr">
+        <div class="topbar"><span class="back">‹</span><span class="chip">3 / 4</span><span class="clock">34:52</span></div>
+        <div class="exname">Bench Press</div>
+        <div class="exmeta">Chest · Barbell</div>
+        <div class="colhead"><span>#</span><span>Last time</span><span class="c">kg</span><span class="c">Reps</span><span></span></div>
+
+        <div class="rowwrap"><div class="setrow">
+          <span class="idx">1</span><span class="prev">70 × 8</span>
+          <span class="cell">70</span><span class="cell">8</span>
+          <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+        </div></div>
+
+        <div class="rowwrap"><div class="setrow">
+          <span class="idx">2</span><span class="prev">70 × 8</span>
+          <span class="cell">70</span><span class="cell">7</span>
+          <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+        </div></div>
+
+        <div class="rowwrap"><div class="setrow">
+          <span class="idx">3</span><span class="prev">65 × 8</span>
+          <span class="cell">65</span><span class="cell">6</span>
+          <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+        </div></div>
+
+        <div class="rowwrap both"><div class="setrow">
+          <span class="idx"></span><span class="fell">−15 kg</span>
+          <span class="cell">50</span><span class="cell">8</span>
+          <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+        </div></div>
+
+        <div class="rowwrap both"><div class="setrow">
+          <span class="idx" style="line-height:0">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M12 4.8v14M5.8 12.6l6.2 6.2 6.2-6.2" stroke="#b5abfc" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </span><span class="fell">−25 kg</span>
+          <span class="cell">40</span><span class="cell">6</span>
+          <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+        </div></div>
+
+        <div class="rowwrap">
+          <div class="livebox">
+            <div class="setrow">
+              <span class="idx live">4</span><span class="prev">65 × 8</span>
+              <span class="cell big">65</span><span class="cell big ghost">6</span>
+              <span class="tick live"></span>
+            </div>
+            <div class="waitrow">Rest · 2:41 &nbsp;·&nbsp; <span style="color:var(--a400)">start now</span></div>
+          </div>
+          <div class="markline"><span class="empty">+ Note</span></div>
+        </div>
+
+        <div class="addrow">
+          <span class="addbtn">+ Add set</span>
+          <span class="addbtn">+ Drop set</span>
+        </div>
+      </div>
+      <div class="cta">Finish workout</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="notes">
+  <ul>
+    <li><strong>The delta on the second drop is measured from the top of the
+      chain, not from the row above it.</strong> −25 rather than −10: what you
+      want to know at 40 kg is how far you have come down from the working
+      weight. The row above is visible on the same screen and the subtraction
+      is not the point.</li>
+    <li><strong>Every option here removes the digit, and that alone changes what
+      the ledger counts.</strong> Nothing downstream reads it — the index is
+      rendered from <code>index + 1</code> and used nowhere else — but the
+      accessibility label is built from the same number
+      (<code>L.setLabel</code>), so a drop needs a label of its own or a
+      screen reader will keep calling it set 4.</li>
+    <li><strong>None of this touches the data.</strong> <code>link?: true</code>
+      on <code>LoggedSet</code> is already the whole model, the delta is derived
+      from the weight of the row the chain hangs from, and the spine is derived
+      from adjacency. No new field, no <code>STORAGE_VERSION</code> bump, and
+      nothing new crosses to a buddy.</li>
+    <li><strong>The diary needs no change under B or D</strong> — it already
+      folds a drop into its parent with <code>↳</code> and already counts
+      <i>4 sets</i>. Under C the ledger would finally match it, which is an
+      argument for C that the cost has to be weighed against.</li>
+  </ul>
+</div>
+
+<hr class="fade">
+
+<h2 class="sec"><span class="n">F ·</span> Side by side</h2>
+
+<table class="cmp">
+  <tr>
+    <th></th><th>A · whisper</th><th>B · spine</th><th>C · stack</th><th>D · delta</th>
+  </tr>
+  <tr>
+    <td>Reads as a drop at arm's length</td>
+    <td class="y">yes</td><td class="y">yes</td><td class="y">strongest</td><td class="n">weakly</td>
+  </tr>
+  <tr>
+    <td>Same drawing live and done</td>
+    <td class="n">no — must grow to be lifted into</td><td class="y">yes</td><td class="n">no — the block has to raise one line</td><td class="y">yes</td>
+  </tr>
+  <tr>
+    <td>Survives a verdict in the index cell</td>
+    <td class="y">yes</td><td class="y">yes</td><td class="n">open question</td><td class="y">yes — the cell is left empty</td>
+  </tr>
+  <tr>
+    <td>Chain of three</td>
+    <td class="y">fine</td><td class="y">one spine</td><td class="y">one block</td><td class="y">fine</td>
+  </tr>
+  <tr>
+    <td>Says how much fell</td>
+    <td class="n">no</td><td class="n">no</td><td class="n">no</td><td class="y">yes</td>
+  </tr>
+  <tr>
+    <td>New i18n</td>
+    <td class="n">one word, ×2 languages</td><td class="y">none</td><td class="n">one word, ×2</td><td class="y">none</td>
+  </tr>
+  <tr>
+    <td>Geometry moves</td>
+    <td class="y">none</td><td class="y">none (padding cancels)</td><td class="n">all of it</td><td class="y">none</td>
+  </tr>
+  <tr>
+    <td>Roughly</td>
+    <td>a style object</td><td>a style object + one view</td><td>a rewrite of the ledger's rendering</td><td>two text substitutions</td>
+  </tr>
+</table>
+
+<div class="settled">
+  <div class="h">If you want one sentence</div>
+  <ul>
+    <li><strong>B + D.</strong> The spine gives the row a shape that is the
+      superset's own vocabulary one scope down, the delta gives it something to
+      say, neither changes what the ledger measures, and both survive the tick —
+      which is the failure the audit found and the thing a connector in the
+      gutter was never going to fix.</li>
+    <li><strong>D alone if you want it today</strong>, and it is genuinely two
+      substitutions. <strong>C if the count is the thing that bothers you most</strong>
+      — it is the only one that makes a drop structurally not-a-set, and it is
+      a real piece of work.</li>
+  </ul>
+</div>
+
+</div>

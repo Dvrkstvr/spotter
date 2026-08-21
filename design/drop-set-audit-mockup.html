@@ -1,0 +1,851 @@
+<title>Spotter — The drop set, audited (mockup)</title>
+<style>
+  /* ── Nocturne, verbatim from src/design/tokens.ts ─────────────────────
+     Single-theme on purpose: this mocks the app's default (blurple · dark),
+     which is byte-identical to the ported design palette. The ledger rules
+     below are copied from `drop-superset-mockup.html` so the two documents
+     draw the same rows — this one audits what got built against it. */
+  :root {
+    --bg: #161826;          /* app page */
+    --surface: #232532;
+    --text: #e9e9ed;
+    --accent: #9184d9;
+    --a100: #f5f4ff; --a200: #e7e5fe; --a300: #d2cefd; --a400: #b5abfc;
+    --a500: #968ae0; --a600: #796cbf; --a700: #5d5294; --a800: #423a6a; --a900: #2b2741;
+    --n100: #f3f5fe; --n300: #cfd3e5; --n400: #b2b6ca; --n500: #9397ab; --n600: #75798c;
+    --n700: #595d6c; --n800: #3f424d; --n900: #292b31;
+    --scrim: #0b0c14;
+    --divider: rgba(233, 233, 237, 0.16);
+    --rule: rgba(233, 233, 237, 0.09);
+    --wash-t8: rgba(233, 233, 237, 0.08);
+    --wash-a16: rgba(145, 132, 217, 0.16);
+    --wash-a12: rgba(145, 132, 217, 0.12);
+    --wash-a7: rgba(145, 132, 217, 0.07);
+    --bad: #d98484;
+    --sans: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--scrim); color: var(--text); font-family: var(--sans);
+    font-size: 15px; line-height: 1.55; -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 1180px; margin: 0 auto; padding: 56px 28px 96px; }
+
+  .kicker { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); }
+  h1 { font-weight: 500; font-size: 40px; line-height: 1.12; letter-spacing: -0.015em; margin: 10px 0 14px; text-wrap: balance; }
+  h1 em { font-style: normal; color: var(--a300); }
+  h2.sec { font-weight: 500; font-size: 24px; letter-spacing: -0.015em; margin: 0 0 6px; }
+  h2.sec .n { color: var(--n700); }
+  .lede { color: var(--n400); max-width: 68ch; }
+  .lede.wide { max-width: 86ch; }
+  .lede strong { color: var(--text); font-weight: 500; }
+  .lede code, .notes code, .settled code, td code, .verdict code {
+    font-family: var(--mono); font-size: 12.5px; color: var(--a300);
+    background: var(--n900); border-radius: 4px; padding: 1px 5px;
+  }
+
+  .settled { margin: 26px 0 0; border: 1px solid var(--divider); border-left: 2px solid var(--accent); border-radius: 8px; padding: 13px 16px; max-width: 86ch; }
+  .settled .h { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); }
+  .settled ul { margin: 9px 0 0; padding-left: 18px; color: var(--n400); font-size: 13.5px; display: grid; gap: 7px; }
+  .settled li::marker { color: var(--n700); }
+  .settled strong { color: var(--text); font-weight: 500; }
+  .settled.warn { border-left-color: var(--bad); }
+  .settled.warn .h { color: var(--bad); }
+
+  hr.fade { border: 0; height: 1px; margin: 52px 0; background: linear-gradient(90deg, transparent, var(--divider) 48px, var(--divider) calc(100% - 48px), transparent); }
+
+  /* the verdict strip that heads each section */
+  .verdict { display: grid; grid-template-columns: 74px 1fr; gap: 14px; align-items: start; margin: 20px 0 0; max-width: 86ch; }
+  .verdict .tag { font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 0; text-align: right; }
+  .verdict .tag.broken { color: var(--bad); }
+  .verdict .tag.half { color: var(--a400); }
+  .verdict .b { font-size: 13.5px; color: var(--n400); }
+  .verdict .b b { color: var(--text); font-weight: 500; }
+
+  /* frames laid out side by side */
+  .trio { display: grid; grid-template-columns: repeat(3, 348px); gap: 26px; margin-top: 26px; align-items: start; }
+  .pair { display: grid; grid-template-columns: 348px 348px; gap: 32px; margin-top: 26px; align-items: start; }
+  .half .cap { font-size: 13px; font-weight: 500; margin-bottom: 3px; }
+  .half .cap.bad { color: var(--bad); }
+  .half .cap.good { color: var(--accent); }
+  .half .cap.mid { color: var(--n300); }
+  .half .sub { font-size: 12px; color: var(--n500); margin-bottom: 12px; max-width: 42ch; min-height: 88px; }
+  .half .sub b { color: var(--n300); font-weight: 500; }
+  .notes { margin-top: 24px; max-width: 82ch; }
+  .notes ul { margin: 10px 0 0; padding-left: 18px; color: var(--n400); font-size: 14px; display: grid; gap: 9px; }
+  .notes li::marker { color: var(--n700); }
+  .notes strong { color: var(--text); font-weight: 500; }
+  @media (max-width: 1140px) { .trio, .pair { grid-template-columns: 1fr; } }
+
+  /* phone frame */
+  .phone { width: 348px; background: var(--bg); border: 1px solid var(--n800); border-radius: 30px; padding: 12px 12px 0; overflow: hidden; position: relative; }
+  .phone.tall { height: 700px; }
+  .phone.mid { height: 620px; }
+  .phone.short { height: 470px; }
+  .phone .status { display: flex; justify-content: space-between; align-items: center; font-size: 10px; color: var(--n700); padding: 2px 6px 8px; }
+  .scr { padding: 0 4px; }
+
+  /* the session's exercise screen */
+  .topbar { display: flex; align-items: center; gap: 10px; padding: 2px 0 10px; }
+  .topbar .back { font-size: 17px; color: var(--n400); }
+  .chip { font-size: 11.5px; color: var(--a300); border: 1px solid var(--a700); background: var(--wash-a7); border-radius: 999px; padding: 2px 9px; font-variant-numeric: tabular-nums; }
+  .topbar .clock { margin-left: auto; font-size: 12px; color: var(--n500); font-variant-numeric: tabular-nums; }
+  .exname { font-size: 19px; font-weight: 500; letter-spacing: -0.01em; }
+  .exmeta { font-size: 11px; color: var(--n600); margin-top: 2px; }
+
+  /* the set ledger — geometry mirrors session-overlay.tsx:
+     16px index · 8 gap · 66 last · 8 · flex · 8 · flex · 8 · 34 check */
+  .colhead, .setrow { display: grid; grid-template-columns: 16px 66px 1fr 1fr 34px; gap: 8px; align-items: center; }
+  .colhead { padding: 14px 2px 5px; }
+  .colhead span { font-size: 9.5px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--n700); }
+  .colhead .c { text-align: center; }
+  .rowwrap { margin-bottom: 5px; position: relative; }
+  .idx { font-size: 12px; color: var(--n600); font-variant-numeric: tabular-nums; }
+  .idx.live { color: var(--a400); }
+  .prev { font-size: 11.5px; color: var(--n500); font-variant-numeric: tabular-nums; }
+  .prev.dash { color: var(--n700); }
+  .cell { text-align: center; font-size: 15px; color: var(--text); border-bottom: 1px solid var(--n800); padding: 5px 0 4px; font-variant-numeric: tabular-nums; }
+  .cell.big { font-size: 22px; padding: 3px 0 2px; }
+  .cell.ghost { color: var(--n700); }
+  .tick { width: 22px; height: 22px; border-radius: 6px; border: 1px solid var(--n700); justify-self: center; display: grid; place-items: center; }
+  .tick.on { border-color: var(--accent); background: var(--wash-a16); }
+  .tick.live { border-color: var(--a600); }
+  .livebox { margin: 3px 0; padding: 8px; border: 1px solid var(--a700); border-radius: 10px; background: var(--wash-a7); }
+
+  /* ── THE CHAIN, AS SHIPPED ────────────────────────────────────────────
+     One absolutely-positioned 1px riser and nothing else: `chainRiser`,
+     left 8 / top -8 / height 16, moving to left 16 / height 24 when the
+     linked row is live. Reproduced here exactly, including the miss. */
+  .rowwrap.built { margin-top: -2px; }
+  .rowwrap.built::before { content: ''; position: absolute; left: 8px; top: -8px; height: 16px; width: 1px; background: var(--a700); }
+  .rowwrap.built.tolive::before { left: 16px; height: 24px; }
+
+  /* ── THE CHAIN, AS DRAWN IN THE ORIGINAL MOCKUP ── riser + stub ── */
+  .rowwrap.drawn { margin-top: -2px; }
+  .rowwrap.drawn::before { content: ''; position: absolute; left: 7px; top: -8px; height: 18px; width: 1px; background: var(--a700); }
+  .rowwrap.drawn::after { content: ''; position: absolute; left: 7px; top: 9px; width: 6px; height: 1px; background: var(--a700); }
+  .rowwrap.drawn.tolive::before { top: -6px; height: 22px; }
+  .rowwrap.drawn.tolive::after { top: 15px; }
+
+  /* ── THE CHAIN, PROPOSED ── an elbow that lands on a glyph ────────────
+     The riser hangs from the digit above at x = 8 always, drops past the
+     live box's border and turns right into the `↳` at the head of the
+     "Last time" column — the one cell a drop is guaranteed not to be
+     using. One drawing live or not; only its length changes. */
+  .rowwrap.fixed { margin-top: -2px; }
+  .rowwrap.fixed::before { content: ''; position: absolute; left: 8px; top: -9px; height: 26px; width: 1px; background: var(--a600); }
+  .rowwrap.fixed::after { content: ''; position: absolute; left: 8px; top: 16px; width: 16px; height: 1px; background: var(--a600); }
+  .rowwrap.fixed.tolive::before { top: -9px; height: 38px; }
+  .rowwrap.fixed.tolive::after { top: 28px; width: 25px; }
+  .lnk { color: var(--a500); font-size: 12px; }
+
+  /* the wait line under the live row */
+  .waitrow { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding-top: 7px; border-top: 1px solid var(--wash-t8); }
+  .waitrow .l { flex: 1; font-size: 11.5px; color: var(--n500); font-variant-numeric: tabular-nums; }
+  .waitrow .l.chain { color: var(--a400); }
+
+  .markline { display: flex; align-items: center; gap: 6px; margin-top: 5px; padding-left: 2px; }
+  .markline .t { font-size: 11px; color: var(--n500); flex: 1; min-width: 0; }
+  .markline .t.empty { color: var(--n700); }
+
+  /* held "Add set" / "Drop set" pair under the last row */
+  .addrow { display: flex; gap: 8px; margin-top: 10px; }
+  .addbtn { flex: 1; border-top: 1px solid var(--wash-t8); padding: 9px 2px; text-align: center; font-size: 12.5px; color: var(--n500); }
+  .addbtn.shrunk { font-size: 10px; }
+  .addbtn.shrunk2 { font-size: 11.4px; }
+  .addbtn.dash { border: 1px dashed var(--n700); border-radius: 8px; padding: 8px; font-size: 12.5px; color: var(--n400); }
+
+  .cta { position: absolute; left: 16px; right: 16px; bottom: 14px; border: 1px solid var(--a600); background: var(--wash-a12); border-radius: 10px; padding: 12px; text-align: center; font-size: 14px; color: var(--a200); }
+
+  /* sheets */
+  .sheet { border-top: 1px solid var(--divider); background: var(--surface); border-radius: 14px 14px 0 0; padding: 14px 14px 16px; position: absolute; left: 12px; right: 12px; bottom: 0; }
+  .sheet h4 { font-size: 15px; font-weight: 500; }
+  .sheet .sub { font-size: 11.5px; color: var(--n600); margin-top: 1px; }
+  .swrow { display: flex; align-items: center; gap: 10px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--rule); }
+  .swrow .txt { flex: 1; }
+  .swrow .tt { font-size: 13.5px; }
+  .swrow .ts { font-size: 11px; color: var(--n600); margin-top: 1px; }
+  .swrow.gone { opacity: 0.28; }
+  .swrow.gone .tt, .swrow.gone .ts { text-decoration: line-through; }
+  .sw { width: 38px; height: 22px; border-radius: 999px; background: var(--n800); position: relative; flex: none; }
+  .sw::after { content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 999px; background: var(--n500); }
+  .sw.on { background: var(--wash-a16); }
+  .sw.on::after { left: 19px; background: var(--accent); }
+  .absent { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--n800); font-size: 11.5px; color: var(--n700); text-align: center; }
+
+  /* the ghost-column drift table */
+  table.drift, table.sites { border-collapse: collapse; margin-top: 22px; font-size: 13px; width: 100%; }
+  table.drift { max-width: 86ch; }
+  table.drift th, table.sites th { text-align: left; font-weight: 400; font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--n700); padding: 0 12px 7px 0; border-bottom: 1px solid var(--rule); }
+  table.drift td, table.sites td { padding: 8px 12px 8px 0; border-bottom: 1px solid var(--rule); color: var(--n400); vertical-align: top; }
+  table.drift td { font-variant-numeric: tabular-nums; }
+  table.drift td.k { color: var(--n500); font-family: var(--mono); font-size: 12px; }
+  table.drift td.wrong { color: var(--bad); }
+  table.drift td.right { color: var(--a300); }
+  table.drift .note { color: var(--n600); font-size: 11.5px; }
+  table.sites td.f { color: var(--n500); font-family: var(--mono); font-size: 11.5px; white-space: nowrap; }
+  table.sites td.kind { white-space: nowrap; font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  table.sites td.kind.broken { color: var(--bad); }
+  table.sites td.kind.half { color: var(--a400); }
+  table.sites td.kind.dead { color: var(--n600); }
+  table.sites td.kind.flight { color: var(--n400); }
+</style>
+
+<div class="page">
+
+<div class="kicker">Spotter · audit + proposal</div>
+<h1>The drop set is two thirds of<br>a feature: <em>the chain joins nothing,<br>and the ghost column drifts.</em></h1>
+<p class="lede wide">
+  <code>data/superset.ts</code> is right and so is the rest-on-tick predicate —
+  <strong>a tick earns a rest only when nothing is queued to be taken
+  immediately after it</strong> works exactly as written, for drops and for
+  pairs. What is wrong is on either side of it. The connector that was meant to
+  say <em>these two were one effort</em> was built as half a drawing and aimed at
+  the wrong column; the explanation leaves the instant you tick; and three
+  writers downstream — <code>lastLog</code>, <code>saveAsRoutine</code>,
+  <code>logSet</code> — count a drop as an ordinary set and quietly corrupt what
+  they hold.
+</p>
+
+<div class="settled warn">
+  <div class="h">What is actually broken</div>
+  <ul>
+    <li><strong>Next week's "last time" column shifts by one for every drop you
+      ever took.</strong> <code>finishSession</code> writes every ticked row into
+      <code>lastLog</code>; <code>sessionFrom</code> reads it back
+      <code>last[k]</code>, index for index. Drop off set 2 of 4 and set 3's
+      ghost becomes the drop's <code>50 × 8</code>. <code>lastMarks</code> is
+      built off the same array, so <code>prevMark</code> and
+      <code>LastNotes</code>' "set 3" name the wrong rows too.</li>
+    <li><strong>Saving a day as a routine bakes in the drop weight.</strong>
+      <code>saveAsRoutine</code> and <code>saveDayAsRoutine</code> both take
+      <code>sets: e.sets.length</code> and read their numbers off the last ticked
+      row — which is the drop. A 3 × 65 kg day saves as <b>4 sets @ 50 kg</b>.</li>
+    <li><strong>A drop can be logged as <code>65 × 0</code>.</strong> The new row
+      arrives with the weight prefilled and <code>prev: '—'</code>, and
+      <code>logSet</code>'s guard is <code>!cur.w &amp;&amp; !cur.reps</code> — so
+      the prefill defeats it and there is no ghost to fill the reps from. That is
+      the exact "BW × 0 … next session's last-time lie" the tick refuses
+      everywhere else.</li>
+  </ul>
+</div>
+
+<div class="settled">
+  <div class="h">What is unfinished rather than wrong</div>
+  <ul>
+    <li><strong>The chain is half of its drawing.</strong> The mockup's connector
+      is an L — a riser in the gutter plus a stub into the digit. Only the riser
+      was built.</li>
+    <li><strong>And it is aimed at one digit at a time.</strong>
+      <code>chainRiserLive</code> moves it to <code>left: 16</code> to follow the
+      live box's 9px inset, but the digit above is still at 8. Live or not, it
+      lines up with one of the two rows it is joining and misses the other.</li>
+    <li><strong>A ticked drop is indistinguishable from a set.</strong>
+      <code>queued</code> — <em>Drop from set 3 — no rest</em> — only renders while
+      the linked row is live. Scroll back afterwards and rows 1–6 read as six
+      identical sets. The <em>diary</em> shows <code>↳</code>; the ledger, where
+      the decision is actually made, shows less than the record does.</li>
+    <li><strong>The button never says "drop set".</strong>
+      <code>L.addDrop</code> — <em>+ Drop set</em> / <em>+ Dropsatz</em> — is
+      written in both languages and referenced nowhere; the button carries
+      <code>holdAddDrop</code> instead, and two long <em>Hold to…</em> labels now
+      share a strip that used to hold one at full width.</li>
+  </ul>
+</div>
+
+<hr class="fade">
+
+<h2 class="sec"><span class="n">1 ·</span> The chain</h2>
+<p class="lede wide">
+  The same ledger three times: Bench Press, set 3 done at 65, a drop live under
+  it. <strong>Only the connector changes.</strong>
+</p>
+
+<div class="verdict">
+  <div class="tag half">half-built</div>
+  <div class="b"><code>chainRiser</code> is one absolutely-positioned 1px line,
+  16px tall, sitting in a 3px gap. It never got the stub, and its live variant
+  moves it out from under the digit it is hanging from.</div>
+</div>
+
+<div class="trio">
+
+  <!-- A · as shipped -->
+  <div class="half">
+    <div class="cap bad">A · As shipped</div>
+    <div class="sub">
+      <b>The riser only.</b> It starts 8px above the row, crosses the live box's
+      accent border and stops roughly 13px short of the digit it points at —
+      while sitting 8px right of the digit it hangs from. What lands on the glass
+      is a stray tick in the gutter.
+    </div>
+    <div class="phone mid">
+      <div class="status"><span>9:41</span><span>▮▮▮</span></div>
+      <div class="scr">
+        <div class="topbar"><span class="back">‹</span><span class="chip">3 / 4</span><span class="clock">31:06</span></div>
+        <div class="exname">Bench Press</div>
+        <div class="exmeta">Chest · Barbell</div>
+        <div class="colhead"><span>#</span><span>Last time</span><span class="c">kg</span><span class="c">Reps</span><span></span></div>
+
+        <div class="rowwrap"><div class="setrow">
+          <span class="idx">1</span><span class="prev">70 × 8</span>
+          <span class="cell">70</span><span class="cell">8</span>
+          <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+        </div></div>
+
+        <div class="rowwrap"><div class="setrow">
+          <span class="idx">2</span><span class="prev">70 × 8</span>
+          <span class="cell">70</span><span class="cell">7</span>
+          <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+        </div></div>
+
+        <div class="rowwrap"><div class="setrow">
+          <span class="idx">3</span><span class="prev">65 × 8</span>
+          <span class="cell">65</span><span class="cell">6</span>
+          <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+        </div></div>
+
+        <div class="rowwrap built tolive">
+          <div class="livebox">
+            <div class="setrow">
+              <span class="idx live">4</span><span class="prev dash">—</span>
+              <span class="cell big">65</span><span class="cell big ghost"></span>
+              <span class="tick live"></span>
+            </div>
+            <div class="waitrow"><span class="l chain">Drop from set 3 — no rest</span></div>
+          </div>
+          <div class="markline"><span class="t empty">+ Note</span></div>
+        </div>
+
+        <div class="addrow">
+          <span class="addbtn shrunk2">Hold to add a set</span>
+          <span class="addbtn shrunk">Hold to add a drop set</span>
+        </div>
+      </div>
+      <div class="cta">Next exercise</div>
+    </div>
+  </div>
+
+  <!-- B · as drawn -->
+  <div class="half">
+    <div class="cap mid">B · As drawn in the original mockup</div>
+    <div class="sub">
+      <b>Riser plus stub</b>, an L pointing back into the index column. Better —
+      it is a shape rather than a mark — but it still terminates in empty
+      padding, and it is the half that was specified and then not built. Note the
+      prefilled <b>65</b>: the drop arrives at the weight it is dropping
+      <i>from</i>.
+    </div>
+    <div class="phone mid">
+      <div class="status"><span>9:41</span><span>▮▮▮</span></div>
+      <div class="scr">
+        <div class="topbar"><span class="back">‹</span><span class="chip">3 / 4</span><span class="clock">31:06</span></div>
+        <div class="exname">Bench Press</div>
+        <div class="exmeta">Chest · Barbell</div>
+        <div class="colhead"><span>#</span><span>Last time</span><span class="c">kg</span><span class="c">Reps</span><span></span></div>
+
+        <div class="rowwrap"><div class="setrow">
+          <span class="idx">1</span><span class="prev">70 × 8</span>
+          <span class="cell">70</span><span class="cell">8</span>
+          <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+        </div></div>
+
+        <div class="rowwrap"><div class="setrow">
+          <span class="idx">2</span><span class="prev">70 × 8</span>
+          <span class="cell">70</span><span class="cell">7</span>
+          <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+        </div></div>
+
+        <div class="rowwrap"><div class="setrow">
+          <span class="idx">3</span><span class="prev">65 × 8</span>
+          <span class="cell">65</span><span class="cell">6</span>
+          <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+        </div></div>
+
+        <div class="rowwrap drawn tolive">
+          <div class="livebox">
+            <div class="setrow">
+              <span class="idx live">4</span><span class="prev dash">—</span>
+              <span class="cell big">65</span><span class="cell big ghost"></span>
+              <span class="tick live"></span>
+            </div>
+            <div class="waitrow"><span class="l chain">Drop from set 3 — no rest</span></div>
+          </div>
+          <div class="markline"><span class="t empty">+ Note</span></div>
+        </div>
+
+        <div class="addrow">
+          <span class="addbtn shrunk2">Hold to add a set</span>
+          <span class="addbtn shrunk">Hold to add a drop set</span>
+        </div>
+      </div>
+      <div class="cta">Next exercise</div>
+    </div>
+  </div>
+
+  <!-- C · proposed -->
+  <div class="half">
+    <div class="cap good">C · Proposed · an elbow that lands on a glyph</div>
+    <div class="sub">
+      The riser hangs from the digit above at <b>x = 8, always</b>, runs the full
+      height of the gap and turns right into a <b>↳</b> at the head of the "Last
+      time" column — the one cell a drop is guaranteed not to be using, since a
+      drop has no ghost by construction. One drawing; only its length changes
+      when the row is live.
+    </div>
+    <div class="phone mid">
+      <div class="status"><span>9:41</span><span>▮▮▮</span></div>
+      <div class="scr">
+        <div class="topbar"><span class="back">‹</span><span class="chip">3 / 4</span><span class="clock">31:06</span></div>
+        <div class="exname">Bench Press</div>
+        <div class="exmeta">Chest · Barbell</div>
+        <div class="colhead"><span>#</span><span>Last time</span><span class="c">kg</span><span class="c">Reps</span><span></span></div>
+
+        <div class="rowwrap"><div class="setrow">
+          <span class="idx">1</span><span class="prev">70 × 8</span>
+          <span class="cell">70</span><span class="cell">8</span>
+          <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+        </div></div>
+
+        <div class="rowwrap"><div class="setrow">
+          <span class="idx">2</span><span class="prev">70 × 8</span>
+          <span class="cell">70</span><span class="cell">7</span>
+          <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+        </div></div>
+
+        <div class="rowwrap"><div class="setrow">
+          <span class="idx">3</span><span class="prev">65 × 8</span>
+          <span class="cell">65</span><span class="cell">6</span>
+          <span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+        </div></div>
+
+        <div class="rowwrap fixed tolive">
+          <div class="livebox">
+            <div class="setrow">
+              <span class="idx live">4</span><span class="lnk">↳</span>
+              <span class="cell big">65</span><span class="cell big ghost"></span>
+              <span class="tick live"></span>
+            </div>
+            <div class="waitrow"><span class="l chain">Drop from set 3 — no rest</span></div>
+          </div>
+          <div class="markline"><span class="t empty">+ Note</span></div>
+        </div>
+
+        <div class="addrow">
+          <span class="addbtn dash">+ Add set</span>
+          <span class="addbtn dash">+ Drop set</span>
+        </div>
+      </div>
+      <div class="cta">Next exercise</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="notes">
+  <ul>
+    <li><strong>The <code>↳</code> is not new vocabulary — it is the diary's,
+      brought forward one screen.</strong> <code>plan.tsx</code> already folds a
+      drop into the set it came off with <code>↳ 50 × 8</code>. The same glyph in
+      the ledger means the session and the record say one thing in one character,
+      which is the rule the app already follows for <code>addOnlyMissing</code>
+      and for the tip strings the tour reads.</li>
+    <li><strong>It goes in the ghost cell because that cell is empty by decision,
+      not by accident.</strong> A drop is written with <code>prev: '—'</code> —
+      last week's set N+1 was not this drop, and a figure that isn't about this
+      row is worse than none. So the column is guaranteed free on exactly the
+      rows that need a marker, and a lone <code>↳</code> makes no claim about
+      last time: it terminates a line drawn from the row above.</li>
+    <li><strong>It survives the mark.</strong> The whole reason the chain went in
+      the gutter is that the index digit belongs to <code>SetMark</code> — judge a
+      drop and its verdict would erase the fact that it was one. The elbow and
+      the <code>↳</code> are both outside the digit, so both survive a ▲.</li>
+    <li><strong>And it survives the tick</strong>, which the wait line does not.
+      This is the part that makes a finished session readable: the elbow and the
+      glyph are row furniture, not wait furniture, so they stay behind when
+      <code>queued</code> leaves with the live box.</li>
+    <li><strong>One x-coordinate for both states.</strong> Dropping
+      <code>chainRiserLive</code>'s <code>left: 16</code> is what makes the riser
+      hang from the digit above in every case; the live box's 9px inset is then
+      absorbed by the elbow's horizontal run instead of by moving the vertical.
+      The line visibly steps in because the row it enters is inset — which is
+      true, and reads as structure.</li>
+    <li><strong>Weight goes to <code>accent600</code>, one step up.</strong> As
+      shipped the riser is at the live border's weight and a third of its length;
+      at 1px in a 3px gap that reads as an artifact. The elbow is long enough to
+      read as a line, so it can afford the step — and needs it to stay visible
+      over the accent wash behind the live box.</li>
+  </ul>
+</div>
+
+<hr class="fade">
+
+<h2 class="sec"><span class="n">2 ·</span> After the tick — where the feature currently disappears</h2>
+<p class="lede wide">
+  The same exercise, sealed and scrolled back to. This is the state a drop spends
+  most of its life in, and the one nobody drew.
+</p>
+
+<div class="verdict">
+  <div class="tag half">half-built</div>
+  <div class="b"><code>queued</code> is computed as <code>liveSet?.link &amp;&amp;
+  live</code> — <b>the explanation exists only while the row is live.</b> Ticking
+  it removes the last thing on screen that said the two sets were one
+  effort.</div>
+</div>
+
+<div class="pair">
+
+  <div class="half">
+    <div class="cap bad">Today · six sets, apparently</div>
+    <div class="sub">
+      <b>65 · 50 · 55 · 40</b> reads as a lifter falling apart. All that survives
+      of the two drops is a 2px closed gap and a 16px riser in the wrong column.
+    </div>
+    <div class="phone short">
+      <div class="status"><span>9:41</span><span>▮▮▮</span></div>
+      <div class="scr">
+        <div class="topbar"><span class="back">‹</span><span class="chip">6 / 6</span><span class="clock">41:20</span></div>
+        <div class="exname">Bench Press</div>
+        <div class="exmeta">Chest · Barbell</div>
+        <div class="colhead"><span>#</span><span>Last time</span><span class="c">kg</span><span class="c">Reps</span><span></span></div>
+
+        <div class="rowwrap"><div class="setrow"><span class="idx">1</span><span class="prev">70 × 8</span><span class="cell">70</span><span class="cell">8</span><span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span></div></div>
+        <div class="rowwrap"><div class="setrow"><span class="idx">2</span><span class="prev">70 × 8</span><span class="cell">70</span><span class="cell">7</span><span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span></div></div>
+        <div class="rowwrap"><div class="setrow"><span class="idx">3</span><span class="prev">65 × 8</span><span class="cell">65</span><span class="cell">6</span><span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span></div></div>
+        <div class="rowwrap built"><div class="setrow"><span class="idx">4</span><span class="prev dash">—</span><span class="cell">50</span><span class="cell">8</span><span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span></div></div>
+        <div class="rowwrap"><div class="setrow"><span class="idx">5</span><span class="prev">60 × 8</span><span class="cell">55</span><span class="cell">6</span><span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span></div></div>
+        <div class="rowwrap built"><div class="setrow"><span class="idx">6</span><span class="prev dash">—</span><span class="cell">40</span><span class="cell">9</span><span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span></div></div>
+
+        <div class="addrow">
+          <span class="addbtn shrunk2">Hold to add a set</span>
+          <span class="addbtn shrunk">Hold to add a drop set</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="half">
+    <div class="cap good">Proposed · four sets, two of them dropped</div>
+    <div class="sub">
+      The elbow and the <b>↳</b> are row furniture, so they are still there. Two
+      chains, legible at a glance, and the same shape the day panel will draw six
+      weeks from now. Nothing else on the row changed.
+    </div>
+    <div class="phone short">
+      <div class="status"><span>9:41</span><span>▮▮▮</span></div>
+      <div class="scr">
+        <div class="topbar"><span class="back">‹</span><span class="chip">6 / 6</span><span class="clock">41:20</span></div>
+        <div class="exname">Bench Press</div>
+        <div class="exmeta">Chest · Barbell</div>
+        <div class="colhead"><span>#</span><span>Last time</span><span class="c">kg</span><span class="c">Reps</span><span></span></div>
+
+        <div class="rowwrap"><div class="setrow"><span class="idx">1</span><span class="prev">70 × 8</span><span class="cell">70</span><span class="cell">8</span><span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span></div></div>
+        <div class="rowwrap"><div class="setrow"><span class="idx">2</span><span class="prev">70 × 8</span><span class="cell">70</span><span class="cell">7</span><span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span></div></div>
+        <div class="rowwrap"><div class="setrow"><span class="idx">3</span><span class="prev">65 × 8</span><span class="cell">65</span><span class="cell">6</span><span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span></div></div>
+        <div class="rowwrap fixed"><div class="setrow"><span class="idx">4</span><span class="lnk">↳</span><span class="cell">50</span><span class="cell">8</span><span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span></div></div>
+        <div class="rowwrap"><div class="setrow"><span class="idx">5</span><span class="prev">60 × 8</span><span class="cell">55</span><span class="cell">6</span><span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span></div></div>
+        <div class="rowwrap fixed"><div class="setrow"><span class="idx">6</span><span class="lnk">↳</span><span class="cell">40</span><span class="cell">9</span><span class="tick on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 12.6l4.6 4.6L19 7.4" stroke="#9184d9" stroke-width="2.4" stroke-linecap="round"/></svg></span></div></div>
+
+        <div class="addrow">
+          <span class="addbtn dash">+ Add set</span>
+          <span class="addbtn dash">+ Drop set</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="notes">
+  <ul>
+    <li><strong>The chip is left alone.</strong> <code>6 / 6</code> is right — six
+      sets were lifted, and the app's own rule is that the count stays honest.
+      Nothing here proposes hiding a drop from the count; it proposes being able
+      to see which of the six it was.</li>
+    <li><strong>The two held buttons take their nouns and a dashed outline.</strong>
+      <code>L.addDrop</code> already exists in both languages and is currently
+      dead. The reason to move the "hold" tell from the label to the border is
+      that the strip now carries two of them: at 156px each on a 360dp phone, two
+      <em>Hold to…</em> labels get shrunk by <code>adjustsFontSizeToFit</code> to
+      different sizes <i>from each other</i>, which is a good part of what reads
+      as unfinished — and German is longer again. Dashed already means <em>this
+      one is held</em> at three sites (<code>HoldBtn</code>, the live set row, the
+      coach's routine card), so the grammar is borrowed rather than invented.
+      <b>This one is Calvin's call: it changes a button that predates drop sets by
+      a year.</b></li>
+  </ul>
+</div>
+
+<hr class="fade">
+
+<h2 class="sec"><span class="n">3 ·</span> The ghost column, next Tuesday</h2>
+<p class="lede wide">
+  The visual half is cosmetic. This one is not: <strong>a drop taken anywhere but
+  the last row shifts every "last time" figure below it, permanently, for that
+  exercise.</strong>
+</p>
+
+<div class="verdict">
+  <div class="tag broken">broken</div>
+  <div class="b"><code>finishSession</code> writes <code>lastLog[e.ex] = { date,
+  sets }</code> from <code>e.sets.filter(x =&gt; x.done)</code> — drops included.
+  <code>sessionFrom</code> then reads <code>last[k]</code> index for index.
+  <b>The two arrays stop describing each other the moment a drop is not
+  last</b>, and <code>lastMarks</code> shifts with them.</div>
+</div>
+
+<table class="drift">
+  <tr>
+    <th>Today · Bench Press, drop off set 2</th>
+    <th>Stored in <code>lastLog</code></th>
+    <th>Next Tuesday's ghost</th>
+    <th>Should be</th>
+  </tr>
+  <tr>
+    <td>set 1 &nbsp; <b>70 × 8</b></td>
+    <td class="k">"70 × 8"</td>
+    <td>set 1 → 70 × 8</td>
+    <td class="right">70 × 8</td>
+  </tr>
+  <tr>
+    <td>set 2 &nbsp; <b>65 × 6</b></td>
+    <td class="k">"65 × 6"</td>
+    <td>set 2 → 65 × 6</td>
+    <td class="right">65 × 6</td>
+  </tr>
+  <tr>
+    <td>set 3 &nbsp; <b>50 × 8</b> &nbsp;<span class="note">↳ the drop</span></td>
+    <td class="k">"50 × 8"</td>
+    <td class="wrong">set 3 → <b>50 × 8</b></td>
+    <td class="right">60 × 6</td>
+  </tr>
+  <tr>
+    <td>set 4 &nbsp; <b>60 × 6</b></td>
+    <td class="k">"60 × 6"</td>
+    <td class="wrong">set 4 → <b>60 × 6</b></td>
+    <td class="right">60 × 5</td>
+  </tr>
+  <tr>
+    <td>set 5 &nbsp; <b>60 × 5</b></td>
+    <td class="k">"60 × 5"</td>
+    <td class="wrong">never read <span class="note">(routine asks for 4)</span></td>
+    <td class="right">—</td>
+  </tr>
+</table>
+
+<div class="notes">
+  <ul>
+    <li><strong>The fix is one <code>filter</code>, in one place, with no shape
+      change.</strong> <code>lastLog</code> is not the diary — it holds only the
+      latest session per exercise, because that is all a ghost needs. A drop is a
+      fact about the day, and the day already keeps it
+      (<code>LoggedExercise.links</code>), so the ghost has no business holding
+      one: build <code>lastLog</code>'s <code>sets</code> and
+      <code>lastMarks</code> from <code>ticked.filter(x =&gt; !x.link)</code>
+      while <code>history</code> keeps the full <code>ticked</code> array. No
+      <code>STORAGE_VERSION</code> bump and no migration — the stored shape is
+      identical, only shorter.</li>
+    <li><strong>The same one-line rule for the two routine writers.</strong>
+      <code>saveAsRoutine</code> and <code>saveDayAsRoutine</code> both take
+      <code>sets: e.sets.length</code> and read their numbers off the last ticked
+      row. Counting and reading over the unlinked rows only fixes both: a routine
+      has no way to hold a drop (<code>RoutineItem.with</code> has no drop twin,
+      by decision), so a drop must not survive into one as an ordinary set — and
+      above all its <em>weight</em> must not become the routine's.</li>
+    <li><strong>And a drop must not be tickable empty.</strong>
+      <code>logSet</code>'s guard assumes a row carrying a value in
+      <code>w</code> carries one in <code>reps</code> too, which every other row
+      earns from its ghost. A drop has no ghost and arrives with <code>w</code>
+      prefilled, so the guard passes and <code>65 × 0</code> is written.
+      <b>Keep the prefill</b> — editing 65 down to 50 is one sweep of the number
+      drag, which is what the cell is for — and widen the guard to refuse a tick
+      that would leave either field at zero with nothing to fill it from.</li>
+  </ul>
+</div>
+
+<hr class="fade">
+
+<h2 class="sec"><span class="n">4 ·</span> Two ways in, one of them unguarded</h2>
+<p class="lede wide">
+  <code>+ Drop set</code> inserts a linked row after the set you just lifted and
+  clears the rest that tick had earned. The mark sheet's switch sets the same
+  flag on <em>any</em> row above the first — and does neither.
+</p>
+
+<div class="verdict">
+  <div class="tag broken">broken</div>
+  <div class="b"><b>The switch is offered on rows nobody has lifted.</b> Turn it
+  on four rows down and <code>restEarned</code> goes false with nothing on screen
+  to say why: <code>queued</code> only draws on the <i>live</i> row, so the next
+  tick simply earns no rest. It also leaves a running rest running, where the
+  button cancels it.</div>
+</div>
+
+<div class="pair">
+
+  <div class="half">
+    <div class="cap bad">Today · a link on any row, at any time</div>
+    <div class="sub">
+      Set 5 has not been lifted, set 4 has not been lifted, and the sheet still
+      offers to make set 5 a drop off set 4. <code>onLink</code> is gated on
+      <code>markAt.j &gt; 0</code> and nothing else.
+    </div>
+    <div class="phone mid">
+      <div class="status"><span>9:41</span><span>▮▮▮</span></div>
+      <div class="scr">
+        <div class="topbar"><span class="back">‹</span><span class="chip">3 / 6</span><span class="clock">22:41</span></div>
+        <div class="exname">Bench Press</div>
+        <div class="exmeta">Chest · Barbell</div>
+        <div class="colhead"><span>#</span><span>Last time</span><span class="c">kg</span><span class="c">Reps</span><span></span></div>
+        <div class="rowwrap"><div class="setrow"><span class="idx">4</span><span class="prev">65 × 8</span><span class="cell ghost">65</span><span class="cell ghost">6</span><span class="tick"></span></div></div>
+        <div class="rowwrap"><div class="setrow"><span class="idx">5</span><span class="prev">65 × 8</span><span class="cell ghost">65</span><span class="cell ghost">6</span><span class="tick"></span></div></div>
+      </div>
+      <div class="sheet">
+        <h4>Set 5</h4>
+        <div class="sub">Bench Press · not yet logged</div>
+        <div class="swrow">
+          <div class="txt">
+            <div class="tt">Straight after set 4</div>
+            <div class="ts">No rest between them.</div>
+          </div>
+          <div class="sw on"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="half">
+    <div class="cap good">Proposed · the switch is the way <i>out</i>, not a second way in</div>
+    <div class="sub">
+      Its stated job in the code is already "the only way to take a drop's link
+      back off". So: <b>drawn only where a link exists, or where one could
+      honestly be made</b> — the row directly under a ticked set, which is exactly
+      where <code>+ Drop set</code> puts one. Anywhere else it is absent, the way
+      it already is on set 1.
+    </div>
+    <div class="phone mid">
+      <div class="status"><span>9:41</span><span>▮▮▮</span></div>
+      <div class="scr">
+        <div class="topbar"><span class="back">‹</span><span class="chip">3 / 6</span><span class="clock">22:41</span></div>
+        <div class="exname">Bench Press</div>
+        <div class="exmeta">Chest · Barbell</div>
+        <div class="colhead"><span>#</span><span>Last time</span><span class="c">kg</span><span class="c">Reps</span><span></span></div>
+        <div class="rowwrap"><div class="setrow"><span class="idx">4</span><span class="prev">65 × 8</span><span class="cell ghost">65</span><span class="cell ghost">6</span><span class="tick"></span></div></div>
+        <div class="rowwrap"><div class="setrow"><span class="idx">5</span><span class="prev">65 × 8</span><span class="cell ghost">65</span><span class="cell ghost">6</span><span class="tick"></span></div></div>
+      </div>
+      <div class="sheet">
+        <h4>Set 5</h4>
+        <div class="sub">Bench Press · not yet logged</div>
+        <div class="swrow gone">
+          <div class="txt">
+            <div class="tt">Straight after set 4</div>
+            <div class="ts">No rest between them.</div>
+          </div>
+          <div class="sw"></div>
+        </div>
+        <div class="absent">not rendered — set 4 hasn't been logged</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="notes">
+  <ul>
+    <li><strong>Both ways in should be one mutator.</strong> Whatever writes
+      <code>link</code> also has to clear <code>rest</code> — the whole claim of
+      the flag is that the tick which started that countdown earned none. Today
+      the button does it inline and the sheet does not, which is two behaviours
+      for one state.</li>
+    <li><strong>Absent, not disabled</strong>, matching the existing treatment of
+      set 1: "there is nothing above it, so the row is absent from the first set's
+      sheet rather than shown disabled". The struck-through row on the right is
+      drawn only to make the comparison legible; in the app nothing renders
+      there.</li>
+    <li><strong>Removing the row is already in flight.</strong> The working tree
+      carries <code>holdRemoveSet</code> and a destructive <code>HoldBtn</code> on
+      the mark sheet, which closes the other half of this: today, unlinking a drop
+      leaves a blank row inflating <code>n / m</code> with no way to take it out.
+      Nothing in this document collides with that — it lands in the same sheet,
+      under the same switch.</li>
+  </ul>
+</div>
+
+<hr class="fade">
+
+<h2 class="sec"><span class="n">5 ·</span> Where each of these lives</h2>
+
+<table class="sites">
+  <tr><th>Site</th><th>What</th><th>Kind</th></tr>
+  <tr>
+    <td class="f">workout-store.tsx<br>finishSession</td>
+    <td><code>lastLog</code> / <code>lastMarks</code> built from every ticked row, drops included — next session's ghosts and verdicts shift by one per drop.</td>
+    <td class="kind broken">broken · data</td>
+  </tr>
+  <tr>
+    <td class="f">workout-store.tsx<br>saveAsRoutine<br>saveDayAsRoutine</td>
+    <td><code>sets: e.sets.length</code> counts drops as planned sets, and the numbers come off the last ticked row — which is the drop. The routine inherits the drop weight.</td>
+    <td class="kind broken">broken · data</td>
+  </tr>
+  <tr>
+    <td class="f">session-overlay.tsx<br>Ledger · logSet</td>
+    <td>Guard is <code>!cur.w &amp;&amp; !cur.reps</code>; a drop arrives with <code>w</code> prefilled and no ghost, so an empty tick logs <code>65 × 0</code>.</td>
+    <td class="kind broken">broken · data</td>
+  </tr>
+  <tr>
+    <td class="f">session-overlay.tsx<br>onLink</td>
+    <td>Offered on every row above the first, unlifted ones included; doesn't clear a running rest, where <code>+ Drop set</code> does.</td>
+    <td class="kind broken">broken · behaviour</td>
+  </tr>
+  <tr>
+    <td class="f">session-overlay.tsx<br>chainRiser / chainRiserLive</td>
+    <td>Riser without the stub; <code>left</code> follows the live box so it hangs from neither digit; 16–24px in a 3px gap, ending ~13px short.</td>
+    <td class="kind half">half-built</td>
+  </tr>
+  <tr>
+    <td class="f">session-overlay.tsx<br>queued</td>
+    <td>Gated on the linked row being live, so a ticked drop keeps nothing that says it was one — the diary shows more than the ledger does.</td>
+    <td class="kind half">half-built</td>
+  </tr>
+  <tr>
+    <td class="f">session-overlay.tsx<br>addSet · addRow</td>
+    <td>Two <em>Hold to…</em> labels at 156px each, shrunk by <code>adjustsFontSizeToFit</code> to <code>minimumFontScale 0.8</code> — the pair ends up at two different sizes, worse in German.</td>
+    <td class="kind half">half-built</td>
+  </tr>
+  <tr>
+    <td class="f">i18n.ts<br>addDrop · unpair</td>
+    <td><code>addDrop</code> (<em>+ Drop set</em> / <em>+ Dropsatz</em>) and <code>unpair</code> are written in both languages and referenced nowhere.</td>
+    <td class="kind dead">dead</td>
+  </tr>
+  <tr>
+    <td class="f">mark sheet<br>holdRemoveSet</td>
+    <td>Removing a set — the missing undo for a drop. Already being written in the working tree; listed so it isn't done twice.</td>
+    <td class="kind flight">in flight</td>
+  </tr>
+</table>
+
+<div class="settled">
+  <div class="h">Not proposed, and why</div>
+  <ul>
+    <li><strong>Sub-numbering (3a / 3b).</strong> Still the clearest thing to read
+      and still wants the one slot <code>SetMark</code> has already spent — turned
+      down in the original mockup for that reason, and nothing here changes
+      it.</li>
+    <li><strong>Hiding drops from the <code>n / m</code> chip.</strong> Six sets
+      were lifted. The count is right; only its legibility was missing.</li>
+    <li><strong>A planned drop on a routine row.</strong> Drawn and turned down
+      once already — it has to invent a weight, which is the one thing a plan is
+      not allowed to write over your own history.</li>
+    <li><strong>Blanking the drop's weight instead of prefilling it.</strong> It
+      would close the <code>× 0</code> hole for free, and it costs the thing the
+      row is for: 65 → 50 is one sweep of the number drag. Fix the guard, keep the
+      gesture.</li>
+    <li><strong>A tip.</strong> <em>+ Drop set</em> is a labelled control and
+      fails the admission test — could a careful person use the app for a month
+      and never find it? No.</li>
+  </ul>
+</div>
+
+</div>
