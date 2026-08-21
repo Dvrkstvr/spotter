@@ -43,6 +43,7 @@ import { PlanSheet } from '@/components/overlays/plan-sheet';
 import { SessionOverlay } from '@/components/overlays/session-overlay';
 import { SettingsOverlay } from '@/components/overlays/settings-overlay';
 import { SummaryModal } from '@/components/overlays/summary-modal';
+import { Diagnostics } from '@/components/diagnostics';
 import { PlanAlarm } from '@/components/plan-alarm';
 import { RestAlarm } from '@/components/rest-alarm';
 import { SessionKeepalive } from '@/components/session-keepalive';
@@ -73,6 +74,11 @@ export function Overlays() {
           service belongs to the session, not to the buddy half or to whether
           the overlay is showing. Renders nothing. */}
       <SessionKeepalive />
+      {/* Also renders nothing, and also outside `social`: the buddy half
+          switching off is one of the things worth having in the log. Off
+          unless the setting is on, in which case it costs a line here and
+          there — see `src/data/diag.ts`. */}
+      <Diagnostics />
       {/* 91 when it has something to say, nothing at all the rest of the time.
           Mounted unconditionally because the file it answers for arrives before
           any flag could be set — on a cold start, before React exists. */}

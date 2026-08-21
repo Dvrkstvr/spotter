@@ -21,6 +21,7 @@
 import { useEffect, useRef } from 'react';
 
 import { ensureRadioPermissions, radio } from '@/data/buddy-radio';
+import { dlog } from '@/data/diag';
 import {
   authProof,
   closureFor,
@@ -124,15 +125,24 @@ export function BuddyRadio() {
     // mid-workout drop is never. So each half re-kicks itself until it takes;
     // a late double-start fails with STATUS_ALREADY_ADVERTISING and is
     // swallowed like every other refusal.
-    const kick = (go: () => Promise<void>) => {
-      go().catch(() => {
-        if (alive) timers.push(setTimeout(() => kick(go), RETRY_MS));
-      });
+    const kick = (go: () => Promise<void>, what: string) => {
+      go()
+        .then(() => dlog('buddy', `${what} started`))
+        .catch((e) => {
+          // The refusal Nearby gives while the Bluetooth stack is settling, and
+          // the one thing that tells a silent radio apart from a quiet gym.
+          dlog('buddy', `${what} refused`, { err: e instanceof Error ? e.message : String(e) });
+          if (alive) timers.push(setTimeout(() => kick(go, what), RETRY_MS));
+        });
     };
     ensureRadioPermissions().then((ok) => {
+      dlog('buddy', 'radio permissions', { ok }, true);
       if (!ok || !alive) return;
-      kick(() => r.startAdvertising(encodePeerName(ref.current.s.selfId, myName(ref.current.s))));
-      kick(() => r.startDiscovery());
+      kick(
+        () => r.startAdvertising(encodePeerName(ref.current.s.selfId, myName(ref.current.s))),
+        'advertising'
+      );
+      kick(() => r.startDiscovery(), 'discovery');
     });
     return () => {
       alive = false;
@@ -166,11 +176,22 @@ export function BuddyRadio() {
       const name = st.s.buddy;
       if (!name || st.s.buddyEndpoint !== null) return;
       const peer = st.s.nearbyPeers.find((p) => matchesBuddy(name, st.s.buddyIds[name], p));
-      if (!peer) return;
+      if (!peer) {
+        // The heal is stuck at discovery rather than at the request — the two
+        // are indistinguishable from the screen and want opposite fixes.
+        dlog('buddy', 'reconnect: buddy not visible', { buddy: name, peers: st.s.nearbyPeers.length });
+        return;
+      }
       seen += 1;
-      if (!initiator(st.s, peer) && seen <= GRACE_TICKS) return;
-      r.requestConnection(encodePeerName(st.s.selfId, myName(st.s)), peer.endpointId).catch(
-        () => {}
+      if (!initiator(st.s, peer) && seen <= GRACE_TICKS) {
+        dlog('buddy', 'reconnect: holding back', { tick: seen, of: GRACE_TICKS });
+        return;
+      }
+      dlog('buddy', 'reconnect: requesting', { tick: seen, endpoint: peer.endpointId }, true);
+      r.requestConnection(encodePeerName(st.s.selfId, myName(st.s)), peer.endpointId).catch((e) =>
+        dlog('buddy', 'reconnect: request failed', {
+          err: e instanceof Error ? e.message : String(e),
+        })
       );
     }, RETRY_MS);
     return () => clearInterval(id);
@@ -192,6 +213,7 @@ export function BuddyRadio() {
     if (session && !prev && session.rid && st.s.buddyEndpoint && st.s.sessionRole === null) {
       const routine = st.s.routines.find((x) => x.id === session.rid);
       if (routine) {
+        dlog('buddy', 'hosting — invite out', { rid: routine.id }, true);
         st.patch({ sessionShared: true, sessionRole: 'host', buddyJoin: 'pending' });
         r.sendPayload(
           st.s.buddyEndpoint,
@@ -240,6 +262,11 @@ export function BuddyRadio() {
     const id = setTimeout(() => {
       const cur = ref.current.s;
       if (!cur.session || !cur.buddyEndpoint) return;
+      // The one send worth a line every time: the buddy's whole picture of this
+      // session is whatever the last of these carried, so "their rest never
+      // showed" and "their turn never came round" are both answered by whether
+      // this fired and what `rest` was in it.
+      dlog('buddy', 'progress out', { active: cur.active, rest: restLeftOf(cur) || undefined });
       r.sendPayload(
         cur.buddyEndpoint,
         JSON.stringify({
@@ -354,6 +381,7 @@ export function BuddyRadio() {
     // re-prove the secret — and clearing buddyEndpoint is what flips `active`
     // back on, which restarts advertising, discovery and the ticker.
     const dropLink = (endpointId: string) => {
+      dlog('buddy', 'link torn down', { endpoint: endpointId }, true);
       meta.current.delete(endpointId);
       authed.current.delete(endpointId);
       flaky.delete(endpointId);
@@ -378,6 +406,7 @@ export function BuddyRadio() {
     // and after a reconnecting peer's proof checks out, never before.
     const trust = (endpointId: string) => {
       const st = ref.current;
+      dlog('buddy', 'trusted — snapshot out', { endpoint: endpointId }, true);
       authed.current.add(endpointId);
       if (st.s.buddyEndpoint !== endpointId) st.patch({ buddyEndpoint: endpointId });
       r.sendPayload(
@@ -561,6 +590,7 @@ export function BuddyRadio() {
       r.addListener('onPayloadFailed', (e) => {
         const n = (flaky.get(e.endpointId) ?? 0) + 1;
         flaky.set(e.endpointId, n);
+        dlog('buddy', 'payload undelivered', { endpoint: e.endpointId, run: n }, true);
         if (n < 2) return;
         // Any endpoint, not just the buddy link: a hello that can't be
         // delivered is a handshake that will never finish, and dropLink's
@@ -574,14 +604,23 @@ export function BuddyRadio() {
       r.addListener('onPayload', (e) => {
         flaky.delete(e.endpointId);
         const msg = parseBuddyMessage(e.data);
-        if (!msg) return;
+        if (!msg) {
+          dlog('buddy', 'payload unparseable', { bytes: e.data.length }, true);
+          return;
+        }
+        dlog('buddy', 'payload in', { t: msg.t });
         const st = ref.current;
         // Nothing but a hello is honoured from an endpoint that hasn't proved
         // the pairing secret — a reconnecting peer's snapshot, item merge,
         // session invite and draft all wait behind `trust`. This is the line
         // that stops a name-only impersonator: it connects, but every
         // sensitive message it sends lands here and is dropped.
-        if (msg.t !== 'hello' && !authed.current.has(e.endpointId)) return;
+        if (msg.t !== 'hello' && !authed.current.has(e.endpointId)) {
+          // The impersonator line. Also what an ordering bug would look like,
+          // which is exactly why it is worth being able to tell them apart.
+          dlog('buddy', 'dropped — endpoint not authenticated', { t: msg.t }, true);
+          return;
+        }
         switch (msg.t) {
           case 'hello': {
             const info = meta.current.get(e.endpointId);
@@ -602,9 +641,16 @@ export function BuddyRadio() {
             const roster = info ? rosterNameFor(st.s, info.peer) : (st.s.buddy ?? null);
             const secret = roster ? st.s.buddySecrets[roster] : undefined;
             if (!proofOk(secret, msg.proof, digits)) {
+              dlog(
+                'buddy',
+                'proof refused',
+                { roster: roster ?? 'none', haveSecret: secret !== undefined, gotProof: !!msg.proof },
+                true
+              );
               r.disconnectFrom(e.endpointId).catch(() => {});
               break;
             }
+            dlog('buddy', 'proof accepted', { roster: roster ?? 'none' }, true);
             trust(e.endpointId);
             break;
           }

@@ -12,7 +12,7 @@
  * in place of the plain start button. Structure syncs both ways; the sets
  * column is the shared one, reps and kg stay per-person.
  */
-import React, { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   Animated,
   PanResponder,
@@ -61,11 +61,19 @@ export function RoutineOverlay() {
   const styles = useThemed(sheet);
   const c = useColors();
   const {
-    s, L, patch, ex, routine, gInfo, kInfo, exInfo, rInfo, mutRoutine, deleteRoutine, start, draftPayload,
+    s, L, patch, ex, routine, gInfo, kInfo, exInfo, rInfo, mutRoutine, moveRoutineItem, deleteRoutine, start, draftPayload,
   } = useStore();
   const insets = useSafeAreaInsets();
   const close = () => patch({ routineOpen: null });
   useBackClose(close);
+
+  // The plain editor's reorder — the co-draft rows carry their own in
+  // `DraftRows`. Same gesture, but the pitch is measured per row rather than
+  // taken from the first one: the pair gap rides between rows, so a uniform
+  // pitch would land a long drag a row short of the line it drew.
+  const [drag, setDrag] = useState<{ from: number; to: number } | null>(null);
+  const [dy] = useState(() => new Animated.Value(0));
+  const heights = useRef<number[]>([]);
 
   const r = routine(s.routineOpen);
   if (!r) return null;
@@ -73,6 +81,52 @@ export function RoutineOverlay() {
   // The co-draft skin needs the pairing to still exist; if the buddy was
   // disconnected mid-draft this falls back to the plain editor.
   const draft = s.coDraft?.rid === r.id && s.buddy ? s.coDraft : null;
+
+  // A grip on a list of one is furniture, so both the rows and the column
+  // header's spacer key off this.
+  const reorderable = !draft && r.items.length > 1;
+  const rowH = (n: number) => (heights.current[n] ?? 56) + t.gap;
+  const landing = (from: number, offset: number) => {
+    let to = from;
+    let acc = 0;
+    if (offset > 0)
+      while (to < r.items.length - 1 && offset > acc + rowH(to + 1) / 2) {
+        acc += rowH(to + 1);
+        to++;
+      }
+    else
+      while (to > 0 && -offset > acc + rowH(to - 1) / 2) {
+        acc += rowH(to - 1);
+        to--;
+      }
+    return to;
+  };
+  // Rebuilt every render so the closures always see the current rows — React
+  // Native reads handler props at event time (the ReorderRows pattern).
+  const gripFor = (from: number) =>
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 2,
+      onPanResponderGrant: () => {
+        dy.setValue(0);
+        setDrag({ from, to: from });
+      },
+      onPanResponderMove: (_, g) => {
+        dy.setValue(g.dy);
+        const to = landing(from, g.dy);
+        setDrag((d) => (d && d.to !== to ? { ...d, to } : d));
+      },
+      onPanResponderRelease: (_, g) => {
+        const to = landing(from, g.dy);
+        if (to !== from) moveRoutineItem(r.id, from, to);
+        dy.setValue(0);
+        setDrag(null);
+      },
+      onPanResponderTerminate: () => {
+        dy.setValue(0);
+        setDrag(null);
+      },
+    });
 
   // Every rule that puts this routine on the calendar, in the same words the
   // Plan row pills and the plan sheet use — one formatter, three surfaces.
@@ -144,7 +198,7 @@ export function RoutineOverlay() {
         )}
 
         <View style={styles.colHead}>
-          {draft && <View style={styles.grip} />}
+          {(draft || reorderable) && <View style={styles.grip} />}
           {draft && <View style={styles.chip} />}
           <Text style={[styles.colLabel, styles.colName]}>{L.exercise}</Text>
           <Text style={[styles.colLabel, styles.colNarrow, draft && styles.colShared]}>
@@ -167,9 +221,37 @@ export function RoutineOverlay() {
               // only ever reads it. Adjacency, so the gap between two rows is
               // literally where the question lives.
               const paired = item.with === 'next' && n + 1 < r.items.length;
+              const isDragging = drag?.from === n;
+              const isTarget = !!drag && drag.to === n && drag.from !== n;
               return (
-                <React.Fragment key={`${item.ex}-${n}`}>
+                <Animated.View
+                  key={`${item.ex}-${n}`}
+                  onLayout={(e) => {
+                    heights.current[n] = e.nativeEvent.layout.height;
+                  }}
+                  style={[
+                    styles.slot,
+                    { borderTopColor: isTarget ? c.accent : 'transparent' },
+                    // The screen's own colour, so the row in flight covers
+                    // what it slides over instead of printing through it.
+                    isDragging && {
+                      transform: [{ translateY: dy }],
+                      zIndex: 2,
+                      elevation: 2,
+                      backgroundColor: c.bg,
+                    },
+                  ]}
+                >
                 <View style={styles.row}>
+                  {reorderable && (
+                    <View
+                      {...gripFor(n).panHandlers}
+                      accessibilityLabel={L.dragReorder}
+                      style={styles.grip}
+                    >
+                      <GripIcon color={isDragging ? c.accent : c.neutral700} />
+                    </View>
+                  )}
                   <View style={styles.rowText}>
                     {/* One line, like the co-draft rows below and every other
                         list — a long custom name must not break the grid. */}
@@ -258,7 +340,7 @@ export function RoutineOverlay() {
                     {paired && <Text style={styles.pairLabel}>{L.superset}</Text>}
                   </Pressable>
                 )}
-                </React.Fragment>
+                </Animated.View>
               );
             })}
           </View>
@@ -543,6 +625,10 @@ const sheet = themed(() => ({
   },
   colShared: { color: color.accent700 },
 
+  /* One row's slot in the plain editor's drag list — the row plus the pair
+     gap under it, so a dragged row carries its gap along. ReorderRows'
+     landing cue: a 2px top border, transparent until targeted. */
+  slot: { borderTopWidth: 2 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',

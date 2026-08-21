@@ -28,6 +28,7 @@ import type {
 import type { BuddySnapshot } from '@/data/buddy-transport';
 import { mergeFirstUp, mergeTurns, routineClosure } from '@/data/buddy-sync';
 import { mondayISO, todayISO } from '@/data/date';
+import { dlog } from '@/data/diag';
 import { deviceInstallId, randomInstallId } from '@/data/identity';
 import {
   anchorFor,
@@ -321,6 +322,24 @@ export type State = {
    */
   privateMode: boolean;
   /**
+   * Record what the app does, to a file, for reporting a bug that happened in a
+   * gym — see `src/data/diag.ts`. Off unless someone turned it on: `dlog`
+   * returns on its first line, so a phone that is not being tested spends
+   * nothing. Additive like `coach` and `tips`, so no `STORAGE_VERSION` bump.
+   */
+  diag: boolean;
+  /**
+   * The folder the log is exported into — a SAF tree URI the user picked once,
+   * whose grant Android persists against this install. Null until they do.
+   *
+   * A URI rather than a path because Android will not let an app write into
+   * shared storage by name, and a persisted grant is what makes "after the
+   * workout, copy your buddy's file out of Files" a one-time setup rather than
+   * a picker every export. It can still be revoked — the folder is deleted,
+   * storage is cleared — so every write answers failure rather than trusting it.
+   */
+  diagDir: string | null;
+  /**
    * Whether the first-run flow has been completed (or skipped). True in
    * `initialState` on purpose: an existing phone's blob predates the key, so
    * `filterPersisted` leaves this default standing — and a phone with months
@@ -585,6 +604,8 @@ const initialState: State = {
   // setting is the time.
   planAlertAt: 18 * 60,
   privateMode: false,
+  diag: false,
+  diagDir: null,
   onboarded: true,
   onboardingOpen: false,
   style: 'mixed',
@@ -715,6 +736,10 @@ const PERSIST = [
   'setups', 'videos', 'lang', 'groups', 'kinds', 'images', 'exEdits', 'cueEdits',
   'knownBuddies', 'buddyIds', 'buddySecrets', 'selfId', 'themeMode', 'theme', 'restSeconds', 'firstUpDefault',
   'haptics', 'restAlert', 'planAlert', 'planAlertAt', 'privateMode', 'onboarded', 'style', 'level', 'coach', 'tips',
+  // Ordinary settings, and they ride in a backup like every other one: a
+  // restored `diagDir` names a grant the new phone doesn't hold, which is the
+  // revoked-folder case the export row already answers by offering the picker.
+  'diag', 'diagDir',
   // The LIVE keys — crash recovery, not diary (additive like everything else,
   // so no version bump). A swiped-away app or a process death mid-workout used
   // to lose every ticked set; now the session comes back. `elapsed` is special
@@ -770,6 +795,8 @@ const PERSIST_SHAPE: Record<
   planAlert: 'boolean', planAlertAt: 'number',
   privateMode: 'boolean', onboarded: 'boolean', style: 'string',
   level: 'string', coach: 'object', tips: 'object',
+  // `diagDir`'s 'string' does for its null what `sessionRole`'s does for its.
+  diag: 'boolean', diagDir: 'string',
   // `session` and `rest` are object-or-null, and 'object' is exactly the
   // right filter for that: a stored null fails it, the key is dropped, and
   // the seeded null stands — which is what null meant. `sessionRole`'s
@@ -1455,6 +1482,23 @@ function useWorkoutState() {
           );
       }
       if (!alive) return;
+      // The one line the log cannot derive from a transition: by the time
+      // <Diagnostics> sees a session it cannot tell a resumed one from a fresh
+      // one except by `sessionMin`, and it can never see *why* a phone came up
+      // holding the seeded defaults. It is written before the setting it
+      // depends on is known — which is what `diag.ts`'s undecided state is for,
+      // rather than this reading the blob a second time.
+      dlog(
+        'data',
+        'hydrated',
+        {
+          found: held !== null,
+          canSave: ok,
+          resumed: !!data?.session,
+          elapsed: data?.elapsed,
+        },
+        true
+      );
       if (data) patch(data);
       // `held === null` is the one thing `initialState` cannot know: every
       // read succeeded and there was nothing at any version, so this phone

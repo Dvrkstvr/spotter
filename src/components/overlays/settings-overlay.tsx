@@ -27,6 +27,7 @@ import { FullScreen } from '@/components/sheet';
 import { Envelope, pickAndRead, saveAndShare } from '@/data/backup';
 import { hasRadio, isSimRadio, sayGoodbye } from '@/data/buddy-radio';
 import { FIRST_UPS } from '@/data/buddy-sync';
+import { clearDiag, exportToFolder, folderLabel, pickFolder } from '@/data/diag';
 import { DEFAULT_GROUPS, DEFAULT_KINDS } from '@/data/exercises';
 import { dismissAlarms, ensureAlarmPermission } from '@/data/alarms';
 import { TIP_COUNT, tipsRetired } from '@/data/tips';
@@ -46,7 +47,7 @@ import {
   tracking,
 } from '@/design/tokens';
 import { Btn, H2, H6, Seg } from '@/design/ui';
-import { resolveNames, STORAGE_VERSION, useStore } from '@/store/workout-store';
+import { myName, resolveNames, STORAGE_VERSION, useStore } from '@/store/workout-store';
 
 /** Rest lengths worth a tap. 0 is the timer off — see `restSeconds`. */
 const RESTS = [0, 60, 90, 120, 180, 300];
@@ -174,6 +175,46 @@ export function SettingsOverlay() {
     setNote(null);
     if (!(await saveAndShare(exportState(), STORAGE_VERSION, L.exportBackup)))
       setNote(L.backupFailed);
+  };
+
+  /**
+   * Ask for the folder the log is written into, and remember it.
+   *
+   * Backing out of the picker is an answer, so it says nothing rather than
+   * reporting a failure — the same reason `doImport` returns silently on
+   * 'cancelled'.
+   */
+  const doDiagFolder = async () => {
+    setNote(null);
+    const uri = await pickFolder();
+    if (!uri) return;
+    patch({ diagDir: uri });
+    setNote(L.diagFolderSet.replace('{folder}', folderLabel(uri)));
+  };
+
+  /**
+   * Write the log out now.
+   *
+   * With no folder picked yet this asks for one first, rather than sending
+   * someone to the row above and back: the tap means "put the log somewhere I
+   * can get at it", and where is a detail it can ask about on the way.
+   *
+   * A failure here is nearly always the grant having gone — the folder was
+   * deleted, or storage was cleared — so the message says the one thing worth
+   * doing about it.
+   */
+  const doDiagExport = async () => {
+    setNote(null);
+    const dir = s.diagDir ?? (await pickFolder());
+    if (!dir) return;
+    if (dir !== s.diagDir) patch({ diagDir: dir });
+    const name = await exportToFolder(dir, myName(s));
+    setNote(name ? L.diagSaved.replace('{file}', name) : L.diagSaveFailed);
+  };
+
+  const doDiagClear = async () => {
+    await clearDiag();
+    setNote(L.diagCleared);
   };
 
   const doImport = async () => {
@@ -380,6 +421,38 @@ export function SettingsOverlay() {
           <Text style={styles.actionLabel}>{L.importBackup}</Text>
           <Text style={styles.hint}>{L.importHint}</Text>
         </Pressable>
+
+        {/* The testing half of Data, and it reveals its own controls: with the
+            switch off there is nothing here to read but the switch, which is
+            the right amount of screen for a feature nobody uses on a phone
+            that is only being trained with. */}
+        <ToggleRow
+          label={L.diagLabel}
+          hint={L.diagHint}
+          on={s.diag}
+          set={(v) => {
+            setNote(null);
+            patch({ diag: v });
+          }}
+        />
+        {s.diag && (
+          <>
+            <Pressable onPress={doDiagFolder} style={styles.actionRow}>
+              <Text style={styles.actionLabel}>{L.diagFolder}</Text>
+              <Text style={styles.hint}>
+                {s.diagDir ? folderLabel(s.diagDir) : L.diagFolderNone}
+              </Text>
+            </Pressable>
+            <Pressable onPress={doDiagExport} style={styles.actionRow}>
+              <Text style={styles.actionLabel}>{L.diagSave}</Text>
+              <Text style={styles.hint}>{L.diagSaveHint}</Text>
+            </Pressable>
+            <Pressable onPress={doDiagClear} style={styles.actionRow}>
+              <Text style={styles.actionLabel}>{L.diagClear}</Text>
+              <Text style={styles.hint}>{L.diagClearHint}</Text>
+            </Pressable>
+          </>
+        )}
         {note && <Text style={styles.note}>{note}</Text>}
 
         {/* The danger corner — hidden, not removed. It was the only door back

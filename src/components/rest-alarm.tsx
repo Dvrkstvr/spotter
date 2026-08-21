@@ -15,6 +15,7 @@
 import { useEffect, useRef } from 'react';
 import { AppState } from 'react-native';
 
+import { dlog } from '@/data/diag';
 import {
   cancelAlarm,
   dismissAlarms,
@@ -75,6 +76,10 @@ export function RestAlarm() {
     // The schedule is async and the rest can end before it lands — hence both
     // halves of the guard: cancel what came back late, and cancel what arrived.
     scheduleRestAlarm(left, L.restOverTitle, body).then((got) => {
+      // `null` here is the whole of "the alarm never fired": no module, no
+      // permission, or a rest of zero. Nothing on the screen distinguishes
+      // those from an alarm that fired while the phone was in a pocket.
+      dlog('rest', 'alarm scheduled', { in: left, ok: got !== null, late: dropped }, true);
       if (dropped) cancelAlarm(got);
       else id = got;
     });
@@ -83,6 +88,7 @@ export function RestAlarm() {
     // finished, the setting switched off.
     return () => {
       dropped = true;
+      dlog('rest', 'alarm cancelled', { had: id !== null });
       cancelAlarm(id);
     };
     // `at` identifies the rest: a new one always means a new stamp.

@@ -823,6 +823,77 @@ in front of it, and then goes away for good. Mockup:
   which is precisely what re-running the tour could not promise. The count on
   the right going back to zero is the whole confirmation it needs.
 
+## The diagnostics log
+
+Everything this app gets wrong that is worth chasing happens where a debugger
+cannot follow: a link healing in a gym, an alarm firing through a locked screen,
+a session coming back after Android killed the process, two phones disagreeing
+about whose set it is. The bug report was a memory of what the screen looked
+like an hour ago. This writes it down as it happens — `src/data/diag.ts` for the
+recording, `<Diagnostics>` for the harness, three rows in Settings' Data
+section. It is Calvin's, has no design behind it, and is off by default.
+
+- **It records events, not state**, and **every line carries both clocks** —
+  wall time and `elapsed`. Half of what is worth chasing here is exactly those
+  two disagreeing (a screen lock, a resume, a buddy's rest re-anchored on
+  arrival), and one clock would make those lines say nothing. What it never
+  records is the per-second tick or a drag's per-frame steps: the argument the
+  saver's dirty check makes about `elapsed`, one module over.
+- **`dlog` is off unless the setting is on, with one deliberate third state.**
+  `on` is `null` until hydration lands — and the most valuable lines in the file
+  happen before that: what the blob held, whether a session resumed, how far its
+  clock was advanced. So an undecided launch buffers into a bounded `preroll`
+  and the first `setDiagOn` either takes it or throws it away. After that the
+  answer is settled for the process and `dlog` returns on its first line, which
+  is "off costs nothing" intact — it just starts one beat later than it looks.
+- **Most of what is recorded is *derived*, in `<Diagnostics>`.** A transition in
+  state is a fact the store already holds, and watching one there costs nothing
+  at the site that caused it: a session appearing, a rest stamped or skipped, a
+  link up or down. Only what leaves no trace gets a `dlog` where it happens — a
+  payload sent, a proof refused, an alarm handed to Android — because those are
+  events rather than values and by the next render they are over. A store
+  littered with logging is a store where the logging and the behaviour drift
+  apart; a component reading transitions can only report what happened.
+- **Two places for the bytes, and the split is the whole design.** The live log
+  is a file in the app's own document directory, appended through a debounced
+  buffer, because that is what survives a process death and has to be cheap.
+  The *export* is a whole copy written into a folder the user picked, because a
+  SAF document cannot be cheaply appended — every write is
+  open-truncate-write-close through a content provider. So the folder gets a
+  file at the moments worth one: a finished session, or the button.
+- **Appended through a `FileHandle`, not rewritten.** `File.write` replaces, so
+  the obvious version reads half a megabyte back and writes it out again on
+  every flush — during exactly the activity being measured. Seeking to the end
+  costs the batch. That needs bytes, and this runtime has no `TextEncoder`
+  (Hermes ships none; Expo's winter runtime installs `TextDecoder` and
+  `TextEncoderStream` but not the encoder), hence the twenty-line `utf8` — whose
+  multi-byte branches exist for exactly one real case, a German name. The
+  whole-file rewrite survives as the fallback and as the trim.
+- **The folder is a SAF tree URI, not a path.** Android will not let an app write
+  into shared storage by name, and the grant is persistable, so `diagDir`
+  survives a restart and the picker is one-time setup rather than per export.
+  It can still be revoked — folder deleted, storage cleared — so every write
+  answers failure rather than trusting it, and the row offers the picker again.
+  `folderLabel` decodes the tail so a settings row says `Development/Spotter`
+  rather than the machine's answer to a question about your own phone.
+- **The filename carries whose phone it came off** (`diagFileName`). The errand
+  is two logs in one folder on a laptop after a shared workout; a timestamp
+  alone means opening both to find out which is which.
+- **Names are in it and training is not.** A log with `buddy=` and no name
+  cannot be lined up against the other phone's, so names and a shortened
+  `selfId` are in the header. No set, weight or note ever reaches a line — what
+  someone lifted is diary, and this is a machine transcript.
+- **`diag` and `diagDir` are additive `PERSIST` keys** — no `STORAGE_VERSION`
+  bump, no migration — and they ride in a backup like every other setting. A
+  restored `diagDir` names a grant the new phone doesn't hold, which is the
+  revoked-folder case the export row already answers. Nothing about this is in
+  a buddy snapshot: what one phone has been asked to record is not the buddy's
+  business, the same rule set marks follow.
+- **The rows reveal themselves.** With the switch off there is nothing under it
+  but the switch — a folder row, a save row and a clear row are furniture on a
+  phone that is only being trained with. Save-now with no folder yet asks for
+  one on the way rather than sending you to the row above and back.
+
 ## Deliberate deviations from the design
 
 Keep these; they're decisions, not drift. Each is commented at its site.
