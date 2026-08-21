@@ -294,9 +294,26 @@ export type State = {
    * Let a rest that runs out while the phone is away reach you anyway, as a
    * notification. The out-of-app half of `haptics`: a suspended JS thread never
    * feels the moment pass, so the alarm is handed to Android up front — see
-   * `src/data/rest-alarm.ts`.
+   * `src/data/alarms.ts`.
    */
   restAlert: boolean;
+  /**
+   * Remind you, once, on a day something is planned. The plan is dated rules,
+   * so which days hold a workout is knowable a fortnight out — see
+   * `<PlanAlarm>`, which is the only thing that reads this pair.
+   *
+   * Off by default, unlike `restAlert`: a rest alert only ever fires inside a
+   * workout you started, where this one arrives on a day you may not have
+   * opened the app at all. Something that speaks unprompted is asked for
+   * rather than assumed.
+   */
+  planAlert: boolean;
+  /**
+   * When, as minutes past local midnight. A number rather than `'18:00'`
+   * because it is arithmetic at every reader — the stepper clamps it, the
+   * schedule adds it to a date — and a string would be parsed back at each one.
+   */
+  planAlertAt: number;
   /**
    * Train alone. The whole buddy half of the app — the radio, the roster, the
    * bars, every sheet that can interrupt you — is hidden and switched off.
@@ -562,6 +579,11 @@ const initialState: State = {
   firstUpDefault: 'host',
   haptics: true,
   restAlert: true,
+  planAlert: false,
+  // 18:00 — after work and before the evening is gone, which is when a
+  // reminder can still be acted on. Only ever the starting point: the whole
+  // setting is the time.
+  planAlertAt: 18 * 60,
   privateMode: false,
   onboarded: true,
   onboardingOpen: false,
@@ -692,7 +714,7 @@ const PERSIST = [
   'routines', 'plan', 'history', 'lastLog', 'lastMarks', 'custom', 'profile',
   'setups', 'videos', 'lang', 'groups', 'kinds', 'images', 'exEdits', 'cueEdits',
   'knownBuddies', 'buddyIds', 'buddySecrets', 'selfId', 'themeMode', 'theme', 'restSeconds', 'firstUpDefault',
-  'haptics', 'restAlert', 'privateMode', 'onboarded', 'style', 'level', 'coach', 'tips',
+  'haptics', 'restAlert', 'planAlert', 'planAlertAt', 'privateMode', 'onboarded', 'style', 'level', 'coach', 'tips',
   // The LIVE keys — crash recovery, not diary (additive like everything else,
   // so no version bump). A swiped-away app or a process death mid-workout used
   // to lose every ticked set; now the session comes back. `elapsed` is special
@@ -745,6 +767,7 @@ const PERSIST_SHAPE: Record<
   buddyIds: 'object', buddySecrets: 'object', selfId: 'string',
   themeMode: 'string', theme: 'string', restSeconds: 'number',
   firstUpDefault: 'string', haptics: 'boolean', restAlert: 'boolean',
+  planAlert: 'boolean', planAlertAt: 'number',
   privateMode: 'boolean', onboarded: 'boolean', style: 'string',
   level: 'string', coach: 'object', tips: 'object',
   // `session` and `rest` are object-or-null, and 'object' is exactly the

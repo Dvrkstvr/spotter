@@ -56,7 +56,7 @@ class SessionService : Service() {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
       // Re-creating the channel under the same id is how Android takes a
       // rename, so a language switch updates it — same move the rest channel
-      // makes in rest-alarm.ts.
+      // makes in alarms.ts.
       val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
       nm.createNotificationChannel(
         NotificationChannel(CHANNEL, channelName, NotificationManager.IMPORTANCE_LOW).apply {

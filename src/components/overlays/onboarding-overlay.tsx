@@ -37,7 +37,7 @@ import {
 } from '@/data/exercises';
 import { DAYS_SHORT, Lang, Strings } from '@/data/i18n';
 import { weekSlots } from '@/data/plan';
-import { ensureAlarmPermission } from '@/data/rest-alarm';
+import { ensureAlarmPermission } from '@/data/alarms';
 import { useBackClose } from '@/hooks/use-back-close';
 import { themed, useColors, useThemed } from '@/design/theme';
 import { color, fill, font, motion, radius, t, tracking, wash } from '@/design/tokens';

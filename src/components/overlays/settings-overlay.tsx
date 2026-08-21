@@ -28,7 +28,7 @@ import { Envelope, pickAndRead, saveAndShare } from '@/data/backup';
 import { hasRadio, isSimRadio, sayGoodbye } from '@/data/buddy-radio';
 import { FIRST_UPS } from '@/data/buddy-sync';
 import { DEFAULT_GROUPS, DEFAULT_KINDS } from '@/data/exercises';
-import { dismissRestAlarms, ensureAlarmPermission } from '@/data/rest-alarm';
+import { dismissAlarms, ensureAlarmPermission } from '@/data/alarms';
 import { TIP_COUNT, tipsRetired } from '@/data/tips';
 import { useBackClose } from '@/hooks/use-back-close';
 import { themed, useColors, useDark, useThemed } from '@/design/theme';
@@ -41,6 +41,7 @@ import {
   ThemeMode,
   ThemeName,
   THEMES,
+  slop,
   themeSwatch,
   tracking,
 } from '@/design/tokens';
@@ -49,6 +50,15 @@ import { resolveNames, STORAGE_VERSION, useStore } from '@/store/workout-store';
 
 /** Rest lengths worth a tap. 0 is the timer off — see `restSeconds`. */
 const RESTS = [0, 60, 90, 120, 180, 300];
+
+/**
+ * What one tap on the minute stepper is worth.
+ *
+ * Five, not one: nobody's reminder is at 18:07, and a stepper that took twelve
+ * taps to cross an hour would be a text field with extra steps. The hour is the
+ * decision; the minutes are how far either side of it.
+ */
+const MINUTE_STEP = 5;
 
 const MODES: ThemeMode[] = ['system', 'light', 'dark'];
 
@@ -144,7 +154,20 @@ export function SettingsOverlay() {
   const setRestAlert = (on: boolean) => {
     patch({ restAlert: on });
     if (on) ensureAlarmPermission();
-    else dismissRestAlarms();
+    else dismissAlarms();
+  };
+
+  /**
+   * The same calm moment as `setRestAlert`, and the same permission — Android
+   * grants POST_NOTIFICATIONS to the app, not to a channel, so whichever of the
+   * two is switched on first has asked for both. Switching it off clears the
+   * tray; <PlanAlarm> drops the stamped fortnight on its own, because the list
+   * it derives from is empty the moment the flag is.
+   */
+  const setPlanAlert = (on: boolean) => {
+    patch({ planAlert: on });
+    if (on) ensureAlarmPermission();
+    else dismissAlarms();
   };
 
   const doExport = async () => {
@@ -258,6 +281,21 @@ export function SettingsOverlay() {
           on={s.restAlert}
           set={setRestAlert}
         />
+        <ToggleRow
+          label={L.planAlertLabel}
+          hint={L.planAlertHint}
+          on={s.planAlert}
+          set={setPlanAlert}
+        />
+        {/* Only while it is on: switched off, the whole setting is the switch,
+            and a time that governs nothing is furniture. Same reason the plan
+            sheet's Repeats field steps aside under "just this day". */}
+        {s.planAlert && (
+          <RiseIn style={styles.timeRow}>
+            <Text style={styles.rowLabel}>{L.planAlertTime}</Text>
+            <TimeStepper at={s.planAlertAt} set={(at) => patch({ planAlertAt: at })} />
+          </RiseIn>
+        )}
 
         <H6 style={styles.head}>{L.privacy}</H6>
         <ToggleRow
@@ -387,6 +425,76 @@ export function SettingsOverlay() {
         />
       )}
     </FullScreen>
+  );
+}
+
+/**
+ * `‹ 18 › : ‹ 30 ›` — the plan sheet's stepper grammar, twice.
+ *
+ * Two steppers rather than a wheel, a text field or a list of preset times.
+ * Nothing here can be typed wrong, it needs no keyboard on a screen that is
+ * mostly switches, and it borrows a control the app already has: a drag would
+ * fight the settings scroll exactly as it would fight the plan sheet's.
+ *
+ * Each field wraps within itself — 23 goes to 00, 55 goes to 00 — so neither
+ * end is a wall, and stepping the minutes never moves the hour under you.
+ */
+function TimeStepper({ at, set }: { at: number; set: (at: number) => void }) {
+  const styles = useThemed(sheet);
+  const { L } = useStore();
+  const h = Math.floor(at / 60);
+  const m = at % 60;
+  const wrap = (v: number, n: number) => ((v % n) + n) % n;
+  return (
+    <View style={styles.timeStepper}>
+      <Unit
+        label={L.planAlertHour}
+        value={h}
+        onStep={(d) => set(wrap(h + d, 24) * 60 + m)}
+      />
+      <Text style={styles.timeColon}>:</Text>
+      <Unit
+        label={L.planAlertMinute}
+        value={m}
+        onStep={(d) => set(h * 60 + wrap(m + d * MINUTE_STEP, 60))}
+      />
+    </View>
+  );
+}
+
+/** One `‹ nn ›`. Two digits always, so the row never re-flows as it steps. */
+function Unit({
+  label,
+  value,
+  onStep,
+}: {
+  label: string;
+  value: number;
+  onStep: (d: -1 | 1) => void;
+}) {
+  const styles = useThemed(sheet);
+  return (
+    <View style={styles.stepper}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${label} −`}
+        hitSlop={slop}
+        onPress={() => onStep(-1)}
+        style={styles.stepBtn}
+      >
+        <Text style={styles.stepGlyph}>‹</Text>
+      </Pressable>
+      <Text style={styles.stepValue}>{String(value).padStart(2, '0')}</Text>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${label} +`}
+        hitSlop={slop}
+        onPress={() => onStep(1)}
+        style={styles.stepBtn}
+      >
+        <Text style={styles.stepGlyph}>›</Text>
+      </Pressable>
+    </View>
   );
 }
 
@@ -607,6 +715,32 @@ const sheet = themed(() => ({
 
   toggleRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 16 },
   toggleText: { flex: 1 },
+
+  timeRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 12 },
+  timeStepper: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  timeColon: {
+    fontFamily: font.regular,
+    fontSize: 14,
+    color: color.neutral500,
+  },
+  stepper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: color.divider,
+    borderRadius: radius.md,
+    overflow: 'hidden',
+  },
+  stepBtn: { paddingVertical: 4, paddingHorizontal: 11 },
+  stepGlyph: { fontFamily: font.regular, fontSize: 17, color: color.accent },
+  stepValue: {
+    fontFamily: font.regular,
+    fontSize: 14,
+    color: color.text,
+    minWidth: 24,
+    textAlign: 'center',
+    fontVariant: ['tabular-nums'],
+  },
 
   actionRow: { paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: t.rule },
   tipsRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 },

@@ -2,7 +2,7 @@
      for what it buys and SessionServiceModule.kt for the JS surface.
 
      The type is `specialUse`, and that is the same bet USE_EXACT_ALARM is
-     (see rest-alarm.ts): `connectedDevice` would be the honest label for the
+     (see alarms.ts): `connectedDevice` would be the honest label for the
      buddy half, but its Android 14 prerequisite is a *granted* Bluetooth
      runtime permission, which a solo lifter who declined the buddy prompts
      doesn't hold — and the service matters to them too. `specialUse` starts

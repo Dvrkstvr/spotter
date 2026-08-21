@@ -395,6 +395,13 @@ export const DICT = {
     restOverTitle: 'Rest is over', restOverBody: 'Your next set is up.',
     // Names the Android notification channel, in the phone's own settings.
     restAlertChannel: 'Rest timer',
+    planAlertLabel: 'Remind me on a planned day',
+    planAlertHint: 'One notification, at the time below, on days your plan holds a workout. Nothing on a rest day, and nothing once you have logged it.',
+    planAlertTime: 'Reminder time',
+    planAlertHour: 'Hour', planAlertMinute: 'Minute',
+    // The reminder itself. Its title is the Today card's own words — one
+    // phrase for one fact — and its body names the day's workouts.
+    planAlertChannel: 'Planned workouts',
     sessionChannel: 'Active workout', sessionOngoing: 'Workout running — tap to come back.',
     privacy: 'Privacy', trainAlone: 'Train alone',
     trainAloneHint:
@@ -801,6 +808,11 @@ export const DICT = {
     restAlertHint: 'Erreicht dich auch bei gesperrtem Bildschirm oder in der Tasche. Die Benachrichtigung verschwindet von selbst, sobald du die App wieder öffnest.',
     restOverTitle: 'Pause vorbei', restOverBody: 'Dein nächster Satz steht an.',
     restAlertChannel: 'Pausen-Timer',
+    planAlertLabel: 'An geplanten Tagen erinnern',
+    planAlertHint: 'Eine Benachrichtigung zur Uhrzeit unten, an Tagen, an denen dein Plan ein Training vorsieht. Nichts an Ruhetagen, und nichts mehr, sobald du es aufgezeichnet hast.',
+    planAlertTime: 'Uhrzeit der Erinnerung',
+    planAlertHour: 'Stunde', planAlertMinute: 'Minute',
+    planAlertChannel: 'Geplantes Training',
     sessionChannel: 'Laufendes Training', sessionOngoing: 'Training läuft — zurück per Fingertipp.',
     privacy: 'Privatsphäre', trainAlone: 'Allein trainieren',
     trainAloneHint:

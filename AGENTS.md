@@ -1529,7 +1529,7 @@ Keep these; they're decisions, not drift. Each is commented at its site.
 - **Every logged set's rest is `restSeconds`, not a constant** — a setting, 0
   meaning off. `REST_SECONDS` is gone from the session overlay.
 - **A rest that ends out of the app arrives as a notification** (`restAlert`,
-  `src/data/rest-alarm.ts`, `<RestAlarm>` mounted in `Overlays`). It is the
+  `src/data/alarms.ts`, `<RestAlarm>` mounted in `Overlays`). It is the
   out-of-app half of `buzz.rest()` and the two are exclusive: the haptic now
   only fires while `AppState` is `active`, because a wall-anchored clock makes
   the rest transition on the frame you unlock, and a buzz then is about
@@ -1544,12 +1544,55 @@ Keep these; they're decisions, not drift. Each is commented at its site.
   `console.error` about remote push, drawn as a red LogBox bar over the screen.
   So the module loads on first use and `init` mutes that one message on its way
   in; lazy alone only moves the bar from launch to the first workout. What that
-  costs is `cancelRestAlarm` / `dismissRestAlarms`, which run at mount and may
+  costs is `cancelAlarm` / `dismissAlarms`, which run at mount and may
   therefore never load it: they clear through an already-loaded module, and
   `init` sweeps the tray itself to cover the cold start after a process death —
   the *scheduled* alarms too, because a resumed rest (see the live-session
   bullet below) re-arms its remainder, and without the sweep the dead
   process's pending alarm would announce the same rest twice.
+- **A day you planned something on says so, once, at a time you set**
+  (`planAlert` / `planAlertAt`, `<PlanAlarm>` mounted in `Overlays` beside
+  `<RestAlarm>`). Not in the design, which has no notifications at all. It is
+  the rest alarm's trick at a day's scale rather than three minutes', and the
+  same module owns both — `src/data/alarms.ts`, renamed from `rest-alarm.ts`
+  when it stopped being about one thing.
+  - **One loader, because the sweeps are app-wide.** `init` clears the tray
+    *and* every alarm a dead process left pending, and it may only do that
+    before this process schedules anything. Two modules would be two `init`s,
+    and whichever ran second would cancel the first one's work. So the channel
+    registry is shared too — `rest` and `plan` are separate Android channels,
+    which is what lets the phone silence the reminder without silencing the
+    rest timer, and one POST_NOTIFICATIONS grant covers both because the
+    permission is the app's.
+  - **A fortnight is stamped ahead, not a repeating trigger.** Android has no
+    trigger that means "every third day from the 4th, unless it was
+    cancelled" — but `plannedOn` already answers exactly that, so `<PlanAlarm>`
+    asks it for each of the next `HORIZON` days and hands over dated alarms.
+    The whole list is dropped and re-stamped whenever anything it was derived
+    from moves: the rules, the routines' names, what has been logged, the time,
+    the language, the day. What it costs is the horizon — a phone unopened for
+    two weeks runs out — and that is the right failure, because a plan nobody
+    has looked at in a fortnight is not one the app should keep announcing.
+  - **One reminder per day, and it names the day's workouts** rather than one
+    per rule: a day holding two is one thing to be told about. Today's rows
+    drop what is already logged **or running right now** — the errand is "this
+    is still to do", and a workout under way is neither done nor in `history`.
+    A rule whose routine was deleted since contributes no name, and a day left
+    with none is not announced; a chosen rest day has no rows at all, which is
+    `plannedOn` doing the work rather than a second rule about rest.
+  - **The title is `plannedToday`, the Today card's own words.** One phrase for
+    one fact, in both places it is stated.
+  - **Off by default, unlike `restAlert`.** A rest alert only ever fires inside
+    a workout you started; this one speaks on a day you may not have opened the
+    app at all, and something that speaks unprompted is asked for rather than
+    assumed. The time is a stepper pair (`TimeStepper`, the plan sheet's `‹ n ›`
+    grammar twice, minutes by `MINUTE_STEP`), not a preset list and not a
+    keyboard — and it is drawn only while the switch is on, the same reason the
+    plan sheet's Repeats field steps aside under *just this day*.
+  - **`planAlert` / `planAlertAt` are additive `PERSIST` keys**, so
+    `STORAGE_VERSION` stays 4. They ride in a backup like every other setting,
+    are untouched by `mergePersisted`, and never cross to a buddy — when you
+    like to be reminded is not their business.
 - **The live session survives the process** (`session` / `active` / `elapsed` /
   `rest` / `sessionRole` ride in `PERSIST` — the LIVE keys, additive, so no
   version bump). An

@@ -16,12 +16,12 @@ import { useEffect, useRef } from 'react';
 import { AppState } from 'react-native';
 
 import {
-  cancelRestAlarm,
-  dismissRestAlarms,
+  cancelAlarm,
+  dismissAlarms,
   ensureAlarmPermission,
   scheduleRestAlarm,
-  setAlarmChannelName,
-} from '@/data/rest-alarm';
+  setChannelName,
+} from '@/data/alarms';
 import { useStore } from '@/store/workout-store';
 
 export function RestAlarm() {
@@ -29,7 +29,7 @@ export function RestAlarm() {
 
   // Android shows this in the app's notification settings, so it follows the
   // language like everything else the user reads.
-  useEffect(() => setAlarmChannelName(L.restAlertChannel), [L.restAlertChannel]);
+  useEffect(() => setChannelName('rest', L.restAlertChannel), [L.restAlertChannel]);
 
   const rest = s.rest;
   /**
@@ -75,7 +75,7 @@ export function RestAlarm() {
     // The schedule is async and the rest can end before it lands — hence both
     // halves of the guard: cancel what came back late, and cancel what arrived.
     scheduleRestAlarm(left, L.restOverTitle, body).then((got) => {
-      if (dropped) cancelRestAlarm(got);
+      if (dropped) cancelAlarm(got);
       else id = got;
     });
     // Cleanup is the *only* cancel path, and it covers every way a rest can
@@ -83,7 +83,7 @@ export function RestAlarm() {
     // finished, the setting switched off.
     return () => {
       dropped = true;
-      cancelRestAlarm(id);
+      cancelAlarm(id);
     };
     // `at` identifies the rest: a new one always means a new stamp.
   }, [armed, at, s.restSeconds, L.restOverTitle, body]);
@@ -104,11 +104,16 @@ export function RestAlarm() {
    * "It vanishes when you open the app back up." Also on mount, which is the
    * cold-start case: an alarm that fired while the app was gone would otherwise
    * still be sitting in the shade.
+   *
+   * The tray is the app's, so this sweep takes the plan reminder with it, which
+   * is right — you are in the app, which is where the reminder was pointing. It
+   * lives here rather than in <PlanAlarm> because one sweep asked for twice is
+   * still one sweep, and this is the component that has always owned it.
    */
   useEffect(() => {
-    dismissRestAlarms();
+    dismissAlarms();
     const sub = AppState.addEventListener('change', (st) => {
-      if (st === 'active') dismissRestAlarms();
+      if (st === 'active') dismissAlarms();
     });
     return () => sub.remove();
   }, []);
