@@ -889,6 +889,26 @@ section. It is Calvin's, has no design behind it, and is off by default.
   revoked-folder case the export row already answers. Nothing about this is in
   a buddy snapshot: what one phone has been asked to record is not the buddy's
   business, the same rule set marks follow.
+- **A derived line depends on the value, never on the object it came from.**
+  The first real logs came back 46% one repeated line: the `exercise` watcher
+  depended on `s.session`, which is copy-on-write, so every keystroke and every
+  frame of a number drag re-fired it — the exact per-frame recording the rule
+  above forbids, arrived at by accident. Depend on `s.active`, not on the
+  session that holds it. Two more came from the same batch and are the same
+  lesson from the other side: a **rest replaced by a fresh rest** fell through
+  every branch of its transition test, so a workout with twenty rests recorded
+  two (`at` identifies a rest, exactly as `<RestAlarm>` reads it), and
+  `totals()` at the end-of-session transition read the session that had *just*
+  become null and reported `0 of 0` for the workout — the numbers have to be
+  captured while the session still stands. **A set landing is now its own
+  event**, derived from that count, because everything else in a workout hangs
+  off it and a drop set or a superset earns no rest to infer it from.
+- **The automatic export waits for the session to settle** (`EXPORT_SETTLE_MS`).
+  Written on the instant the session ends, the file stops at `session ended` —
+  and the goodbye, the link coming down and the radio restarting all land in the
+  twenty seconds after it, which for a shared workout is the part worth having.
+  The cost is a force-close inside that window losing the automatic copy, which
+  is what the Save row is for.
 - **The rows reveal themselves.** With the switch off there is nothing under it
   but the switch — a folder row, a save row and a clear row are furniture on a
   phone that is only being trained with. Save-now with no folder yet asks for

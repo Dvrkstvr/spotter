@@ -28,6 +28,17 @@ import { hasRadio, isSimRadio } from '@/data/buddy-radio';
 import { dlog, exportToFolder, flush, setDiagClock, setDiagHeader, setDiagOn } from '@/data/diag';
 import { myName, useStore } from '@/store/workout-store';
 
+/**
+ * How long the automatic export waits after a session ends.
+ *
+ * The teardown of a shared workout — the goodbye, the link coming down, the
+ * radio restarting — lands in the seconds *after* the last set is filed, and an
+ * export on the instant cuts every one of them off. Twenty seconds covers it
+ * with room to spare and is still well inside the time anyone spends putting
+ * their phone away.
+ */
+const EXPORT_SETTLE_MS = 20_000;
+
 export function Diagnostics() {
   const { s, totals } = useStore();
 
@@ -94,9 +105,26 @@ export function Diagnostics() {
 
   /* — the session — */
 
+  /**
+   * The live totals, kept one render behind the transition that needs them.
+   *
+   * `totals()` reads the *current* session, and by the time the end-of-session
+   * effect runs there isn't one — so asking it there reported `0 of 0` for
+   * every workout ever logged. The numbers have to be captured while the
+   * session is still standing, which is what this is.
+   */
+  const totalsRef = useRef({ done: 0, all: 0, vol: 0 });
+  const live = s.session ? totals() : null;
+  useEffect(() => {
+    if (live) totalsRef.current = live;
+  });
+
   const session = s.session;
   const prevSession = useRef<typeof session>(null);
   const dir = s.diagDir;
+  // The settle timer below, cleared only when the app goes away — which is also
+  // the one case where there is nothing left to export from.
+  const exportAt = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     const prev = prevSession.current;
     prevSession.current = session;
@@ -119,24 +147,82 @@ export function Diagnostics() {
       return;
     }
     if (!session && prev) {
-      const t = totals();
+      const t = totalsRef.current;
       dlog('ses', 'session ended', { sets: t.done, of: t.all, vol: Math.round(t.vol) }, true);
       // The log's natural unit is a workout, so this is the moment to put a
       // copy in the folder: after a shared session both phones have written
       // their file and the buddy's can be fetched with the Files app. Only
       // when a folder was picked — the export row is the manual half.
-      if (dir) void exportToFolder(dir, who).then((n) => dlog('data', 'log exported', { file: n }));
+      //
+      // **After a settle, not on the instant**, and the first real logs are
+      // what taught this: the file written the moment a session ends stops at
+      // this very line, and the goodbye, the link coming down and the teardown
+      // all land in the twenty seconds after it — which for a shared workout is
+      // the most interesting part of the file. The cost is a force-close inside
+      // that window losing the automatic copy, which the Save row answers.
+      if (dir)
+        exportAt.current = setTimeout(() => {
+          void exportToFolder(dir, who).then((n) => dlog('data', 'log exported', { file: n }));
+        }, EXPORT_SETTLE_MS);
     }
-    // `totals` and `who` are read at the moment of a transition rather than
+    // `who` and the totals are read at the moment of a transition rather than
     // watched; joining them would re-fire this on every ticked set.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session]);
 
-  /* — which exercise, and the two clocks around a rest — */
+  useEffect(
+    () => () => {
+      if (exportAt.current) clearTimeout(exportAt.current);
+    },
+    []
+  );
 
+  /* — the set, the exercise, and the two clocks around a rest — */
+
+  /**
+   * A set landing is the event this file was missing.
+   *
+   * Everything a workout does hangs off it — the rest, the alarm, the turn, the
+   * buddy's next broadcast — and until now it could only be inferred from a
+   * rest being stamped, which meant a drop set or a superset (the two cases
+   * that deliberately earn no rest) left no trace at all. Derived from the
+   * count rather than logged at the tick, so it costs the store nothing and
+   * catches an untick as readily as a tick.
+   */
+  const done = live?.done ?? 0;
+  const prevDone = useRef(0);
   useEffect(() => {
-    if (s.session) dlog('ses', 'exercise', { i: s.active });
-  }, [s.active, s.session]);
+    const was = prevDone.current;
+    prevDone.current = done;
+    // A session ending takes the count to zero, and that is not an untick.
+    if (!session || done === was) return;
+    dlog('ses', done > was ? 'set logged' : 'set unticked', { done, of: totalsRef.current.all });
+  }, [done, session]);
+
+  /**
+   * Which exercise — and **only when it changes.**
+   *
+   * This used to depend on `s.session`, which is copy-on-write, so every
+   * keystroke and every frame of a number drag re-fired it: 281 of the 616
+   * lines in the first real log were this one line repeating `i=1`. That is
+   * precisely the per-frame recording the module's own rules forbid.
+   */
+  const active = s.active;
+  const hasSession = !!session;
+  useEffect(() => {
+    if (hasSession) dlog('ses', 'exercise', { i: active });
+  }, [active, hasSession]);
+
+  /**
+   * How many exercises the session holds, which is not a constant: one can be
+   * added mid-workout, adopted from the buddy, or removed. Without it an
+   * `active` the routine's own length cannot explain — the first log showed
+   * `i=5` in a session that started with five — is unanswerable after the fact.
+   */
+  const listLen = session?.list.length ?? 0;
+  useEffect(() => {
+    if (listLen) dlog('ses', 'list', { n: listLen });
+  }, [listLen]);
 
   const rest = s.rest;
   const prevRest = useRef<typeof rest>(null);
@@ -144,6 +230,11 @@ export function Diagnostics() {
     const prev = prevRest.current;
     prevRest.current = rest;
     if (rest && !prev) dlog('rest', 'started', { at: rest.at, secs: s.restSeconds });
+    // A rest replaced by a fresh one used to fall through every branch and log
+    // nothing — so a workout with twenty rests in it recorded two. `at` is what
+    // identifies a rest, exactly as <RestAlarm> reads it.
+    else if (rest && prev && rest.at !== prev.at)
+      dlog('rest', 'restarted', { at: rest.at, secs: s.restSeconds });
     else if (rest && prev && rest.skipped && !prev.skipped) dlog('rest', 'skipped');
     else if (!rest && prev) dlog('rest', 'cleared', { wasSkipped: prev.skipped });
     // `restSeconds` is read at the transition, not watched: changing the
