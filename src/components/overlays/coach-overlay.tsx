@@ -16,7 +16,7 @@
  * came through.
  */
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { Pressable, ScrollView, Share, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -26,6 +26,7 @@ import {
   GOALS,
   goalLabel,
   newCount,
+  NOTE_MAX,
   parsePlan,
   resolvePlan,
   type ResolvedPlan,
@@ -297,6 +298,27 @@ export function CoachOverlay() {
               })}
             </View>
 
+            {/* The widest thing on the screen and the cheapest: six chips and
+                a seg are a taxonomy, and everything they can't say — a
+                fortnight's rotation, every second day, a shoulder to work
+                around — is a sentence. Uncontrolled, like every other
+                store-backed field here: the editor's `defaultValue` grammar,
+                which keeps a keystroke off the round trip through `patch`.
+                The step unmounts on the way forward, so it re-seeds on back. */}
+            <H6 style={styles.head}>{L.coachNoteHead}</H6>
+            <TextInput
+              multiline
+              maxLength={NOTE_MAX}
+              defaultValue={opts.note ?? ''}
+              onChangeText={(v) => setOpts({ note: v })}
+              placeholder={L.coachNotePlaceholder}
+              placeholderTextColor={c.neutral600}
+              cursorColor={c.accent}
+              selectionColor={c.accent}
+              style={styles.note}
+              textAlignVertical="top"
+            />
+
             <H6 style={styles.head}>{L.coachShareHead}</H6>
             {/* The first two rows are what the statistics *are* — there is no
                 prompt without them, so they are stated rather than offered.
@@ -465,31 +487,57 @@ export function CoachOverlay() {
                         const existing = res.existingId ? ex(res.existingId) : undefined;
                         const info = existing ? exInfo(existing) : null;
                         const m = existing ? measureOf(existing) : res.create!.measure;
+                        // `resolvePlan` has already broken any pair whose other
+                        // half was dropped, so the trailing test is belt and
+                        // braces — and it is the same test the editor makes,
+                        // which is what keeps the two drawings honest about the
+                        // same data. A pair arriving unannounced and only
+                        // turning up afterwards in the routine would be the one
+                        // thing this screen exists to prevent.
+                        const paired = it.with === 'next' && k < r.items.length - 1;
                         return (
-                          <View
-                            key={`${it.name}-${k}`}
-                            style={[styles.itemRow, k < r.items.length - 1 && styles.ruled]}
-                          >
-                            <Text
-                              numberOfLines={1}
+                          <Fragment key={`${it.name}-${k}`}>
+                            <View
                               style={[
-                                styles.itemName,
-                                info?.missing && missingName(c),
-                                !on && styles.dim,
+                                styles.itemRow,
+                                k < r.items.length - 1 && !paired && styles.ruled,
                               ]}
                             >
-                              {info ? info.text : it.name}
-                            </Text>
-                            <Tag
-                              label={res.existingId ? L.importInLibrary : L.importNewTag}
-                              tone={res.existingId ? 'neutral' : 'accent'}
-                            />
-                            {/* Written the way its measure reads, so a plank
-                                and a run are legible in the same list. */}
-                            <Text style={styles.itemScheme}>
-                              {schemeLine({ sets: it.sets, reps: it.reps, w: it.kg }, m, L)}
-                            </Text>
-                          </View>
+                              <Text
+                                numberOfLines={1}
+                                style={[
+                                  styles.itemName,
+                                  info?.missing && missingName(c),
+                                  !on && styles.dim,
+                                ]}
+                              >
+                                {info ? info.text : it.name}
+                              </Text>
+                              <Tag
+                                label={res.existingId ? L.importInLibrary : L.importNewTag}
+                                tone={res.existingId ? 'neutral' : 'accent'}
+                              />
+                              {/* Written the way its measure reads, so a plank
+                                  and a run are legible in the same list. */}
+                              <Text style={styles.itemScheme}>
+                                {schemeLine({ sets: it.sets, reps: it.reps, w: it.kg }, m, L)}
+                              </Text>
+                            </View>
+                            {/* The rule between the two rows *is* the pair —
+                                the editor's own construction, a hairline in the
+                                gutter and the word, rather than a badge beside a
+                                name that would read as a property of one row. */}
+                            {paired && (
+                              <View style={styles.pairGap}>
+                                <View style={styles.pairGlyph}>
+                                  <View style={styles.pairRule} />
+                                </View>
+                                <Text style={[styles.pairLabel, !on && styles.dim]}>
+                                  {L.superset}
+                                </Text>
+                              </View>
+                            )}
+                          </Fragment>
                         );
                       })}
                     </View>
@@ -619,6 +667,22 @@ const sheet = themed(() => ({
     color: color.neutral400,
   },
 
+  /** The free-text ask. `paste`'s box at a sentence's height rather than a
+      whole reply's — it is one or two lines, not a pasted message. */
+  note: {
+    marginTop: 0,
+    minHeight: 66,
+    padding: 11,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: color.divider,
+    backgroundColor: color.surface,
+    fontFamily: font.regular,
+    fontSize: 12.5,
+    lineHeight: 12.5 * 1.45,
+    color: color.text,
+  },
+
   paste: {
     marginTop: 12,
     minHeight: 132,
@@ -666,6 +730,18 @@ const sheet = themed(() => ({
   dim: { color: color.neutral500 },
 
   itemRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6 },
+  /* The routine editor's pair mark at preview scale — same hairline, same
+     accent, same uppercase word, so one feature reads one way in both places. */
+  pairGap: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 14 },
+  pairGlyph: { width: 12, height: 14, alignItems: 'center', justifyContent: 'center' },
+  pairRule: { width: 1, height: 14, backgroundColor: color.accent700 },
+  pairLabel: {
+    fontFamily: font.regular,
+    fontSize: 9.5,
+    letterSpacing: tracking(9.5, 0.06),
+    textTransform: 'uppercase',
+    color: color.accent400,
+  },
   ruled: { borderBottomWidth: 1, borderBottomColor: t.rule },
   itemName: { flex: 1, fontFamily: font.regular, fontSize: 13, color: color.text },
   itemScheme: {

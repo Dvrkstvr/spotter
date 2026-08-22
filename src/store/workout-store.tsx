@@ -2747,6 +2747,11 @@ function useWorkoutState() {
               sets: it.sets,
               reps: it.reps,
               w: it.kg,
+              // The AI's superset, carried through as the editor writes one.
+              // `resolvePlan` has already broken any pair whose other half was
+              // dropped, so an arriving `with` names the row that follows it
+              // here too — which is the whole of what adjacency needs.
+              ...(it.with ? { with: it.with } : {}),
               ...(s.lastLog[ex] ? {} : { planned: true as const }),
             },
           ];

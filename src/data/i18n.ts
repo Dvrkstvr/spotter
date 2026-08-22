@@ -237,6 +237,11 @@ export const DICT = {
     coach: 'AI Coach', coachSub: 'Builds a prompt around your last {period}',
     coachGoalHead: 'What should the plan work on?',
     coachWeekHead: 'Sessions per week', coachGearHead: 'Equipment to plan with',
+    // The chips are a taxonomy and this is a sentence — the placeholder is an
+    // example rather than an instruction, because what belongs here is
+    // whatever the six goals and the week seg couldn't say.
+    coachNoteHead: 'Anything else?',
+    coachNotePlaceholder: 'e.g. a two-week block, every second day, explosive compound lifts',
     coachShareHead: 'Share with the AI',
     coachShareBalance: 'Muscle balance & weak points', coachShareLifts: 'Key lifts & trends',
     coachShareProfile: 'Your details', coachShareProfileSub: 'age · weight · height',
@@ -255,7 +260,10 @@ export const DICT = {
     promptTitle: 'Your prompt', promptShare: 'Share to AI app…',
     promptShareHint: 'Opens the Android share sheet — Gemini, Claude, ChatGPT, or anything that takes text.',
     promptHaveAnswer: 'I have the answer › Import',
-    promptIntro: 'You are an experienced strength coach. Below is real data from my workout diary. Recommend exercises and weekly routines for my goal.',
+    // "routines", not "weekly routines": the free-text ask below it may well be
+    // a fortnight's rotation, and an intro that had already decided the cycle
+    // length would be arguing with it.
+    promptIntro: 'You are an experienced strength coach. Below is real data from my workout diary. Recommend exercises and routines for my goal.',
     promptGoalHead: 'MY GOAL', promptWeek: '{n} sessions per week.', promptGear: 'Equipment: {gear}.',
     promptAnyGear: 'whatever I have',
     promptBalanceHead: 'MUSCLE BALANCE', promptWeakHead: 'Behind:',
@@ -263,13 +271,17 @@ export const DICT = {
     promptCardioSome: '{n}, {km} km.',
     promptLiftsHead: 'KEY LIFTS', promptLiftNew: 'first time', promptLiftFlat: 'no change',
     promptLiftUp: '{kg} kg',
-    promptAboutHead: 'ABOUT ME',
+    promptAboutHead: 'ABOUT ME', promptNoteHead: 'ALSO',
     promptRulesHead: 'RULES FOR YOUR ANSWER',
     promptRule1: '1. Briefly explain what to change and why.',
     promptRule2: '2. Then ONE fenced code block tagged spotter, exactly this shape:',
     promptRuleMeasure: 'measure is one of: {list}',
     promptRuleGroup: 'group must be one of: {list}',
     promptRuleKind: 'equipment must be one of: {list}',
+    promptRuleWith:
+      'Two exercises taken back to back with no rest between them are a superset: put "with": "next" on the first of the two. Leave it out everywhere else.',
+    promptRuleDrop:
+      'Drop sets have no field here \u2014 I take those live in the app. If you want them, say which sets in your explanation.',
     promptRuleReuse: 'Prefer exercises I already have: {list}',
     promptRuleFile:
       'If you can attach files, attach the block as plan.json as well — tapping it in a chat opens Spotter with the plan ready. Send the block in the message either way.',
@@ -673,6 +685,8 @@ export const DICT = {
     coach: 'KI-Coach', coachSub: 'Baut einen Prompt aus deinen letzten {period}',
     coachGoalHead: 'Woran soll der Plan arbeiten?',
     coachWeekHead: 'Einheiten pro Woche', coachGearHead: 'Verfügbare Geräte',
+    coachNoteHead: 'Sonst noch was?',
+    coachNotePlaceholder: 'z. B. Zweiwochenblock, jeden zweiten Tag, explosive Grundübungen',
     coachShareHead: 'Mit der KI teilen',
     coachShareBalance: 'Muskelbalance & Schwachstellen', coachShareLifts: 'Wichtige Übungen & Verlauf',
     coachShareProfile: 'Deine Daten', coachShareProfileSub: 'Alter · Gewicht · Größe',
@@ -691,7 +705,7 @@ export const DICT = {
     promptTitle: 'Dein Prompt', promptShare: 'An KI-App senden…',
     promptShareHint: 'Öffnet das Android-Teilen-Menü — Gemini, Claude, ChatGPT oder alles, was Text nimmt.',
     promptHaveAnswer: 'Ich habe die Antwort › Import',
-    promptIntro: 'Du bist ein erfahrener Trainer für Krafttraining. Unten stehen echte Daten aus meinem Trainingstagebuch. Empfiehl mir Übungen und Wochenroutinen für mein Ziel.',
+    promptIntro: 'Du bist ein erfahrener Trainer für Krafttraining. Unten stehen echte Daten aus meinem Trainingstagebuch. Empfiehl mir Übungen und Routinen für mein Ziel.',
     promptGoalHead: 'MEIN ZIEL', promptWeek: '{n} Einheiten pro Woche.', promptGear: 'Geräte: {gear}.',
     promptAnyGear: 'was ich habe',
     promptBalanceHead: 'MUSKELBALANCE', promptWeakHead: 'Im Rückstand:',
@@ -699,13 +713,19 @@ export const DICT = {
     promptCardioSome: '{n}, {km} km.',
     promptLiftsHead: 'WICHTIGE ÜBUNGEN', promptLiftNew: 'zum ersten Mal', promptLiftFlat: 'unverändert',
     promptLiftUp: '{kg} kg',
-    promptAboutHead: 'ÜBER MICH',
+    promptAboutHead: 'ÜBER MICH', promptNoteHead: 'AUSSERDEM',
     promptRulesHead: 'REGELN FÜR DEINE ANTWORT',
     promptRule1: '1. Erkläre kurz, was ich ändern soll und warum.',
     promptRule2: '2. Danach GENAU EIN Codeblock mit dem Tag spotter, in exakt dieser Form:',
     promptRuleMeasure: 'measure ist eines von: {list}',
     promptRuleGroup: 'group muss eines davon sein: {list}',
     promptRuleKind: 'equipment muss eines davon sein: {list}',
+    // Volle Imperative, wie überall im Prompt; „Supersatz“ und „Dropsatz“ sind
+    // die Wörter, die die App selbst benutzt.
+    promptRuleWith:
+      'Zwei Übungen, die ohne Pause direkt hintereinander kommen, sind ein Supersatz: setze bei der ersten der beiden "with": "next". Sonst lass das Feld weg.',
+    promptRuleDrop:
+      'Für Dropsätze gibt es hier kein Feld \u2014 die mache ich direkt in der App. Wenn du welche willst, schreib in die Erklärung, bei welchen Sätzen.',
     promptRuleReuse: 'Bevorzuge Übungen, die ich schon habe: {list}',
     promptRuleFile:
       'Wenn du Dateien anhängen kannst, hänge den Block zusätzlich als plan.json an — ein Fingertipp darauf öffnet Spotter mit dem fertigen Plan. Schicke den Block auf jeden Fall auch in der Nachricht.',

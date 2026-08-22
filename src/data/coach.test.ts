@@ -282,3 +282,95 @@ describe('resolvePlan — routine items', () => {
     expect(r.routines[0].items[0]).toMatchObject({ sets: 4, reps: 8, kg: 72.5 });
   });
 });
+
+/* ── the superset, across both halves of the seam ──────────────────────── */
+
+describe('the superset field', () => {
+  const pair = (items: unknown[]) =>
+    parsePlan(reply(JSON.stringify({ routines: [{ name: 'A', items }] })));
+
+  it('reads the literal the prompt asks for', () => {
+    const plan = ok(pair([
+      { exercise: 'Bench Press', with: 'next' },
+      { exercise: 'Barbell Row' },
+    ]));
+    expect(plan.routines[0].items.map((i) => i.with)).toEqual(['next', undefined]);
+  });
+
+  it('takes a boolean, because that is what a model reaches for instead', () => {
+    const plan = ok(pair([
+      { exercise: 'Bench Press', with: true },
+      { exercise: 'Barbell Row' },
+    ]));
+    expect(plan.routines[0].items[0].with).toBe('next');
+  });
+
+  it('ignores a value that means nothing here', () => {
+    const plan = ok(pair([
+      { exercise: 'Bench Press', with: 'Barbell Row' },
+      { exercise: 'Barbell Row' },
+    ]));
+    expect(plan.routines[0].items[0].with).toBeUndefined();
+  });
+
+  it('clears a pair on the last row, which has nobody to be paired with', () => {
+    const plan = ok(pair([{ exercise: 'Bench Press', with: 'next' }]));
+    expect(plan.routines[0].items[0].with).toBeUndefined();
+  });
+
+  // The whole reason `keepPairs` exists: `with` is adjacency, so a filter that
+  // drops a row hands the survivor whatever slid up into its place — a pair
+  // between two exercises nobody joined, which nothing downstream could spot.
+  it('breaks a pair whose other half was a placeholder row', () => {
+    const plan = ok(pair([
+      { exercise: 'Bench Press', with: 'next' },
+      { exercise: '…' },
+      { exercise: 'Plank' },
+    ]));
+    expect(plan.routines[0].items.map((i) => i.exercise)).toEqual([
+      'Bench Press',
+      'Plank',
+    ]);
+    expect(plan.routines[0].items[0].with).toBeUndefined();
+  });
+
+  it('carries a resolved pair through to the routine', () => {
+    const r = resolve({
+      exercises: [],
+      routines: [{
+        name: 'A',
+        items: [{ exercise: 'Bench Press', with: 'next' }, { exercise: 'Barbell Row' }],
+      }],
+    });
+    expect(r.routines[0].items.map((i) => i.with)).toEqual(['next', undefined]);
+  });
+
+  it('breaks a pair whose other half named an exercise that is not here', () => {
+    const r = resolve({
+      exercises: [],
+      routines: [{
+        name: 'A',
+        items: [
+          { exercise: 'Bench Press', with: 'next' },
+          { exercise: 'Zercher Squat' },
+          { exercise: 'Plank' },
+        ],
+      }],
+    });
+    expect(r.dropped).toEqual(['Zercher Squat']);
+    expect(r.routines[0].items.map((i) => i.name)).toEqual(['Bench Press', 'Plank']);
+    expect(r.routines[0].items[0].with).toBeUndefined();
+  });
+
+  it('clears a pair left trailing once the row after it was dropped', () => {
+    const r = resolve({
+      exercises: [],
+      routines: [{
+        name: 'A',
+        items: [{ exercise: 'Bench Press', with: 'next' }, { exercise: 'Zercher Squat' }],
+      }],
+    });
+    expect(r.routines[0].items).toHaveLength(1);
+    expect(r.routines[0].items[0].with).toBeUndefined();
+  });
+});

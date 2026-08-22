@@ -448,6 +448,43 @@ untouched.
   promise. But `"measure": "load"` is an identifier in this app's data, not a
   word being translated, and a German reply carrying `"gewicht"` imports as
   nothing.
+- **The chips are a taxonomy; the ask is a sentence.** Six goals, a week seg and
+  a gear list will never anticipate what somebody wants next month — a
+  fortnight's rotation, every second day, a shoulder to work around — so
+  `coach.note` is free text under its own `ALSO` heading, in the user's own
+  words, and the far end reads prose anyway. It is the cheapest thing in this
+  flow and the widest. Additive inside a key that already exists, so no
+  `STORAGE_VERSION` bump — and **optional rather than defaulted**, because a
+  stored `coach` replaces the seeded object wholesale, so a phone that saved one
+  before this existed has no `note` and every read has to survive its absence.
+  It is also why `promptIntro` stopped asking for "weekly routines": an intro
+  that had already decided the cycle length would be arguing with the sentence
+  under it.
+- **Exactly one of the two rest-sharing features crosses this seam, and the
+  other is named so it can't be missed.** A superset is a decision about *which
+  two exercises*, which is what a routine holds — so `with: 'next'` is in the
+  block and lands in `RoutineItem` unchanged, read liberally (`true` is what a
+  model reaches for when a literal was asked for, the same argument that makes
+  an untagged fence acceptable). A drop is a decision about how *that set* went,
+  which nobody makes a week early and which has no honest planned form — so it
+  has no field, and the prompt says so out loud rather than leaving it to be
+  guessed at. A model told nothing either ignores drops or encodes them
+  somewhere `parsePlan` drops on the floor; told this, it puts them in the
+  prose, which is where advice about how hard to push a set belongs anyway.
+  - **`with` is adjacency, so every filter that drops a row owns the pair it
+    just broke.** `keepPairs` is that one reading, at the two seams that can
+    drop one — a placeholder row in `parsePlan`, an unresolvable name in
+    `resolvePlan`. This is *not* the orphan case the rest of the app resolves
+    where it reads (`stopsOf`): an orphan is a pair with a half missing and
+    reads back as no pair, where this is a pair between two exercises nobody
+    joined and nothing downstream could tell. A trailing `with` is cleared with
+    it, because every other *writer* here clears one too — `appendSessionEx`,
+    `saveAsRoutine` — and resolve-at-read is the rule for data already stored,
+    not for data being made.
+  - **The preview draws the pair with the editor's own mark** — a hairline in
+    the gutter and the word — rather than a badge beside a name, which would
+    read as a property of one row. A pair arriving unannounced and only turning
+    up afterwards in the routine is the one thing that screen exists to prevent.
 - **Rule 3 makes the answer carry its own way home.** The reply is told to close
   with copy-this-message → open Spotter → paste. Whoever wandered off into a
   chat app has no reason to remember this flow, and `parsePlan` hunting the
