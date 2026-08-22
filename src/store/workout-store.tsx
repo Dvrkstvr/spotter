@@ -30,14 +30,17 @@ import { mergeFirstUp, mergeTurns, routineClosure } from '@/data/buddy-sync';
 import { mondayISO, todayISO } from '@/data/date';
 import { dlog } from '@/data/diag';
 import { deviceInstallId, randomInstallId } from '@/data/identity';
+import { deletePersisted } from '@/data/photos';
 import {
   anchorFor,
   asPlan,
   dropEntries,
+  occurs,
   planFromSchedule,
   skip,
   unskip,
   type Plan,
+  type PlanEntry,
   type Repeat,
 } from '@/data/plan';
 import {
@@ -812,6 +815,21 @@ const fitsShape = (v: unknown, shape: (typeof PERSIST_SHAPE)[keyof typeof PERSIS
       ? typeof v === 'object' && v !== null && !Array.isArray(v)
       : typeof v === shape;
 
+/**
+ * Whether a parseable blob carries a durable key of the wrong *shape* — the
+ * corruption `filterPersisted` silently drops to its seeded default, which the
+ * next save then writes over whatever else was in there. A present-but-null key
+ * is not corruption (a stored `session`/`rest`/`diagDir` null is exactly what
+ * null meant), so only a non-null value that fails its shape counts. Value-level
+ * drops (an unknown theme name, a stray `sessionRole` string) are benign and
+ * deliberately not flagged.
+ */
+const droppedByShape = (raw: unknown): boolean => {
+  if (typeof raw !== 'object' || raw === null) return false;
+  const o = raw as Record<string, unknown>;
+  return PERSIST.some((k) => k in o && o[k] != null && !fitsShape(o[k], PERSIST_SHAPE[k]));
+};
+
 /** Keep only known durable keys, so stale blobs can't resurrect UI state. */
 const filterPersisted = (raw: unknown): Partial<State> => {
   if (typeof raw !== 'object' || raw === null) return {};
@@ -1332,8 +1350,11 @@ const mergePersisted = (
   const out: Partial<State> = {};
 
   if (parts.has('sessions')) {
+    // A mangled-but-envelope-valid backup can carry a row with a missing or
+    // non-string `date`; coerce before comparing so "Add what's missing" sorts
+    // rather than throwing on `.localeCompare`.
     out.history = addMissing(mine.history, theirs.history, historyKey).sort((a, b) =>
-      a.date.localeCompare(b.date)
+      String(a.date ?? '').localeCompare(String(b.date ?? ''))
     );
 
     // `lastLog` carries the date of the session it came from, so "newer wins"
@@ -1413,6 +1434,16 @@ const restoreCounts = (mine: Persisted, theirs: Partial<Persisted>): RestoreCoun
   };
 };
 
+/**
+ * A live session with at least one set actually ticked — a workout in progress
+ * whose lifted sets are real. It is the thing `start()`'s choke point protects,
+ * and the thing a peer's co-built start or an incoming invite must not silently
+ * replace: a fresh session with nothing ticked may still give way to a shared
+ * start, but a session someone has lifted in may not.
+ */
+const sessionHasTicked = (s: State): boolean =>
+  !!s.session && s.session.list.some((e) => e.sets.some((x) => x.done));
+
 /* ── store ─────────────────────────────────────────────────────────────── */
 
 function useWorkoutState() {
@@ -1452,6 +1483,12 @@ function useWorkoutState() {
         if (held) {
           const raw: unknown = JSON.parse(held);
           data = resumeSession(raw, filterPersisted(raw));
+          // A blob that parsed but held a key of the wrong shape is corruption
+          // that loads as the seeded default and is overwritten on the next
+          // save. Copy the original aside first — best-effort, so a failed copy
+          // never blocks the app from coming up on what did survive.
+          if (droppedByShape(raw))
+            await AsyncStorage.setItem(RECOVERY_KEY, held).catch(() => {});
         } else {
           // No v4 blob yet — walk back through the older keys, lifting
           // whatever is there through every migration since. Each key is left
@@ -1522,13 +1559,22 @@ function useWorkoutState() {
     const slice = pendingRef.current;
     if (!slice) return;
     pendingRef.current = null;
-    savedRef.current = slice;
     // `savedAt` rides beside the durable keys: the wall moment this blob was
     // written, which is what lets `resumeSession` advance the clock by the
     // time spent dead. Not a State key — nothing renders it, and stamping it
     // here keeps it honest about *this* write rather than some earlier tick.
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ ...slice, savedAt: Date.now() })).catch(
-      () => {}
+    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ ...slice, savedAt: Date.now() })).then(
+      () => {
+        // The saved marker only advances once the bytes are actually down, so a
+        // failed write can never be mistaken for a success and skipped forever.
+        savedRef.current = slice;
+      },
+      () => {
+        // The write failed: leave the slice dirty so the next change,
+        // backgrounding or unmount retries it rather than trusting a blob that
+        // never landed. Only if nothing newer has queued in the meantime.
+        if (!pendingRef.current) pendingRef.current = slice;
+      }
     );
   }, []);
 
@@ -1860,7 +1906,15 @@ function useWorkoutState() {
     patch((s) => {
       const seed = DEFAULT_ROUTINES.find((r) => r.id === rid);
       if (!seed) return null;
-      return { routines: [...s.routines.filter((r) => r.id !== rid), scaledSeed(seed, s.level)] };
+      const fresh = scaledSeed(seed, s.level);
+      // Replace in place — a re-added seed keeps its spot on the list rather
+      // than jumping to the end, exactly as re-running setup replaces a pick
+      // without reordering everything around it.
+      return {
+        routines: s.routines.some((r) => r.id === rid)
+          ? s.routines.map((r) => (r.id === rid ? fresh : r))
+          : [...s.routines, fresh],
+      };
     });
 
   /**
@@ -1953,15 +2007,29 @@ function useWorkoutState() {
 
   /** Change a rule itself — every occurrence, past bars included. */
   const editPlan = (id: string, rid: string, repeat: Repeat) =>
-    patch((s) => ({
-      plan: {
-        ...s.plan,
-        entries: s.plan.entries.map((e) =>
-          e.id === id ? { ...e, rid, from: anchorFor(e.from, repeat), repeat } : e
-        ),
-      },
-      dayPlan: null,
-    }));
+    patch((s) => {
+      const held = s.plan.entries.find((e) => e.id === id);
+      if (!held) return { dayPlan: null };
+      // Re-anchor to the day the sheet was opened on when we have it (`dayPlan`
+      // still holds it — this write clears it below). Anchoring a shape change
+      // at the old `from` months back is what made the workout vanish from the
+      // day being edited: a `once`, or a `day`/`week` interval whose phase no
+      // longer lands on that day, would draw nowhere near it. A changed rule
+      // takes its past faint bars with it either way (there is no `until`).
+      const base = s.dayPlan?.entry === id ? s.dayPlan.iso : held.from;
+      const next: PlanEntry = { ...held, rid, from: anchorFor(base, repeat), repeat };
+      const entries = s.plan.entries.map((e) => (e.id === id ? next : e));
+      // The new rule can miss dates the old one hit; a skip left on one of those
+      // cancels nothing and reads as a chosen rest day (`restChosen`). Sweep
+      // this entry's now-orphaned skips, as `dropEntries` sweeps a removed
+      // entry's — but only its own ids, and only where it no longer occurs.
+      const skips: Record<string, string[]> = {};
+      for (const [iso, ids] of Object.entries(s.plan.skips)) {
+        const kept = ids.filter((x) => x !== id || occurs(next, iso));
+        if (kept.length) skips[iso] = kept;
+      }
+      return { plan: { entries, skips }, dayPlan: null };
+    });
 
   /**
    * Swap one occurrence for a different routine, leaving the rule alone: the
@@ -2039,7 +2107,12 @@ function useWorkoutState() {
   const importFromPeer = (peer: BuddySnapshot, item: SyncItem) => {
     patch((s) => {
       if (item.kind === 'translation') {
-        const fill = (names: LangMap): LangMap => ({ ...names, [item.lang]: item.text });
+        // Additive only: a translation fills a language this phone is *missing*,
+        // it never overwrites one already here. This phone's own names for its
+        // library are its own — the same rule the rest of sync follows — and an
+        // authed peer must not be able to rename them out from under it.
+        const fill = (names: LangMap): LangMap =>
+          names[item.lang] !== undefined ? names : { ...names, [item.lang]: item.text };
         switch (item.type) {
           case 'group':
             return {
@@ -2170,6 +2243,12 @@ function useWorkoutState() {
     patch((s) => {
       const inv = s.buddyInvite;
       if (!inv) return null;
+      // A workout already under way on this phone, with sets actually lifted,
+      // must not be thrown away to join an invite — the same protection
+      // `start()`'s choke point gives. Leave the invite standing so it can be
+      // dealt with after finishing; a fresh, nothing-ticked session may still
+      // give way, which is the ordinary accept.
+      if (sessionHasTicked(s)) return null;
 
       const deps = upsertShared(s, inv);
       // The starter's structure wins — that's the sync — but this phone's own
@@ -2302,6 +2381,12 @@ function useWorkoutState() {
     // (session: null included), and patching those through would end a workout
     // in progress — the one thing a restore has always promised not to touch.
     const restored = dropLive({ ...pickPersisted(initialState), ...migrateBlob(env.data, env.v) });
+    // Replace throws this phone's images away; the files they pointed at are now
+    // orphaned in the document dir. Clean up only the URIs the restore doesn't
+    // keep — `deletePersisted` ignores anything it didn't write, so a shared or
+    // pre-existing cache URI is left alone.
+    const kept = new Set(Object.values(restored.images ?? {}));
+    for (const uri of Object.values(state.images)) if (!kept.has(uri)) deletePersisted(uri);
     patch(restored);
     // The envelope proves the file is ours, not that every key inside it
     // survived whatever edited it since.
@@ -2357,6 +2442,17 @@ function useWorkoutState() {
       const oldName = id
         ? Object.keys(s.buddyIds).find((n) => s.buddyIds[n] === id && n !== name)
         : undefined;
+      // Renaming this buddy onto a name a *different* buddy already owns would
+      // overwrite that buddy's id and secret — losing their identity. Refuse
+      // the collision outright: leave this buddy under its old name, and both
+      // roster entries intact. Falling through would still clobber the other's
+      // id via the `newId` branch below, so this has to short-circuit.
+      if (
+        oldName &&
+        ((name in s.buddyIds && s.buddyIds[name] !== id) ||
+          s.buddySecrets[name] !== undefined)
+      )
+        return null;
       if (oldName) {
         const { [oldName]: _dropped, ...rest } = s.buddyIds;
         // The pairing secret follows the rename — it belongs to the buddy, not
@@ -2599,6 +2695,11 @@ function useWorkoutState() {
           s.picker === 'routine' && s.routineOpen === merged.id ? null : s.picker,
       };
       if (reason === 'save') return closed;
+      // A peer's co-built "start" keeps the routine on both phones, but must not
+      // launch over a workout already under way here that has lifted sets — the
+      // sets are real. Keep the 'save' half (the routine is on both phones) and
+      // hold the running session; mirror `start()`'s choke point.
+      if (sessionHasTicked(s)) return closed;
       return {
         ...closed,
         session: sessionFrom({ ...s, custom: deps.custom }, merged),
@@ -2641,8 +2742,8 @@ function useWorkoutState() {
    * not units, so adding a plank or a run into that total would quietly make
    * the summary's one number mean nothing.
    */
-  const totals = () => {
-    const list = state.session?.list ?? [];
+  const totals = (session: Session | null = state.session) => {
+    const list = session?.list ?? [];
     let done = 0;
     let all = 0;
     let vol = 0;
@@ -2662,11 +2763,17 @@ function useWorkoutState() {
   const clock = fmtClock(state.elapsed);
 
   const finishSession = () => {
-    const L = DICT[state.lang] ?? DICT.en;
-    const tot = totals();
     const today = todayISO();
     patch((s) => {
       if (!s.session) return null;
+      const L = DICT[s.lang] ?? DICT.en;
+      // Everything below reads *this* snapshot of the session, never the
+      // render-time closure a fling-glide may still be mutating: the totals and
+      // the logged list have to be counted over one and the same `s.session`,
+      // or `vol` desyncs from `list` and a glide-to-zero writes a training day
+      // with an empty set list. `clock` likewise comes off `s.elapsed`.
+      const tot = totals(s.session);
+      const clockNow = fmtClock(s.elapsed);
 
       // Write the ticked numbers back per exercise — these become the "last
       // time" ghosts, replacing the static seed the design shipped with — and
@@ -2683,7 +2790,13 @@ function useWorkoutState() {
         // has no left field at all and always takes the dash, which is what
         // keeps its stored string the same shape as everything else.
         const blank = blankOf(measureOf(ex(e.ex)));
-        const ticked = e.sets.filter((x) => x.done);
+        // The store is the last line against a poisoned `× 0`: the right-hand
+        // figure is what makes a set a set, and a fractional rep in (0, 0.5)
+        // rounds to zero here even though the screen-side tick took it as
+        // truthy. A row that would log as `× 0` must not enter history or the
+        // ghost — everything downstream (`marks`, `links`, the ghost slices)
+        // is indexed off `ticked`, so dropping it here keeps them all aligned.
+        const ticked = e.sets.filter((x) => x.done && Math.round(num(x.reps, 0)) > 0);
         const sets = ticked.map(
           (x) => `${num(x.w, 0) ? fmt(num(x.w, 0)) : blank} × ${Math.round(num(x.reps, 0))}`
         );
@@ -2750,6 +2863,13 @@ function useWorkoutState() {
         }
       }
 
+      // What was *actually* written down, off this same snapshot — not the
+      // chain count, which a glide-to-zero (or a dropped `× 0` row) can leave
+      // standing at one while `logged` is empty. A training day lands on the
+      // calendar only when something real was recorded, so an empty list can
+      // never write a phantom history entry.
+      const didLog = logged.length > 0;
+
       return {
         session: null,
         // The rest earned by the final set must not outlive the session:
@@ -2760,9 +2880,9 @@ function useWorkoutState() {
         rest: null,
         buddyRest: null,
         // Finish is the only way out of a session now that Discard is gone, so
-        // it has to carry what Discard did: a session where nothing was ticked
+        // it has to carry what Discard did: a session where nothing was logged
         // never happened, and must not land on the calendar as a training day.
-        history: tot.done
+        history: didLog
           ? [
               ...s.history,
               {
@@ -2785,12 +2905,12 @@ function useWorkoutState() {
           stats: [
             { k: L.sets, v: tot.done },
             { k: L.volume, v: Math.round(tot.vol) },
-            { k: L.time, v: clock },
+            { k: L.time, v: clockNow },
           ],
-          note: tot.done
+          note: didLog
             ? L.savedNote.replace('{date}', fmtDayLong(s.lang, new Date()))
             : L.savedEmpty,
-          empty: !tot.done,
+          empty: !didLog,
           saveable:
             s.session.rid === null && s.session.list.length > 0 ? s.session.list : null,
         },
@@ -2865,19 +2985,20 @@ function useWorkoutState() {
       // weight would become the routine's. `links` is index for index with
       // `sets`, and absent on every entry logged before drops existed.
       const kept = (h?.list ?? [])
-        .map((e) => ({ e, sets: e.sets.filter((_, j) => !e.links?.[j]) }))
+        .map((e, oi) => ({ e, oi, sets: e.sets.filter((_, j) => !e.links?.[j]) }))
         .filter((x) => x.sets.length > 0);
-      const items = kept.map(({ e, sets }, k) => {
+      const items = kept.map(({ e, oi, sets }, k) => {
         const n = prevNums(sets[sets.length - 1]);
         return {
           ex: e.ex,
           sets: sets.length,
           reps: Math.round(num(n.r, 8)),
           w: num(n.w, 0),
-          // The day was taken as a superset, so the routine made from it is
-          // one. Only where the partner survived the filter, or the pair
-          // would point at whatever followed it instead.
-          ...(e.with && k + 1 < kept.length ? { with: e.with } : {}),
+          // `with` points at the *immediately following* exercise in the
+          // original day. Carry it only when that exact partner is the next
+          // surviving row (`oi + 1`) — a drop-only partner filtered out here
+          // would otherwise re-link the pair to whatever came after it.
+          ...(e.with && kept[k + 1]?.oi === oi + 1 ? { with: e.with } : {}),
         };
       });
       if (items.length === 0) return null;

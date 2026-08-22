@@ -47,13 +47,15 @@ export type RestoreOutcome =
  */
 export function restoreLine(o: RestoreOutcome, L: Strings): string {
   if (o.kind === 'newer') return L.restoreNewer;
-  if (o.kind === 'replaced') return L.restoreDone.replace('{n}', String(o.n));
-  const { sessions, routines, exercises } = o.counts;
-  if (sessions + routines + exercises + o.counts.plan === 0) return L.mergeNothing;
+  if (o.kind === 'replaced')
+    return L.restoreDone.replace('{c}', count(o.n, L.countSession, L.countSessions));
+  const { sessions, routines, exercises, plan } = o.counts;
+  if (sessions + routines + exercises + plan === 0) return L.mergeNothing;
   return L.mergeDone
     .replace('{s}', count(sessions, L.countSession, L.countSessions))
     .replace('{r}', count(routines, L.countRoutine, L.countRoutines))
-    .replace('{e}', count(exercises, L.countExercise, L.countExercises));
+    .replace('{e}', count(exercises, L.countExercise, L.countExercises))
+    .replace('{p}', count(plan, L.countRule, L.countRules));
 }
 
 /** Every count here can legitimately be one, so each carries its own agreement. */

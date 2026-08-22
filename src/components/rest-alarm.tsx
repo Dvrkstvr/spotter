@@ -72,7 +72,11 @@ export function RestAlarm() {
     // re-arm mid-rest — the exercise swiped, the length setting changed —
     // inherits a rest already partly served, and rescheduling the whole
     // `restSeconds` from now would announce it minutes late.
-    const left = Math.max(1, s.restSeconds - (elapsedRef.current - at));
+    const left = s.restSeconds - (elapsedRef.current - at);
+    // Already run out in-app (`s.rest` was never cleared): a re-arm on any dep
+    // change would otherwise fire a fresh near-immediate alarm about a rest
+    // that ended minutes ago. Only arm when there is genuinely time left.
+    if (left <= 0) return;
     // The schedule is async and the rest can end before it lands — hence both
     // halves of the guard: cancel what came back late, and cancel what arrived.
     scheduleRestAlarm(left, L.restOverTitle, body).then((got) => {

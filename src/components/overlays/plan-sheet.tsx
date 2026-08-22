@@ -24,7 +24,7 @@ import { Pressable, Text, View } from 'react-native';
 import { HoldBtn } from '@/components/hold-btn';
 import { CHECK_D, Icon } from '@/components/icon';
 import { Sheet } from '@/components/sheet';
-import { dowOfISO, fromISO } from '@/data/date';
+import { dowOfISO, fromISO, todayISO } from '@/data/date';
 import { countN, fmtDayShort, repeatLabel, repeatSentence, repeatUnit, DAYS_SHORT } from '@/data/i18n';
 import { anchorFor, type Repeat } from '@/data/plan';
 import { useBackClose } from '@/hooks/use-back-close';
@@ -104,8 +104,14 @@ export function PlanSheet() {
 
   const save = () => {
     if (!rid) return;
-    if (!held) addPlan(iso, rid, repeat);
-    else if (perDay) swapPlanDay(iso, held.id, rid);
+    // A new rule anchored before today would invent a planned workout in the
+    // past — the same reason Plan and Today's strip only open this sheet on
+    // today or later. Belt to that braces, so the invariant holds whatever
+    // opens the sheet. Editing an existing rule keeps its own past anchor.
+    if (!held) {
+      if (iso < todayISO()) return;
+      addPlan(iso, rid, repeat);
+    } else if (perDay) swapPlanDay(iso, held.id, rid);
     else editPlan(held.id, rid, repeat);
   };
 

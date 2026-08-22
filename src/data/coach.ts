@@ -233,6 +233,27 @@ export type ParseResult =
   | { ok: false; reason: 'none' | 'json' | 'shape' };
 
 const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
+
+/**
+ * Caps at the parse seam. An AI reply is untrusted input that gets rendered in
+ * a preview and, on import, persisted into routines a later session sizes
+ * arrays from. A runaway or malicious block must not be able to hang the render
+ * or bloat the store. The limits are generous — no real week of training comes
+ * near them — so a normal plan is never touched. (New exercises can only come
+ * from the block, so `MAX_EXERCISES` bounds every one the import would create;
+ * routine items naming an unknown exercise are dropped, not invented.)
+ */
+const MAX_ROUTINES = 50;
+const MAX_ITEMS = 50; // per routine
+const MAX_EXERCISES = 200;
+const MAX_NAME = 100; // characters; a longer name is truncated, not rejected
+
+/** A trimmed, length-capped name — for the strings that get persisted. */
+const capName = (v: unknown) => str(v).slice(0, MAX_NAME);
+
+/** The prompt's own example placeholders — an echoed one must not import. */
+const isPlaceholder = (s: string) => s === '…' || s === '...';
+
 const numOr = (v: unknown): number | undefined => {
   const n = typeof v === 'number' ? v : parseFloat(String(v).replace(',', '.'));
   // Finite, not just non-NaN: JSON.parse turns `1e999` into Infinity, which
@@ -276,36 +297,39 @@ export function parsePlan(reply: string): ParseResult {
 
   const d = data as Record<string, unknown>;
   const exercises: PlanExercise[] = (Array.isArray(d.exercises) ? d.exercises : [])
+    .slice(0, MAX_EXERCISES)
     .map((e): PlanExercise => {
       const o = (e ?? {}) as Record<string, unknown>;
       return {
-        name: str(o.name),
-        group: str(o.group) || undefined,
-        equipment: str(o.equipment) || undefined,
+        name: capName(o.name),
+        group: capName(o.group) || undefined,
+        equipment: capName(o.equipment) || undefined,
         measure: str(o.measure) || undefined,
       };
     })
-    .filter((e) => e.name);
+    .filter((e) => e.name && !isPlaceholder(e.name));
 
   const routines: PlanRoutine[] = (Array.isArray(d.routines) ? d.routines : [])
+    .slice(0, MAX_ROUTINES)
     .map((r): PlanRoutine => {
       const o = (r ?? {}) as Record<string, unknown>;
       return {
-        name: str(o.name),
+        name: capName(o.name),
         items: (Array.isArray(o.items) ? o.items : [])
+          .slice(0, MAX_ITEMS)
           .map((it): PlanItem => {
             const p = (it ?? {}) as Record<string, unknown>;
             return {
-              exercise: str(p.exercise) || str(p.name),
+              exercise: capName(p.exercise) || capName(p.name),
               sets: numOr(p.sets),
               reps: numOr(p.reps),
               kg: numOr(p.kg),
             };
           })
-          .filter((it) => it.exercise),
+          .filter((it) => it.exercise && !isPlaceholder(it.exercise)),
       };
     })
-    .filter((r) => r.name && r.items.length > 0);
+    .filter((r) => r.name && !isPlaceholder(r.name) && r.items.length > 0);
 
   if (exercises.length === 0 && routines.length === 0) return { ok: false, reason: 'shape' };
   return { ok: true, plan: { exercises, routines } };
@@ -372,10 +396,15 @@ export function resolvePlan(
   routineNames: string[],
   fallback: { group: string; kind: string }
 ): ResolvedPlan {
+  // First library entry wins a shared normalised name, deterministically —
+  // `set` would otherwise let whichever came last silently claim the name.
   const byName = new Map<string, string>();
+  const claim = (n: string | undefined, id: string) => {
+    if (n && !byName.has(norm(n))) byName.set(norm(n), id);
+  };
   for (const e of library) {
-    for (const n of Object.values((e.names ?? {}) as LangMap)) if (n) byName.set(norm(n), e.id);
-    if (e.name) byName.set(norm(e.name), e.id);
+    for (const n of Object.values((e.names ?? {}) as LangMap)) claim(n, e.id);
+    claim(e.name, e.id);
   }
 
   const keyOf = (keys: string[], v: string | undefined) =>

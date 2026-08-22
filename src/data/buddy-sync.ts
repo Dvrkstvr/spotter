@@ -488,23 +488,38 @@ export const randomToken = (): string =>
   ).join('');
 
 /**
+ * Which end of the connection a proof was hashed for. Both endpoints witness
+ * the *same* auth digits, so a proof with no direction lane is byte-identical
+ * in both directions — and because each phone sends its proof before checking
+ * the peer's, an attacker could simply echo this phone's own proof straight
+ * back and be trusted. The side that *requested* the connection hashes as
+ * `initiator`, the side that *accepted* as `responder`, and each verifies the
+ * peer's proof under the OPPOSITE lane, so the two proofs never coincide.
+ * (Protocol change — both phones must rebuild, same rollout story as the
+ * secret itself: an un-updated peer's proof lands under the wrong lane, fails
+ * verification, and re-pairs through the code.)
+ */
+export type ProofRole = 'initiator' | 'responder';
+
+/**
  * The proof a peer sends to show it holds the pairing secret, bound to *this*
- * connection via Nearby's authentication digits. Both endpoints witness the
- * same digits — an artefact of the encrypted handshake, unpredictable to any
- * third party — so a proof captured from one session cannot be replayed into
- * another, and the raw secret is never re-sent after enrolment.
+ * connection via Nearby's authentication digits *and* the sender's direction
+ * (see `ProofRole`). Both endpoints witness the same digits — an artefact of
+ * the encrypted handshake, unpredictable to any third party — so a proof
+ * captured from one session cannot be replayed into another, and the raw
+ * secret is never re-sent after enrolment.
  *
  * A pure-JS keyed hash (four decorrelated FNV-1a lanes → 128 bits) rather than
  * a native SHA: the channel is already encrypted and per-session keyed, so an
  * attacker never observes a proof to begin with — this only has to be a
- * stable, not-invertible-in-practice mixing of (secret, digits). If the
+ * stable, not-invertible-in-practice mixing of (secret, digits, role). If the
  * transport is ever not encrypted, swap in expo-crypto through the
  * optional-native bridge.
  */
-export const authProof = (secret: string, digits: string): string =>
+export const authProof = (secret: string, digits: string, role: ProofRole): string =>
   [0, 1, 2, 3]
     .map((lane) => {
-      const msg = `${secret}|${digits}|${lane}`;
+      const msg = `${secret}|${digits}|${role}|${lane}`;
       let h = (0x811c9dc5 ^ Math.imul(lane, 0x9e3779b1)) >>> 0;
       for (let i = 0; i < msg.length; i++) {
         h ^= msg.charCodeAt(i);
@@ -514,12 +529,17 @@ export const authProof = (secret: string, digits: string): string =>
     })
     .join('');
 
-/** Whether a peer's hello proves the secret we hold for them on this link. */
+/**
+ * Whether a peer's hello proves the secret we hold for them on this link.
+ * `role` is the *peer's* direction — the opposite of ours — so a reflected
+ * copy of our own proof (hashed under our role) never verifies.
+ */
 export const proofOk = (
   secret: string | undefined,
   proof: unknown,
-  digits: string
-): boolean => !!secret && typeof proof === 'string' && proof === authProof(secret, digits);
+  digits: string,
+  role: ProofRole
+): boolean => !!secret && typeof proof === 'string' && proof === authProof(secret, digits, role);
 
 /* ── wire protocol (real radio) ────────────────────────────────────────── */
 
@@ -590,6 +610,17 @@ export type BuddyMessage =
  */
 const CAP = { str: 200, list: 400, items: 200 } as const;
 
+/**
+ * Bounds on the numeric fields a hostile peer could inflate. A weight is
+ * kilograms and a register revision is bumped once per user action, so both
+ * caps are generous headroom over any honest value — they exist only to stop
+ * a payload that sends `1e308` (still `Number.isFinite`) from overflowing a
+ * display or permanently winning a last-writer register.
+ */
+const WEIGHT_MAX = 100000;
+const REV_MAX = 1e9;
+const clampRev = (n: number) => Math.max(-REV_MAX, Math.min(REV_MAX, n));
+
 const capStr = (v: unknown, cap = CAP.str): string =>
   typeof v === 'string' ? v.slice(0, cap) : '';
 
@@ -635,7 +666,7 @@ const cleanExercise = (v: unknown): Exercise | null => {
     name: capStr(v.name),
     group: capStr(v.group),
     kind: capStr(v.kind),
-    last: Math.max(0, finite(v.last)),
+    last: Math.min(WEIGHT_MAX, Math.max(0, finite(v.last))),
     lastSets: (Array.isArray(v.lastSets) ? v.lastSets : [])
       .slice(0, CAP.items)
       .filter((s): s is string => typeof s === 'string')
@@ -655,7 +686,7 @@ const cleanRoutineItem = (v: unknown): RoutineItem | null => {
     ex,
     sets: Math.min(999, Math.max(0, Math.round(finite(v.sets, 1)))),
     reps: Math.min(99999, Math.max(0, Math.round(finite(v.reps, 0)))),
-    w: Math.max(0, finite(v.w, 0)),
+    w: Math.min(WEIGHT_MAX, Math.max(0, finite(v.w, 0))),
   };
   if (v.planned === true) it.planned = true;
   // The superset travels, because it is structure — the same half of a routine
@@ -745,7 +776,9 @@ const cleanDraft = (v: unknown): DraftPayload | null => {
 
 const cleanTurnChoice = (v: unknown): TurnChoice | null => {
   if (!isObj(v) || (v.mode !== 'alternate' && v.mode !== 'parallel')) return null;
-  return typeof v.rev === 'number' && Number.isFinite(v.rev) ? { mode: v.mode, rev: v.rev } : null;
+  return typeof v.rev === 'number' && Number.isFinite(v.rev)
+    ? { mode: v.mode, rev: clampRev(v.rev) }
+    : null;
 };
 
 const cleanModes = (v: unknown): Record<string, TurnChoice> => {
@@ -763,7 +796,7 @@ const cleanFirstUp = (v: unknown): FirstUpChoice | undefined => {
   if (!isObj(v) || typeof v.policy !== 'string' || !FIRST_UP_SET.has(v.policy)) return undefined;
   if (typeof v.seed !== 'number' || !Number.isFinite(v.seed)) return undefined;
   if (typeof v.rev !== 'number' || !Number.isFinite(v.rev)) return undefined;
-  return { policy: v.policy as FirstUp, seed: v.seed, rev: v.rev };
+  return { policy: v.policy as FirstUp, seed: v.seed, rev: clampRev(v.rev) };
 };
 
 const cleanBids = (v: unknown): Record<string, Bid> | undefined => {

@@ -309,10 +309,11 @@ const utf8 = (s: string): Uint8Array => {
   const out: number[] = [];
   for (let i = 0; i < s.length; i += 1) {
     let c = s.codePointAt(i)!;
-    if (c >= 0xd800 && c <= 0xdfff) {
-      if (c > 0xdbff || i + 1 >= s.length) c = 0xfffd;
-      else i += 1; // a well-formed pair; codePointAt already read both halves
-    }
+    // `codePointAt` returns the combined code point (≥ 0x10000) for a
+    // well-formed pair, so anything it hands back in the surrogate range is by
+    // definition unpaired — replace it, and never consume the next char.
+    if (c >= 0xd800 && c <= 0xdfff) c = 0xfffd;
+    else if (c > 0xffff) i += 1; // a well-formed pair; codePointAt read both halves
     if (c < 0x80) out.push(c);
     else if (c < 0x800) out.push(0xc0 | (c >> 6), 0x80 | (c & 0x3f));
     else if (c < 0x10000)

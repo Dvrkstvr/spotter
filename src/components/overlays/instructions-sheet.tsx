@@ -7,8 +7,9 @@
  * setup, so the seeded text is still there to reset back to.
  */
 import { useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
+import { HoldBtn } from '@/components/hold-btn';
 import { ImageSlot } from '@/components/image-slot';
 import { Sheet } from '@/components/sheet';
 import { useBackClose } from '@/hooks/use-back-close';
@@ -123,14 +124,16 @@ export function InstructionsSheet() {
                   value={c}
                   onChangeText={(v) => mutCues(e.id, (a) => { a[i] = v; })}
                 />
-                <Pressable
+                {/* Held, like every other destructive glyph in the app. */}
+                <HoldBtn
+                  destructive
+                  label="×"
                   accessibilityLabel={L.remove}
                   hitSlop={slop}
-                  onPress={() => mutCues(e.id, (a) => { a.splice(i, 1); })}
+                  onConfirm={() => mutCues(e.id, (a) => { a.splice(i, 1); })}
                   style={styles.del}
-                >
-                  <Text style={styles.delGlyph}>×</Text>
-                </Pressable>
+                  labelStyle={styles.delGlyph}
+                />
               </View>
             ))}
           </View>
@@ -182,7 +185,17 @@ const sheet = themed(() => ({
   cueText: { flex: 1, fontFamily: font.regular, fontSize: 13, color: color.neutral300 },
   cueEdit: { flexDirection: 'row', alignItems: 'flex-start', gap: 9 },
   cueInput: { flex: 1, minHeight: 40, paddingVertical: 7, fontSize: 13 },
-  del: { width: 22, height: 34, alignItems: 'center', justifyContent: 'center' },
+  // Collapses HoldBtn's border and padding so it draws as just the glyph — same
+  // footprint the plain Pressable had, matching the routine editor's ×.
+  del: {
+    width: 22,
+    height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+    borderColor: 'transparent',
+  },
   delGlyph: { fontFamily: font.regular, fontSize: 15, color: color.neutral600 },
   addBtn: { alignSelf: 'flex-start', marginTop: 7 },
   closeBtn: { marginTop: 18, height: 40 },

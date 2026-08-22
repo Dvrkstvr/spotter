@@ -263,22 +263,45 @@ export const dropEntries = (p: Plan, gone: (e: PlanEntry) => boolean): Plan => {
  * throw in every screen that reads the plan, after which the debounced save
  * would write the wreck over the good blob.
  */
+/**
+ * A stored repeat, repaired to something `occurs` can read, or `null` if it
+ * cannot be. `span()` already clamps a bad `n` on every read, so the one field
+ * that can actually throw is a `week` rule's `dows` — `occurs` calls
+ * `.includes` on it directly, and a missing or non-array value is a TypeError
+ * in `plannedOn`, i.e. a crash on every screen that reads the plan. A non-array
+ * or an array of junk is filtered to the valid weekday indexes; empty after
+ * that, the rule lands nowhere and the caller drops the whole entry.
+ */
+const cleanRepeat = (r: Repeat): Repeat | null => {
+  if (r.unit === 'once') return { unit: 'once' };
+  if (r.unit === 'day') return { unit: 'day', n: r.n };
+  const dows = Array.isArray(r.dows)
+    ? [...new Set(r.dows.filter((d) => Number.isInteger(d) && d >= 0 && d <= 6))].sort(
+        (a, b) => a - b
+      )
+    : [];
+  return dows.length ? { unit: 'week', n: r.n, dows } : null;
+};
+
 export const asPlan = (v: unknown): Plan => {
   const held = v as { entries?: unknown; skips?: unknown } | null;
   if (!held || typeof held !== 'object') return { entries: [], skips: {} };
-  const entries = (Array.isArray(held.entries) ? held.entries : []).filter(
-    (e: unknown): e is PlanEntry => {
+  const entries = (Array.isArray(held.entries) ? held.entries : [])
+    .map((e: unknown): PlanEntry | null => {
       const r = e as PlanEntry | null;
-      return (
-        !!r &&
-        typeof r.id === 'string' &&
-        typeof r.rid === 'string' &&
-        typeof r.from === 'string' &&
-        !!r.repeat &&
-        (r.repeat.unit === 'once' || r.repeat.unit === 'day' || r.repeat.unit === 'week')
-      );
-    }
-  );
+      if (
+        !r ||
+        typeof r.id !== 'string' ||
+        typeof r.rid !== 'string' ||
+        typeof r.from !== 'string' ||
+        !r.repeat ||
+        (r.repeat.unit !== 'once' && r.repeat.unit !== 'day' && r.repeat.unit !== 'week')
+      )
+        return null;
+      const repeat = cleanRepeat(r.repeat);
+      return repeat ? { id: r.id, rid: r.rid, from: r.from, repeat } : null;
+    })
+    .filter((e): e is PlanEntry => e !== null);
   const skips: Record<string, string[]> = {};
   const raw = held.skips;
   if (raw && typeof raw === 'object' && !Array.isArray(raw))

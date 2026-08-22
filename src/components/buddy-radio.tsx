@@ -32,6 +32,7 @@ import {
   parseBuddyMessage,
   type PeerIdentity,
   progressOf,
+  type ProofRole,
   proofOk,
   randomToken,
   rosterNameFor,
@@ -418,7 +419,19 @@ export function BuddyRadio() {
           id: st.s.selfId,
           data: shareableSlice(st.s),
         })
-      ).catch(() => {});
+        // The snapshot is the one payload big enough to hit Nearby's ~32KB
+        // BYTES cap, and this used to swallow that failure — a silent empty
+        // pairing. Surface it: the link is still up, so the reconnect/heal
+        // path re-runs `trust` and re-sends. A library that genuinely can't
+        // fit one payload wants chunking (a STREAM payload) — see the module.
+      ).catch((err) =>
+        dlog(
+          'buddy',
+          'snapshot send failed',
+          { endpoint: endpointId, err: err instanceof Error ? err.message : String(err) },
+          true
+        )
+      );
       // This phone opened the link to ask something — the ask follows the
       // snapshot, so the other side knows who is asking by the time it lands.
       if (st.s.joinSent?.state === 'waiting')
@@ -485,6 +498,26 @@ export function BuddyRadio() {
           return;
         }
 
+        // Our OWN outgoing connection to a peer we can't prove — a known buddy
+        // paired before secrets existed, asked for a session — can never pass:
+        // there is no code stage unless *both* phones are in share mode, which
+        // one side asking can't arrange. Left to the incoming-guard below it
+        // was rejected and the reconnect ticker re-requested it forever, with
+        // `joinSent` stuck 'waiting'. So tear the ask down here and let the
+        // user re-pair through Invite (you.tsx routes a secretless buddy there
+        // instead of asking). A *stranger's* incoming request is untouched by
+        // this — it falls through to the code gate / rejection below.
+        if (!e.isIncoming && !st.s.scanning) {
+          dlog('buddy', 'own request unprovable — dropping ask', { roster: roster ?? 'none' }, true);
+          r.rejectConnection(e.endpointId).catch(() => {});
+          st.patch((s) =>
+            s.buddyEndpoint === null && s.joinSent?.state === 'waiting'
+              ? { buddy: null, joinSent: null }
+              : null
+          );
+          return;
+        }
+
         // Everyone else pairs only through the code check, and the code only
         // shows in the share sheet: a stranger, an ex-buddy's phone
         // auto-reconnecting after a one-sided disconnect, an impersonator
@@ -495,10 +528,12 @@ export function BuddyRadio() {
           r.rejectConnection(e.endpointId).catch(() => {});
           return;
         }
-        // The invitee displays the code and accepts up front — the actual
-        // gate is the inviter typing that code, which only their accept can
-        // pass. Cancel on the invitee side still rejects.
-        if (e.isIncoming) r.acceptConnection(e.endpointId).catch(() => {});
+        // Both sides now confirm before the link is trusted: the inviter by
+        // typing the displayed code (their accept), the invitee by tapping
+        // Confirm in the scan sheet (which calls acceptConnection). Neither is
+        // auto-accepted here, so a first-time incoming pairing can't become a
+        // durable roster buddy without a human tap. Cancel on either side
+        // still rejects.
         st.patch({
           pendingAuth: {
             endpointId: e.endpointId,
@@ -559,6 +594,11 @@ export function BuddyRadio() {
           return;
         }
         const digits = info?.digits ?? '';
+        // Hash under *our own* direction: the side that requested the
+        // connection is the initiator, the side that accepted the responder.
+        // The peer verifies under the opposite lane, so the two proofs never
+        // coincide and neither can be reflected back (see `ProofRole`).
+        const myRole: ProofRole = info?.incoming ? 'responder' : 'initiator';
         r.sendPayload(
           e.endpointId,
           JSON.stringify({
@@ -566,7 +606,7 @@ export function BuddyRadio() {
             t: 'hello',
             name: myName(st.s),
             id: st.s.selfId,
-            proof: authProof(secret, digits),
+            proof: authProof(secret, digits, myRole),
           })
         ).catch(() => {});
       }),
@@ -640,7 +680,12 @@ export function BuddyRadio() {
             // rather than trust it.
             const roster = info ? rosterNameFor(st.s, info.peer) : (st.s.buddy ?? null);
             const secret = roster ? st.s.buddySecrets[roster] : undefined;
-            if (!proofOk(secret, msg.proof, digits)) {
+            // The peer's direction is the opposite of ours: if we accepted the
+            // connection (incoming) they requested it (initiator), and vice
+            // versa. A proof hashed under our own lane — a reflection of the
+            // one we just sent — verifies under neither and is refused.
+            const peerRole: ProofRole = info?.incoming ? 'initiator' : 'responder';
+            if (!proofOk(secret, msg.proof, digits, peerRole)) {
               dlog(
                 'buddy',
                 'proof refused',

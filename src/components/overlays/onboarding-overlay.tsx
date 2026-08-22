@@ -35,7 +35,7 @@ import {
   StyleKey,
   STYLE_KEYS,
 } from '@/data/exercises';
-import { DAYS_SHORT, Lang, Strings } from '@/data/i18n';
+import { countN, DAYS_SHORT, Lang, Strings } from '@/data/i18n';
 import { weekSlots } from '@/data/plan';
 import { ensureAlarmPermission } from '@/data/alarms';
 import { useBackClose } from '@/hooks/use-back-close';
@@ -492,7 +492,8 @@ export function OnboardingOverlay() {
                   {name.text}
                 </Text>
                 <Text style={styles.choiceMeta}>
-                  {r.items.length} {L.exCount} · {sets} {L.setCount}
+                  {countN(r.items.length, L.exCountOne, L.exCount)} ·{' '}
+                  {countN(sets, L.setCountOne, L.setCount)}
                 </Text>
                 <Text style={styles.choiceSub} numberOfLines={1}>
                   {line}

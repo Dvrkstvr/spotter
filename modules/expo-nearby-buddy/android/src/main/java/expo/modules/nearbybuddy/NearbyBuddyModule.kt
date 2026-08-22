@@ -17,6 +17,7 @@ import expo.modules.kotlin.Promise
 import expo.modules.kotlin.exception.CodedException
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Thin bridge over Google Nearby Connections for the buddy sync flow.
@@ -33,6 +34,13 @@ class NearbyBuddyModule : Module() {
       appContext.reactContext ?: throw CodedException("NO_CONTEXT", "React context gone", null)
     )
 
+  // Ids of payloads *this* phone sent, so onPayloadTransferUpdate can tell an
+  // outgoing transfer from an incoming one — the update itself carries no
+  // direction. Only an outgoing FAILURE means "our bytes never arrived", which
+  // is what the JS zombie-teardown counts; an incoming failure is the peer's
+  // problem and must not tear our link down. Cleared on any terminal status.
+  private val outgoingPayloads: MutableSet<Long> = ConcurrentHashMap.newKeySet()
+
   private val payloadCallback = object : PayloadCallback() {
     override fun onPayloadReceived(endpointId: String, payload: Payload) {
       val bytes = payload.asBytes() ?: return
@@ -40,14 +48,26 @@ class NearbyBuddyModule : Module() {
     }
 
     override fun onPayloadTransferUpdate(endpointId: String, update: PayloadTransferUpdate) {
-      if (update.status == PayloadTransferUpdate.Status.SUCCESS) {
-        sendEvent("onPayloadSent", mapOf("endpointId" to endpointId, "payloadId" to update.payloadId.toString()))
-      } else if (update.status == PayloadTransferUpdate.Status.FAILURE) {
-        // Delivery failed at the transport. sendPayload's own Task resolving
-        // only means the payload was enqueued, so this update is the one place
-        // Nearby admits the bytes never arrived — which the JS side reads as
-        // "this link is dead even though onDisconnected hasn't fired".
-        sendEvent("onPayloadFailed", mapOf("endpointId" to endpointId, "payloadId" to update.payloadId.toString()))
+      val outgoing = outgoingPayloads.contains(update.payloadId)
+      when (update.status) {
+        PayloadTransferUpdate.Status.SUCCESS -> {
+          if (outgoing) outgoingPayloads.remove(update.payloadId)
+          // Either direction completing proves the link is alive, which is all
+          // the JS side reads onPayloadSent for.
+          sendEvent("onPayloadSent", mapOf("endpointId" to endpointId, "payloadId" to update.payloadId.toString()))
+        }
+        PayloadTransferUpdate.Status.FAILURE -> {
+          if (outgoing) {
+            outgoingPayloads.remove(update.payloadId)
+            // Delivery failed at the transport. sendPayload's own Task resolving
+            // only means the payload was enqueued, so this update is the one place
+            // Nearby admits the bytes never arrived — which the JS side reads as
+            // "this link is dead even though onDisconnected hasn't fired". Only
+            // *our* outgoing failures count; an incoming one is not our teardown.
+            sendEvent("onPayloadFailed", mapOf("endpointId" to endpointId, "payloadId" to update.payloadId.toString()))
+          }
+        }
+        else -> {}
       }
     }
   }
@@ -156,9 +176,16 @@ class NearbyBuddyModule : Module() {
     }
 
     AsyncFunction("sendPayload") { endpointId: String, data: String, promise: Promise ->
-      client.sendPayload(endpointId, Payload.fromBytes(data.toByteArray(Charsets.UTF_8)))
+      val payload = Payload.fromBytes(data.toByteArray(Charsets.UTF_8))
+      // Record before sending so a FAILURE update — which can arrive before the
+      // Task's own failure listener — is recognised as ours.
+      outgoingPayloads.add(payload.id)
+      client.sendPayload(endpointId, payload)
         .addOnSuccessListener { promise.resolve(null) }
-        .addOnFailureListener { promise.reject(CodedException("SEND_FAILED", it.message, it)) }
+        .addOnFailureListener {
+          outgoingPayloads.remove(payload.id)
+          promise.reject(CodedException("SEND_FAILED", it.message, it))
+        }
     }
 
     AsyncFunction("disconnectFrom") { endpointId: String ->

@@ -79,8 +79,17 @@ export function InsightsOverlay() {
   const fact = funFact(st.volume, st.distanceKm);
   const peakVol = Math.max(1, ...series.map((b) => b.volume));
 
-  const favEx = fav.exercise ? ex(fav.exercise.id) : undefined;
-  const favExName = favEx ? exInfo(favEx) : null;
+  // The top favourite may have been deleted since — fall back to the first
+  // ranked exercise that still resolves rather than dropping the row.
+  const favExHit = fav.exercises.map((f) => ({ f, e: ex(f.id) })).find((x) => x.e);
+  const favExName = favExHit ? exInfo(favExHit.e!) : null;
+
+  // "Empty" means nothing was logged in the window at all. A cardio-only diary
+  // has no counted (region) sets but real work — runs, loose sets, volume — so
+  // gating the whole screen on `countedSets` hid its cardio line, distance, fun
+  // fact, favourites, volume chart and the recommendations CTA.
+  const nothing =
+    st.countedSets === 0 && st.looseSets === 0 && st.volume === 0 && st.distanceKm === 0;
 
   return (
     <FullScreen zIndex={76}>
@@ -120,61 +129,69 @@ export function InsightsOverlay() {
           }))}
         />
 
-        {st.countedSets === 0 ? (
+        {nothing ? (
           // A window with nothing in it says so, once, instead of drawing five
           // charts of zero. Every panel below would otherwise be a flat line
           // presented as a finding.
           <Text style={styles.empty}>{L.insightsEmpty}</Text>
         ) : (
           <>
-            {/* The hint reads as a caption *under* the chart rather than
-                opposite the heading: the radar's top label is centred and
-                lands level with that row, and three things competing for one
-                line is what made the first version look broken. */}
-            <View style={styles.card}>
-              <H6 style={styles.cardTitle}>{L.insightsBalance}</H6>
-              {width > 0 && (
-                <BalanceRadar
-                  balance={st.balance}
-                  label={(r) => regionLabel(r, L)}
-                  size={width - 28}
-                  c={c}
-                />
-              )}
-              <Text style={styles.caption}>{L.insightsBalanceHint}</Text>
-            </View>
+            {/* The balance radar and its weak-point reading only mean something
+                once strength sets have rolled into a region — a cardio-only
+                window has none, so these step aside while the rest stays. */}
+            {st.countedSets > 0 && (
+              <>
+                {/* The hint reads as a caption *under* the chart rather than
+                    opposite the heading: the radar's top label is centred and
+                    lands level with that row, and three things competing for
+                    one line is what made the first version look broken. */}
+                <View style={styles.card}>
+                  <H6 style={styles.cardTitle}>{L.insightsBalance}</H6>
+                  {width > 0 && (
+                    <BalanceRadar
+                      balance={st.balance}
+                      label={(r) => regionLabel(r, L)}
+                      size={width - 28}
+                      c={c}
+                    />
+                  )}
+                  <Text style={styles.caption}>{L.insightsBalanceHint}</Text>
+                </View>
 
-            {/* The honest version of the chart above: ranked, named, and with
-                the number written out. This is what the coach prompt reads. */}
-            <H6 style={styles.head}>{L.insightsWeak}</H6>
-            {st.weak.length === 0 ? (
-              <Text style={styles.note}>{L.insightsWeakNone}</Text>
-            ) : (
-              <View>
-                {st.weak.map((w, i) => (
-                  <View
-                    key={w.region}
-                    style={[styles.weakRow, i < st.weak.length - 1 && styles.ruled]}
-                  >
-                    <Text style={styles.weakName}>{regionLabel(w.region, L)}</Text>
-                    {/* The track runs to twice an even split, so the marker
-                        sits at its midpoint: a bar reaching half way is a
-                        region getting its share. Nothing here exceeds that —
-                        a weak region is under it by definition. */}
-                    <View style={styles.track}>
+                {/* The honest version of the chart above: ranked, named, and
+                    with the number written out. This is what the coach prompt
+                    reads. */}
+                <H6 style={styles.head}>{L.insightsWeak}</H6>
+                {st.weak.length === 0 ? (
+                  <Text style={styles.note}>{L.insightsWeakNone}</Text>
+                ) : (
+                  <View>
+                    {st.weak.map((w, i) => (
                       <View
-                        style={[
-                          styles.fill,
-                          { width: `${Math.min(100, (w.share / (EVEN_SHARE * 2)) * 100)}%` },
-                        ]}
-                      />
-                      <View pointerEvents="none" style={styles.evenMark} />
-                    </View>
-                    <Text style={styles.weakPct}>{pct(w.share)}%</Text>
-                    <Tag label={L.insightsLow} tone="outline" />
+                        key={w.region}
+                        style={[styles.weakRow, i < st.weak.length - 1 && styles.ruled]}
+                      >
+                        <Text style={styles.weakName}>{regionLabel(w.region, L)}</Text>
+                        {/* The track runs to twice an even split, so the marker
+                            sits at its midpoint: a bar reaching half way is a
+                            region getting its share. Nothing here exceeds that
+                            — a weak region is under it by definition. */}
+                        <View style={styles.track}>
+                          <View
+                            style={[
+                              styles.fill,
+                              { width: `${Math.min(100, (w.share / (EVEN_SHARE * 2)) * 100)}%` },
+                            ]}
+                          />
+                          <View pointerEvents="none" style={styles.evenMark} />
+                        </View>
+                        <Text style={styles.weakPct}>{pct(w.share)}%</Text>
+                        <Tag label={L.insightsLow} tone="outline" />
+                      </View>
+                    ))}
                   </View>
-                ))}
-              </View>
+                )}
+              </>
             )}
 
             {/* Cardio is not a muscle and is never balanced against the six —
@@ -231,7 +248,7 @@ export function InsightsOverlay() {
                   </Text>
                   <Tag label={L.favExercise} tone="neutral" />
                   <Text style={styles.favCount}>
-                    {L.favLogged.replace('{n}', String(fav.exercise!.sessions))}
+                    {L.favLogged.replace('{n}', String(favExHit!.f.sessions))}
                   </Text>
                 </View>
               )}

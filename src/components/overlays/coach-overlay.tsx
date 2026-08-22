@@ -37,7 +37,7 @@ import { useBackClose } from '@/hooks/use-back-close';
 import { themed, useColors, useThemed } from '@/design/theme';
 import { color, font, radius, slop, t, tracking } from '@/design/tokens';
 import { Btn, Chip, H2, H6, missingName, Seg, Tag } from '@/design/ui';
-import { schemeLine, useStore } from '@/store/workout-store';
+import { resolveNames, schemeLine, useStore } from '@/store/workout-store';
 
 /** The muscle group an unresolvable one falls back to — a real seeded row. */
 const FALLBACK = { group: 'Other' };
@@ -158,7 +158,11 @@ export function CoachOverlay() {
           library,
           s.groups.map((g) => g.key),
           s.kinds.map((k) => k.key),
-          s.routines.map((r) => r.names[s.lang] ?? Object.values(r.names)[0] ?? ''),
+          // Through the store's resolver, not `r.names[s.lang] ?? …`: an empty
+          // string for the current language is not nullish, so the raw form let
+          // a routine whose name is '' in this language compare as blank and
+          // miss the duplicate flag — arriving ticked as a second "Push A".
+          s.routines.map((r) => resolveNames(r.names, s.lang).text),
           { group: FALLBACK.group, kind: fallbackKind }
         )
       : null;

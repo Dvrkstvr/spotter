@@ -6,7 +6,7 @@
  *
  *   70 exercise · 75 routine · 76 insights · 77 coach · 78 settings
  *   79 buddy sync · 80 session
- *   83 plan · 84 pick workout · 85 picker · 86 how-to · 87 nearby
+ *   83 plan · 85 picker · 86 how-to · 87 nearby
  *   88 new exercise · 89 buddy invite / join ask · 90 summary · 91 intake
  *
  * 76 (insights), 77 (coach), 79 (buddy sync), 83 (plan), and 89 (buddy

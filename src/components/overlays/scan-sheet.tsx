@@ -22,6 +22,9 @@ export function ScanSheet() {
   // The inviter's typed code attempt, and whether the last one was wrong.
   const [code, setCode] = useState('');
   const [wrong, setWrong] = useState(false);
+  // The invitee tapped Confirm — their accept is in, now waiting on the
+  // inviter to type the code. Disables the button so it can't be double-sent.
+  const [confirmed, setConfirmed] = useState(false);
 
   const pa = s.pendingAuth;
 
@@ -32,8 +35,17 @@ export function ScanSheet() {
       setSentTo(null);
       setCode('');
       setWrong(false);
+      setConfirmed(false);
     }
   }, [pa]);
+
+  // The invitee confirms the code they're showing before this phone accepts —
+  // the mirror of the inviter typing it. Nothing becomes a durable buddy until
+  // both accepts are in (onConnected → trust in <BuddyRadio>).
+  const confirmIncoming = () => {
+    if (radio && pa) radio.acceptConnection(pa.endpointId).catch(() => {});
+    setConfirmed(true);
+  };
 
   const cancelAuth = () => {
     if (radio && s.pendingAuth) radio.rejectConnection(s.pendingAuth.endpointId).catch(() => {});
@@ -102,6 +114,14 @@ export function ScanSheet() {
           <>
             <Text style={styles.authDigits}>{pa.digits}</Text>
             <Text style={styles.authHint}>{L.authShowHint.replace('{name}', pa.name)}</Text>
+            <Btn
+              variant="primary"
+              block
+              label={L.ok}
+              disabled={confirmed}
+              style={styles.confirmBtn}
+              onPress={confirmIncoming}
+            />
           </>
         ) : (
           <>
@@ -252,6 +272,7 @@ const sheet = themed(() => ({
     paddingVertical: 8,
   },
   inviteSent: { color: color.neutral500 },
+  confirmBtn: { marginTop: 4, height: 40 },
 
   list: { marginTop: 14 },
   row: {

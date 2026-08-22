@@ -52,10 +52,17 @@ export default function TodayScreen() {
    */
   const dayRows = plannedOn(s.plan, iso);
   const loggedRid = (rid: string) => s.history.some((h) => h.date === iso && h.rid === rid);
-  const todayRid = (dayRows.find((e) => !loggedRid(e.rid)) ?? dayRows[dayRows.length - 1])?.rid;
+  const heroEntry = dayRows.find((e) => !loggedRid(e.rid)) ?? dayRows[dayRows.length - 1];
+  const todayRid = heroEntry?.rid;
   const tr = routine(todayRid ?? null);
-  /** The rest of the day, named under the hero's own lines. */
-  const alsoToday = dayRows.filter((e) => e.rid !== todayRid);
+  /**
+   * The rest of the day, named under the hero's own lines. Filtered by entry
+   * id, not rid: two rules may name the same routine on one day, and dropping
+   * by rid would hide the second copy — an entry you could neither see nor act
+   * on. (Which of two identical-rid rows a logged session belongs to is still
+   * conflated; that needs a session→entry link the store doesn't carry.)
+   */
+  const alsoToday = dayRows.filter((e) => e.id !== heroEntry?.id);
 
   /**
    * Whether the card's own workout happened. The design has no completed
@@ -363,7 +370,16 @@ export default function TodayScreen() {
             accessibilityLabel={w.label}
             onPress={() => {
               tipDone('strip');
-              patch({ dayPlan: { iso: w.date, entry: null } });
+              // A past day is a record — tapping it opens Plan read-only on
+              // that day rather than the rule editor, which anchored backwards
+              // would invent a workout you never planned. Today and forward
+              // still plan in place.
+              if (w.date < iso) {
+                patch({ planFocus: w.date });
+                router.push('/plan');
+              } else {
+                patch({ dayPlan: { iso: w.date, entry: null } });
+              }
             }}
             style={[styles.day, w.isToday && styles.dayToday]}
           >

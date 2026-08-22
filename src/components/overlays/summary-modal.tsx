@@ -7,7 +7,7 @@
  */
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, KeyboardAvoidingView, StyleSheet, Text, View } from 'react-native';
 
 import { RiseIn } from '@/components/motion';
 import { useBackClose } from '@/hooks/use-back-close';
@@ -32,7 +32,11 @@ export function SummaryModal() {
   if (!summary) return null;
 
   return (
-    <View style={[StyleSheet.absoluteFill, styles.backdrop]}>
+    // The save-as-routine field is the one input here, and this modal doesn't
+    // go through Sheet/FullScreen — so it carries its own avoidance the way the
+    // shells do. `padding` lifts the centered card above the keyboard; the
+    // backdrop still fills the screen and the payoff layout stays centered.
+    <KeyboardAvoidingView behavior="padding" style={[StyleSheet.absoluteFill, styles.backdrop]}>
       <RiseIn style={styles.card}>
         {/* A zero-tick finish logged nothing: no "Saved", no stats, no
             confetti — the note says what happened and the card bows out. */}
@@ -80,7 +84,7 @@ export function SummaryModal() {
         <Btn variant="primary" block label={L.ok} style={styles.doneBtn} onPress={close} />
         {!summary.empty && <Confetti />}
       </RiseIn>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

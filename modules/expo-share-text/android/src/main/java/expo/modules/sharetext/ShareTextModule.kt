@@ -66,10 +66,21 @@ class ShareTextModule : Module() {
       if (intent.type?.startsWith("text/") != true) return
       val text = intent.getStringExtra(Intent.EXTRA_TEXT) ?: return
       intent.removeExtra(Intent.EXTRA_TEXT)
-      pending = text
       // A copy, because an observer removing itself mid-notify would otherwise
       // mutate the list being walked.
-      observers.toList().forEach { it(text) }
+      val live = observers.toList()
+      if (live.isEmpty()) {
+        // Cold start: no module to notify yet, so the text waits in `pending`
+        // until JS asks for it via `takeSharedText`.
+        pending = text
+      } else {
+        // A running app has a module to notify, and the event *is* the delivery
+        // — so nothing is left in `pending` to be re-offered when the React root
+        // next remounts. Cleared here for the same reason the take path clears
+        // it, or a warm-start share imports twice.
+        pending = null
+        live.forEach { it(text) }
+      }
     }
   }
 }

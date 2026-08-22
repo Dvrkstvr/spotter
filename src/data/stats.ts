@@ -154,14 +154,15 @@ export function trainingStats(
   sinceDays: number | null = null,
   today: Date = new Date()
 ): TrainingStats {
-  const cutoff = sinceDays === null ? null : new Date(today.getTime() - sinceDays * 86_400_000);
-  const from = cutoff
-    ? `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, '0')}-${String(
-        cutoff.getDate()
-      ).padStart(2, '0')}`
-    : null;
-
-  const inWindow = history.filter((h) => (from === null ? true : h.date >= from));
+  // One window boundary for every reader: whole local days back, futures
+  // excluded, so the footer total, the bars and the coach prompt describe the
+  // same slice. `daysAgo` is the same day-count `volumeSeries` and `keyLifts`
+  // use — `h.date >= from` admitted a 57th day and any future-dated row.
+  const inWindow = history.filter((h) => {
+    const ago = daysAgo(h.date, today);
+    if (!Number.isFinite(ago) || ago < 0) return false;
+    return sinceDays === null || ago < sinceDays;
+  });
 
   const sets = Object.fromEntries(REGIONS.map((r) => [r, 0])) as Record<Region, number>;
   let counted = 0;
@@ -179,7 +180,8 @@ export function trainingStats(
       if (m === 'distance' || m === 'duration') hasCardio = true;
       if (m === 'distance')
         for (const set of entry.sets) {
-          const km = parseFloat(String(set).split('×')[0]?.trim() ?? '');
+          // Comma or dot — normalise like `setKg`/`num`, or "5,5 km" reads as 5.
+          const km = parseFloat((String(set).split('×')[0]?.trim() ?? '').replace(',', '.'));
           if (!isNaN(km)) distanceKm += km;
         }
       const region = e ? regionOf(e.group) : null;
@@ -302,7 +304,9 @@ export function volumeSeries(
   const out: Bucket[] = Array.from({ length: n }, () => ({ volume: 0, sessions: 0 }));
   for (const h of history) {
     const ago = daysAgo(h.date, today);
-    if (ago < 0 || ago >= n * bucketDays) continue;
+    // A malformed date yields NaN, which slips past both comparisons and lands
+    // as out[NaN] — skip it, the way the sibling readers tolerate it.
+    if (!Number.isFinite(ago) || ago < 0 || ago >= n * bucketDays) continue;
     const i = n - 1 - Math.floor(ago / bucketDays);
     out[i].volume += h.vol ?? 0;
     out[i].sessions++;
@@ -312,9 +316,17 @@ export function volumeSeries(
 
 /* ── favourites ─────────────────────────────────────────────────────────── */
 
+export type FavExercise = { id: string; sessions: number };
+
 export type Favourites = {
   /** The exercise logged in the most sessions, with that count. */
-  exercise: { id: string; sessions: number } | null;
+  exercise: FavExercise | null;
+  /**
+   * Every exercise, most sessions first — so a screen can fall back to the
+   * runner-up when the top one has since been deleted and no longer resolves,
+   * rather than dropping the row. Ties keep history order, like `exercise`.
+   */
+  exercises: FavExercise[];
   /**
    * The session name logged most often, with that count.
    *
@@ -352,10 +364,15 @@ export function favourites(
     for (const [k, v] of m) if (!best || v > best[1]) best = [k, v];
     return best;
   };
-  const e = top(exCount);
+  // Ranked, most sessions first. Array sort is stable (ES2019+, and in Hermes),
+  // so `exCount` insertion order — history order — breaks ties, matching `top`.
+  const rankedEx: FavExercise[] = [...exCount.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([id, sessions]) => ({ id, sessions }));
   const n = top(nameCount);
   return {
-    exercise: e ? { id: e[0], sessions: e[1] } : null,
+    exercise: rankedEx[0] ?? null,
+    exercises: rankedEx,
     session: n ? { name: n[0], count: n[1] } : null,
   };
 }
@@ -405,7 +422,9 @@ const pick = <T extends { key: FactKey }>(
   let best: FunFact | null = null;
   for (const item of scale) {
     const size = unit === 'kg' ? item.kg! : item.km!;
-    const n = Math.round(total / size);
+    // Floor, not round: "2 elephants" must mean two were actually cleared, not
+    // 1.5 rounded up — the sentence claims the thing was cleared twice over.
+    const n = Math.floor(total / size);
     if (n >= 2) best = { key: item.key, n, kind };
   }
   return best;

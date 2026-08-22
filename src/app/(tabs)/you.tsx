@@ -247,6 +247,16 @@ export default function YouScreen() {
                         // The connection is opened to ask over, never for its own
                         // sake. <BuddyRadio> sends the ask once the link is up.
                         onPress={() => {
+                          // A buddy paired before secrets existed has none, and a
+                          // bare request can't be proved — there's no code stage
+                          // unless both phones are in share mode. Asking anyway
+                          // loops the reconnect ticker forever with the ask stuck
+                          // 'waiting', so send them through Invite to re-pair (and
+                          // mint a secret) instead.
+                          if (s.buddySecrets[name] === undefined) {
+                            patch({ scanning: true });
+                            return;
+                          }
                           requestSession(name);
                           if (peer)
                             radio

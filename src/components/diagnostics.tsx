@@ -40,14 +40,20 @@ import { myName, useStore } from '@/store/workout-store';
 const EXPORT_SETTLE_MS = 20_000;
 
 export function Diagnostics() {
-  const { s, totals } = useStore();
+  const { s, totals, hydrated } = useStore();
 
   /* — the switch, first: nothing below records anything while it is off — */
 
+  // Gated on hydration, because the pre-hydration `s.diag` is the seed (false),
+  // and settling the undecided state to it would take/discard the preroll
+  // before the real persisted value is known — dropping the store's own
+  // `hydrated` line and `app/launched`, the most valuable lines in the file.
+  // The first `setDiagOn` after hydration is the one that claims the preroll.
   useEffect(() => {
+    if (!hydrated) return;
     setDiagOn(s.diag);
     if (s.diag) dlog('app', 'diagnostics on', undefined, true);
-  }, [s.diag]);
+  }, [hydrated, s.diag]);
 
   /* — the second clock every line carries — */
 
@@ -122,6 +128,10 @@ export function Diagnostics() {
   const session = s.session;
   const prevSession = useRef<typeof session>(null);
   const dir = s.diagDir;
+  // The switch gates the automatic export too: with diagnostics off there is no
+  // visible row to stop it (Settings hides them), so a picked folder alone must
+  // not keep writing a log — buddy names and all — after the feature is off.
+  const diagOn = s.diag;
   // The settle timer below, cleared only when the app goes away — which is also
   // the one case where there is nothing left to export from.
   const exportAt = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -160,7 +170,7 @@ export function Diagnostics() {
       // all land in the twenty seconds after it — which for a shared workout is
       // the most interesting part of the file. The cost is a force-close inside
       // that window losing the automatic copy, which the Save row answers.
-      if (dir)
+      if (dir && diagOn)
         exportAt.current = setTimeout(() => {
           void exportToFolder(dir, who).then((n) => dlog('data', 'log exported', { file: n }));
         }, EXPORT_SETTLE_MS);

@@ -12,8 +12,9 @@
  * mode toggle would cost a tap exactly when you have a bar in your hands.
  */
 import { useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
+import { HoldBtn } from '@/components/hold-btn';
 import { Icon, MARK_D } from '@/components/icon';
 import { Sheet } from '@/components/sheet';
 import { measureOf } from '@/data/exercises';
@@ -22,7 +23,7 @@ import { fmtDayTiny } from '@/data/i18n';
 import { themed, useColors, useThemed } from '@/design/theme';
 import { color, font, slop, wash } from '@/design/tokens';
 import { Btn, Chip, Field, H4, H6, Input, missingName, Tag } from '@/design/ui';
-import { measureLabel, resolveNames, useStore } from '@/store/workout-store';
+import { loggedLine, measureLabel, resolveNames, useStore } from '@/store/workout-store';
 
 export function ExerciseSheet() {
   const styles = useThemed(sheet);
@@ -61,9 +62,11 @@ export function ExerciseSheet() {
   const lastWhen = last.date
     ? fmtDayTiny(s.lang, new Date(`${last.date}T00:00:00`))
     : '';
+  // Keyed by id, not name: two routines can share a display name, which would
+  // collide as React keys.
   const usedIn = s.routines
     .filter((r) => r.items.some((i) => i.ex === e.id))
-    .map((r) => rInfo(r).text);
+    .map((r) => ({ id: r.id, name: rInfo(r).text }));
 
   return (
     <Sheet zIndex={70} maxHeight="80%" scrimOpacity={62} onClose={close}>
@@ -167,14 +170,16 @@ export function ExerciseSheet() {
               value={pair[1]}
               onChangeText={(v) => mutSetup(e.id, (a) => { a[i][1] = v; })}
             />
-            <Pressable
+            {/* Held, like every other destructive glyph in the app. */}
+            <HoldBtn
+              destructive
+              label="×"
               accessibilityLabel={L.remove}
               hitSlop={slop}
-              onPress={() => mutSetup(e.id, (a) => { a.splice(i, 1); })}
+              onConfirm={() => mutSetup(e.id, (a) => { a.splice(i, 1); })}
               style={styles.del}
-            >
-              <Text style={styles.delGlyph}>×</Text>
-            </Pressable>
+              labelStyle={styles.delGlyph}
+            />
           </View>
         ))}
       </View>
@@ -222,7 +227,7 @@ export function ExerciseSheet() {
                     <Text style={styles.lastN}>
                       {L.setLabel.replace('{n}', String(i + 1))}
                     </Text>
-                    <Text style={styles.lastV}>{v}</Text>
+                    <Text style={styles.lastV}>{loggedLine(v, measureOf(e), L)}</Text>
                     {m && <Icon d={MARK_D[m.mark]} size={14} color={c.accent400} strokeWidth={2.2} />}
                     <Text style={styles.lastWhen}>{i === 0 ? lastWhen : ''}</Text>
                   </View>
@@ -236,8 +241,8 @@ export function ExerciseSheet() {
 
           <H6 style={styles.head}>{L.usedIn}</H6>
           <View style={styles.usedIn}>
-            {usedIn.map((n) => (
-              <Tag key={n} tone="accent" label={n} />
+            {usedIn.map((r) => (
+              <Tag key={r.id} tone="accent" label={r.name} />
             ))}
           </View>
         </>
@@ -272,7 +277,17 @@ const sheet = themed(() => ({
   setupRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   setupKey: { flex: 1, paddingVertical: 5, paddingHorizontal: 9 },
   setupValue: { width: 64, textAlign: 'center', paddingVertical: 5, paddingHorizontal: 2 },
-  del: { width: 22, height: 26, alignItems: 'center', justifyContent: 'center' },
+  // Collapses HoldBtn's border and padding so it draws as just the glyph, the
+  // same footprint the plain Pressable had — matches the routine editor's ×.
+  del: {
+    width: 22,
+    height: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+    borderColor: 'transparent',
+  },
   delGlyph: { fontFamily: font.regular, fontSize: 15, color: color.neutral600 },
   addBtn: { alignSelf: 'flex-start', marginTop: 7 },
 

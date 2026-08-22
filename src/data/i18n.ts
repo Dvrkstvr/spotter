@@ -429,7 +429,7 @@ export const DICT = {
     diagCleared: 'The log is empty.',
     restoreFailed: 'That file is not a Spotter backup.',
     restoreNewer: 'That backup is from a newer Spotter than this one — update the app, then restore.',
-    restoreDone: 'Restored — {n} sessions logged.',
+    restoreDone: 'Restored — {c} logged.',
     restoreBody:
       'Replacing overwrites the routines, exercises and logged sessions on this phone. It cannot be undone.',
     restoreGo: 'Restore',
@@ -445,7 +445,7 @@ export const DICT = {
     addOnlyMissing: 'Adds only what this phone doesn’t have. Nothing here is overwritten.',
     restoreAllHere: 'Everything in this backup is already on this phone.',
     holdReplace: 'Hold to replace everything',
-    mergeDone: 'Added {s}, {r} and {e}.',
+    mergeDone: 'Added {s}, {r}, {e} and {p}.',
     mergeNothing: 'Nothing to add — it was all here already.',
     // A Spotter file tapped in another app — see <Intake>. The heading names
     // where it came from rather than repeating what the line below already says.
@@ -853,7 +853,7 @@ export const DICT = {
     diagCleared: 'Das Protokoll ist leer.',
     restoreFailed: 'Diese Datei ist kein Spotter-Backup.',
     restoreNewer: 'Dieses Backup stammt aus einem neueren Spotter — aktualisier erst die App, dann stell es wieder her.',
-    restoreDone: 'Wiederhergestellt — {n} Einheiten aufgezeichnet.',
+    restoreDone: 'Wiederhergestellt — {c} aufgezeichnet.',
     restoreBody:
       'Beim Ersetzen werden Routinen, Übungen und aufgezeichnete Einheiten auf diesem Handy überschrieben. Das lässt sich nicht rückgängig machen.',
     restoreGo: 'Wiederherstellen',
@@ -868,7 +868,7 @@ export const DICT = {
       'Ergänzt nur, was auf diesem Handy fehlt. Nichts davon wird hier überschrieben.',
     restoreAllHere: 'Alles aus diesem Backup ist schon auf diesem Handy.',
     holdReplace: 'Zum Ersetzen halten',
-    mergeDone: 'Ergänzt: {s}, {r} und {e}.',
+    mergeDone: 'Ergänzt: {s}, {r}, {e} und {p}.',
     mergeNothing: 'Nichts zu ergänzen — es war schon alles da.',
     intakeDoneTitle: 'Aus deinem Backup',
     intakeTitle: 'Nichts zu importieren',
