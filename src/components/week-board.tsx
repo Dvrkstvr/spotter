@@ -14,7 +14,9 @@
  * 74px target in a row that is mostly not cells, so the list is still scrollable
  * from everywhere else. These are full-width rows with nothing beside them, so
  * an immediate grab would cost the screen its scroll outright. `HOLD_MS` is what
- * buys it back, and the lift plus the buzz is what says the hold has landed.
+ * buys it back — taken from `DragList`, because a hold that meant one thing
+ * here and another in a reorder would be two gestures wearing one name — and
+ * the lift plus the buzz is what says the hold has landed.
  *
  * Positions come from `measureInWindow` at touch-down rather than from
  * `onLayout` arithmetic: the board sits in a ScrollView, so a row's offset
@@ -25,21 +27,13 @@ import { useRef, useState } from 'react';
 import { Animated, Pressable, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
+import { HOLD_MS } from '@/components/drag-list';
 import { GripIcon } from '@/components/icon';
 import { buzz } from '@/data/haptics';
 import { themed, useColors, useThemed } from '@/design/theme';
 import { color, font, radius, slop, t, tracking, wash } from '@/design/tokens';
 import { H6, missingName } from '@/design/ui';
 import { useStore } from '@/store/workout-store';
-
-/**
- * How long a finger has to stay put before it owns the row.
- *
- * Long enough that a scroll never grabs one by accident, short enough that it
- * doesn't read as a wait — and the row lifting under the thumb is the answer,
- * so the hold is never silent.
- */
-const HOLD_MS = 220;
 
 export type PoolItem = { rid: string; text: string; missing?: boolean };
 

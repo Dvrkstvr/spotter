@@ -1031,7 +1031,10 @@ in front of it, and then goes away for good. Mockup:
     up the scroll *on that cell* — a 74px target in a row that is mostly not
     cells. These are full-width rows, so an immediate grab would cost the screen
     its scroll outright; `HOLD_MS` buys it back, and the lift plus `buzz.grab` is
-    what says the hold landed.
+    what says the hold landed. The number is **imported from `DragList`**, not
+    redeclared: a hold that meant 220ms here and something else in a reorder
+    would be two gestures wearing one name, and the merge that brought the two
+    features together is exactly where a second copy would have started drifting.
   - **Pool → day assigns, day → day moves, day → anywhere else clears.** One
     gesture for all three, and a routine is never consumed: the same one goes on
     as many days as you like. The × on a filled day is the quick way out, not a
@@ -1412,10 +1415,10 @@ Keep these; they're decisions, not drift. Each is commented at its site.
   meets it; `NumCell` keeps the drawing and the refusal shake and calls
   `useNumberDrag` for the rest. Everything below is that module's. While a drag
   runs, the list's `scrollEnabled` goes off. Most sets never need the keyboard.
-  This gesture and `DragList` are why
-  `react-native-gesture-handler` is mounted at all (`GestureHandlerRootView` in
-  `src/app/_layout.tsx`). Everything else on this screen — the swipe between
-  exercises included — is still a plain `PanResponder`, and should stay one.
+  This gesture and `DragList` are why `react-native-gesture-handler` is mounted
+  at all (`GestureHandlerRootView` in `src/app/_layout.tsx`). Everything else on
+  this screen — the swipe between exercises included — is still a plain
+  `PanResponder`, and should stay one.
   **It is the app's one drag with no hold in front of it** — the stated
   exception to hold-to-grab, for the reason the next bullet gives.
   - **Touch and slide, with nothing in front of it — and the list pays for
