@@ -42,6 +42,7 @@ export function Sheet({
   maxHeight = '78%',
   scrimOpacity = 66,
   zIndex,
+  scrollEnabled = true,
   children,
 }: {
   onClose: () => void;
@@ -49,6 +50,13 @@ export function Sheet({
   maxHeight?: `${number}%`;
   scrimOpacity?: number;
   zIndex: number;
+  /**
+   * Off while a hold-to-grab drag inside the panel owns the finger. Belt and
+   * braces — an activated gesture already cancels the scroll natively — but
+   * the panel is the only scroller a sheet's list can reach, so the switch has
+   * to live here rather than at the list.
+   */
+  scrollEnabled?: boolean;
   children: ReactNode;
 }) {
   const styles = useThemed(sheet);
@@ -90,6 +98,7 @@ export function Sheet({
           <View style={styles.grabber} />
         </View>
         <ScrollView
+          scrollEnabled={scrollEnabled}
           contentContainerStyle={styles.panelContent}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}

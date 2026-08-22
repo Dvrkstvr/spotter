@@ -34,6 +34,7 @@ import {
   ViewStyle,
 } from 'react-native';
 
+import { useDragGuard } from '@/components/drag-list';
 import { buzz } from '@/data/haptics';
 import { themed, useColors, useThemed } from '@/design/theme';
 import { fill, font, linger, motion, Palette, radius, space } from '@/design/tokens';
@@ -79,6 +80,10 @@ export function HoldBtn({
   // the switch. It costs this component the store subscription it did without,
   // which is the price of the six call sites not each carrying one.
   const { s } = useStore();
+  // Inside a reorderable list this button's 700ms hold and the list's 220ms
+  // grab want the same finger, and the shorter one would win every time. Null
+  // everywhere else, which is nearly everywhere. See `useDragGuard`.
+  const drag = useDragGuard();
   const [fillV] = useState(() => new Animated.Value(0));
   const [scale] = useState(() => new Animated.Value(1));
 
@@ -108,6 +113,7 @@ export function HoldBtn({
   };
 
   const start = () => {
+    drag?.take();
     press(0.965);
     if (!hold) return;
     // Off the fill's own duration, so the ramp is measuring the same 700ms the
@@ -128,6 +134,7 @@ export function HoldBtn({
   };
 
   const release = () => {
+    drag?.give();
     press(1);
     // Silent on the frame the fill starts rewinding. A released hold has
     // already committed if it got that far, so this only ever cancels ticks

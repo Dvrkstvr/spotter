@@ -12,10 +12,8 @@
  * in place of the plain start button. Structure syncs both ways; the sets
  * column is the shared one, reps and kg stay per-person.
  */
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import {
-  Animated,
-  PanResponder,
   Pressable,
   ScrollView,
   StyleProp,
@@ -26,6 +24,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { DragList } from '@/components/drag-list';
 import { GripIcon } from '@/components/icon';
 import { HoldBtn } from '@/components/hold-btn';
 import { FullScreen } from '@/components/sheet';
@@ -67,13 +66,10 @@ export function RoutineOverlay() {
   const close = () => patch({ routineOpen: null });
   useBackClose(close);
 
-  // The plain editor's reorder — the co-draft rows carry their own in
-  // `DraftRows`. Same gesture, but the pitch is measured per row rather than
-  // taken from the first one: the pair gap rides between rows, so a uniform
-  // pitch would land a long drag a row short of the line it drew.
-  const [drag, setDrag] = useState<{ from: number; to: number } | null>(null);
-  const [dy] = useState(() => new Animated.Value(0));
-  const heights = useRef<number[]>([]);
+  // A row of either skin's list is in the air, so the editor's scroller stands
+  // down for the length of the drag. The reorder itself is `DragList`'s — hold
+  // the row, move it, let go — and the co-draft rows carry their own list.
+  const [scrub, setScrub] = useState(false);
 
   const r = routine(s.routineOpen);
   if (!r) return null;
@@ -85,48 +81,6 @@ export function RoutineOverlay() {
   // A grip on a list of one is furniture, so both the rows and the column
   // header's spacer key off this.
   const reorderable = !draft && r.items.length > 1;
-  const rowH = (n: number) => (heights.current[n] ?? 56) + t.gap;
-  const landing = (from: number, offset: number) => {
-    let to = from;
-    let acc = 0;
-    if (offset > 0)
-      while (to < r.items.length - 1 && offset > acc + rowH(to + 1) / 2) {
-        acc += rowH(to + 1);
-        to++;
-      }
-    else
-      while (to > 0 && -offset > acc + rowH(to - 1) / 2) {
-        acc += rowH(to - 1);
-        to--;
-      }
-    return to;
-  };
-  // Rebuilt every render so the closures always see the current rows — React
-  // Native reads handler props at event time (the ReorderRows pattern).
-  const gripFor = (from: number) =>
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 2,
-      onPanResponderGrant: () => {
-        dy.setValue(0);
-        setDrag({ from, to: from });
-      },
-      onPanResponderMove: (_, g) => {
-        dy.setValue(g.dy);
-        const to = landing(from, g.dy);
-        setDrag((d) => (d && d.to !== to ? { ...d, to } : d));
-      },
-      onPanResponderRelease: (_, g) => {
-        const to = landing(from, g.dy);
-        if (to !== from) moveRoutineItem(r.id, from, to);
-        dy.setValue(0);
-        setDrag(null);
-      },
-      onPanResponderTerminate: () => {
-        dy.setValue(0);
-        setDrag(null);
-      },
-    });
 
   // Every rule that puts this routine on the calendar, in the same words the
   // Plan row pills and the plan sheet use — one formatter, three surfaces.
@@ -165,6 +119,9 @@ export function RoutineOverlay() {
 
       <ScrollView
         style={styles.scroll}
+        // Off while a row is in the air — belt and braces behind the grab,
+        // which already cancels the scroll natively when it activates.
+        scrollEnabled={!scrub}
         contentContainerStyle={[styles.body, { paddingBottom: 20 + insets.bottom }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
@@ -210,10 +167,24 @@ export function RoutineOverlay() {
         </View>
 
         {draft ? (
-          <DraftRows r={r} draft={draft} buddy={s.buddy ?? ''} />
+          <DraftRows r={r} draft={draft} buddy={s.buddy ?? ''} onScrub={setScrub} />
         ) : (
-          <View style={{ gap: t.gap }}>
-            {r.items.map((item, n) => {
+          // The slot is what travels, not the row inside it: the pair gutter
+          // lives in the slot, so a dragged row carries its own gap along and
+          // the pitch `DragList` measures is the one the eye sees.
+          <DragList
+            count={r.items.length}
+            keyOf={(n) => `${r.items[n].ex}-${n}`}
+            rowStyle={() => styles.slot}
+            // The screen's own colour, so the row in flight covers what it
+            // slides over instead of printing through it.
+            liftStyle={{ backgroundColor: c.bg }}
+            gap={t.gap}
+            onReorder={(from, to) => moveRoutineItem(r.id, from, to)}
+            onScrub={setScrub}
+          >
+            {(n, d) => {
+              const item = r.items[n];
               const e = ex(item.ex);
               const name = e ? exInfo(e) : null;
               // A superset, and the only place in the app one is made: the
@@ -221,35 +192,15 @@ export function RoutineOverlay() {
               // only ever reads it. Adjacency, so the gap between two rows is
               // literally where the question lives.
               const paired = item.with === 'next' && n + 1 < r.items.length;
-              const isDragging = drag?.from === n;
-              const isTarget = !!drag && drag.to === n && drag.from !== n;
               return (
-                <Animated.View
-                  key={`${item.ex}-${n}`}
-                  onLayout={(e) => {
-                    heights.current[n] = e.nativeEvent.layout.height;
-                  }}
-                  style={[
-                    styles.slot,
-                    { borderTopColor: isTarget ? c.accent : 'transparent' },
-                    // The screen's own colour, so the row in flight covers
-                    // what it slides over instead of printing through it.
-                    isDragging && {
-                      transform: [{ translateY: dy }],
-                      zIndex: 2,
-                      elevation: 2,
-                      backgroundColor: c.bg,
-                    },
-                  ]}
-                >
+                <>
                 <View style={styles.row}>
+                  {/* Not the handle any more — the slot is. It stays because a
+                      list has to say it reorders, and it still goes accent to
+                      report which row is in the air. */}
                   {reorderable && (
-                    <View
-                      {...gripFor(n).panHandlers}
-                      accessibilityLabel={L.dragReorder}
-                      style={styles.grip}
-                    >
-                      <GripIcon color={isDragging ? c.accent : c.neutral700} />
+                    <View accessibilityLabel={L.dragReorder} style={styles.grip}>
+                      <GripIcon color={d.held ? c.accent : c.neutral700} />
                     </View>
                   )}
                   <View style={styles.rowText}>
@@ -340,10 +291,10 @@ export function RoutineOverlay() {
                     {paired && <Text style={styles.pairLabel}>{L.superset}</Text>}
                   </Pressable>
                 )}
-                </Animated.View>
+                </>
               );
-            })}
-          </View>
+            }}
+          </DragList>
         )}
 
         {draft?.buddyPicking && (
@@ -406,77 +357,48 @@ export function RoutineOverlay() {
 }
 
 /**
- * The co-draft's rows: grip to drag-reorder (the ReorderRows gesture, with
- * the same landing-line cue), an initial chip for whoever added the row, and
- * the buddy's reps/weight as a read-only line. Number cells keep local text
- * while focused so an incoming broadcast never clobbers mid-typing.
+ * The co-draft's rows: hold one to reorder it (`DragList`, the app's one drag
+ * grammar, with the same landing-line cue), an initial chip for whoever added
+ * the row, and the buddy's reps/weight as a read-only line. Number cells keep
+ * local text while focused so an incoming broadcast never clobbers mid-typing.
  */
-function DraftRows({ r, draft, buddy }: { r: Routine; draft: CoDraft; buddy: string }) {
+function DraftRows({
+  r,
+  draft,
+  buddy,
+  onScrub,
+}: {
+  r: Routine;
+  draft: CoDraft;
+  buddy: string;
+  onScrub: (on: boolean) => void;
+}) {
   const styles = useThemed(sheet);
   const c = useColors();
   const { s, L, ex, exInfo, gInfo, kInfo, mutRoutine, moveRoutineItem } = useStore();
 
-  const [drag, setDrag] = useState<{ from: number; to: number } | null>(null);
-  const [rowHeight, setRowHeight] = useState(52);
-  const [dy] = useState(() => new Animated.Value(0));
-
-  const landing = (from: number, offset: number) =>
-    Math.max(0, Math.min(r.items.length - 1, from + Math.round(offset / rowHeight)));
-
-  // Rebuilt every render so the closures always see the current row count;
-  // React Native reads handler props at event time (the ReorderRows pattern).
-  const responderFor = (from: number) =>
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 2,
-      onPanResponderGrant: () => {
-        dy.setValue(0);
-        setDrag({ from, to: from });
-      },
-      onPanResponderMove: (_, g) => {
-        dy.setValue(g.dy);
-        const to = landing(from, g.dy);
-        setDrag((d) => (d && d.to !== to ? { ...d, to } : d));
-      },
-      onPanResponderRelease: (_, g) => {
-        const to = landing(from, g.dy);
-        if (to !== from) moveRoutineItem(r.id, from, to);
-        dy.setValue(0);
-        setDrag(null);
-      },
-      onPanResponderTerminate: () => {
-        dy.setValue(0);
-        setDrag(null);
-      },
-    });
-
   return (
-    <View>
-      {r.items.map((item, n) => {
+    <DragList
+      count={r.items.length}
+      keyOf={(n) => `${r.items[n].ex}-${n}`}
+      rowStyle={() => [styles.row, styles.draftRow]}
+      onReorder={(from, to) => moveRoutineItem(r.id, from, to)}
+      onScrub={onScrub}
+    >
+      {(n, d) => {
+        const item = r.items[n];
         const e = ex(item.ex);
         const name = e ? exInfo(e) : null;
         const by = draft.addedBy[item.ex] ?? myName(s);
         const theirs = by === buddy;
         const vals = draft.buddyVals[item.ex];
-        const isDragging = drag?.from === n;
-        const isTarget = !!drag && drag.to === n && drag.from !== n;
         return (
-          <Animated.View
-            key={`${item.ex}-${n}`}
-            onLayout={n === 0 ? (ev) => setRowHeight(ev.nativeEvent.layout.height) : undefined}
-            style={[
-              styles.row,
-              styles.draftRow,
-              { borderTopColor: isTarget ? c.accent : 'transparent' },
-              isDragging && { transform: [{ translateY: dy }], zIndex: 2, elevation: 2 },
-            ]}
-          >
-            <View
-              {...responderFor(n).panHandlers}
-              accessibilityLabel={L.dragReorder}
-              style={styles.grip}
-            >
-              <GripIcon color={isDragging ? c.accent : c.neutral700} />
+          <>
+            {/* Not the handle any more — the row is. It stays as the word this
+                app uses for "this one moves", and still reports which row is
+                in the air. */}
+            <View accessibilityLabel={L.dragReorder} style={styles.grip}>
+              <GripIcon color={d.held ? c.accent : c.neutral700} />
             </View>
             <View style={[styles.chip, theirs ? styles.chipBuddy : styles.chipMe]}>
               <Text style={[styles.chipText, theirs ? styles.chipTextBuddy : styles.chipTextMe]}>
@@ -537,10 +459,10 @@ function DraftRows({ r, draft, buddy }: { r: Routine; draft: CoDraft; buddy: str
               style={styles.colDel}
               labelStyle={styles.delGlyph}
             />
-          </Animated.View>
+          </>
         );
-      })}
-    </View>
+      }}
+    </DragList>
   );
 }
 

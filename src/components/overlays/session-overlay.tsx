@@ -47,6 +47,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 
 import { HoldBtn } from '@/components/hold-btn';
+import { DragList } from '@/components/drag-list';
 import { CHECK_D, GripIcon, Icon, MARK_D } from '@/components/icon';
 import { FullScreen, Sheet } from '@/components/sheet';
 import { Tip } from '@/components/tip';
@@ -1563,61 +1564,15 @@ function Overview({ onClose, onJump }: { onClose: () => void; onJump: (to: numbe
   } = useStore();
   useBackClose(onClose);
 
-  // The reorder drag, in ReorderRows' grammar — grip, accent landing line,
-  // release commits. What it can't borrow is the uniform row pitch: a pair's
-  // block is taller than a lone row, so each stop's height is measured where
-  // it lays out and the landing walks the real heights instead.
-  const [drag, setDrag] = useState<{ from: number; to: number } | null>(null);
-  const [dy] = useState(() => new Animated.Value(0));
-  const heights = useRef<number[]>([]);
+  // A stop is in the air, so the sheet's own scroller stands down for the
+  // length of the drag — the panel is the only scroller this list can reach.
+  const [scrub, setScrub] = useState(false);
 
   const session = s.session;
   if (!session) return null;
   const tot = totals();
 
   const stops = stopsOf(session.list);
-  const stopH = (n: number) => heights.current[n] ?? 48;
-  const landing = (from: number, offset: number) => {
-    let to = from;
-    let acc = 0;
-    if (offset > 0)
-      while (to < stops.length - 1 && offset > acc + stopH(to + 1) / 2) {
-        acc += stopH(to + 1);
-        to++;
-      }
-    else
-      while (to > 0 && -offset > acc + stopH(to - 1) / 2) {
-        acc += stopH(to - 1);
-        to--;
-      }
-    return to;
-  };
-  // Rebuilt every render so the closures always see the current stops —
-  // React Native reads handler props at event time (the ReorderRows pattern).
-  const gripFor = (from: number) =>
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 2,
-      onPanResponderGrant: () => {
-        dy.setValue(0);
-        setDrag({ from, to: from });
-      },
-      onPanResponderMove: (_, g) => {
-        dy.setValue(g.dy);
-        const to = landing(from, g.dy);
-        setDrag((d) => (d && d.to !== to ? { ...d, to } : d));
-      },
-      onPanResponderRelease: (_, g) => {
-        const to = landing(from, g.dy);
-        if (to !== from) moveSessionStop(from, to);
-        dy.setValue(0);
-        setDrag(null);
-      },
-      onPanResponderTerminate: () => {
-        dy.setValue(0);
-        setDrag(null);
-      },
-    });
 
   // Where the two lists have drifted apart — the same diff the buddy line
   // reads, over the whole of their session rather than the one exercise they
@@ -1642,20 +1597,35 @@ function Overview({ onClose, onJump }: { onClose: () => void; onJump: (to: numbe
     });
 
   return (
-    <Sheet zIndex={82} maxHeight="80%" onClose={onClose}>
+    <Sheet zIndex={82} maxHeight="80%" scrollEnabled={!scrub} onClose={onClose}>
       <H4>{session.name}</H4>
       <Text style={styles.ovSub}>
         {tot.done} {L.ofSets} {tot.all} {L.setsWord} · {clock}
       </Text>
 
-      <View style={styles.ovList}>
-        {/* By stop rather than by exercise, so a pair reads here as the one
-            thing it is on the screen behind. There is no pairing control:
-            a superset is made in the routine and only ever read in a session,
-            so this sheet can show one and never offer one — which is also why
-            the drag moves a whole stop: a grip that could pull a pair apart
-            would be an unpairing control wearing a reorder's clothes. */}
-        {stops.map((stop, n) => {
+      {/* By stop rather than by exercise, so a pair reads here as the one
+          thing it is on the screen behind. There is no pairing control:
+          a superset is made in the routine and only ever read in a session,
+          so this sheet can show one and never offer one — which is also why
+          the drag moves a whole stop: a hold that could pull a pair apart
+          would be an unpairing control wearing a reorder's clothes.
+
+          The pitch `DragList` measures is per stop for the same reason: a
+          pair's block is taller than a lone row, and a uniform one would land
+          a long drag rows away from the line it drew. */}
+      <DragList
+        style={styles.ovList}
+        count={stops.length}
+        keyOf={(n) => `${session.list[stops[n].head].ex}-${stops[n].head}`}
+        rowStyle={() => styles.ovStop}
+        // The surface's own colour, so the stop in flight covers what it
+        // slides over instead of printing through it.
+        liftStyle={{ backgroundColor: c.surface }}
+        onReorder={moveSessionStop}
+        onScrub={setScrub}
+      >
+        {(n, d) => {
+          const stop = stops[n];
           const rows = stop.ids.map((k) => {
             const entry = session.list[k];
             const meta = ex(entry.ex);
@@ -1724,43 +1694,22 @@ function Overview({ onClose, onJump }: { onClose: () => void; onJump: (to: numbe
           ) : (
             body
           );
-          const isDragging = drag?.from === n;
-          const isTarget = !!drag && drag.to === n && drag.from !== n;
           return (
-            <Animated.View
-              key={`${session.list[stop.head].ex}-${stop.head}`}
-              onLayout={(e) => {
-                heights.current[n] = e.nativeEvent.layout.height;
-              }}
-              style={[
-                styles.ovStop,
-                { borderTopColor: isTarget ? c.accent : 'transparent' },
-                // The surface's own colour, so the row in flight covers what
-                // it slides over instead of printing through it.
-                isDragging && {
-                  transform: [{ translateY: dy }],
-                  zIndex: 2,
-                  elevation: 2,
-                  backgroundColor: c.surface,
-                },
-              ]}
-            >
-              {/* One grip per stop, absent on a list of one: a drag with
-                  nowhere to go is furniture. */}
+            <>
+              {/* Not the handle any more — the stop is — but it stays as the
+                  word this app uses for "this one moves", and it still says
+                  which stop is in the air. Absent on a list of one, where a
+                  drag with nowhere to go is furniture. */}
               {stops.length > 1 && (
-                <View
-                  {...gripFor(n).panHandlers}
-                  accessibilityLabel={L.dragReorder}
-                  style={styles.ovGrip}
-                >
-                  <GripIcon color={isDragging ? c.accent : c.neutral700} />
+                <View accessibilityLabel={L.dragReorder} style={styles.ovGrip}>
+                  <GripIcon color={d.held ? c.accent : c.neutral700} />
                 </View>
               )}
               <View style={styles.ovStopBody}>{inner}</View>
-            </Animated.View>
+            </>
           );
-        })}
-      </View>
+        }}
+      </DragList>
 
       {/* The ledger version of the buddy line's offer: everything in their
           session that isn't in yours, not just whatever they happen to be

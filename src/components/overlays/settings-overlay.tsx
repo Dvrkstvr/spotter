@@ -86,6 +86,8 @@ export function SettingsOverlay() {
   const { s, L, patch, allEx, reorder, endPairing, exportState, resetTips } = useStore();
   const insets = useSafeAreaInsets();
   const dark = useDark();
+  /** A row of one of the two lists is in the air. */
+  const [scrub, setScrub] = useState(false);
   const close = () => patch({ settingsOpen: false });
   useBackClose(close);
 
@@ -241,6 +243,10 @@ export function SettingsOverlay() {
 
       <ScrollView
         style={styles.scroll}
+        // Off while a row is in the air. Belt and braces — an activated grab
+        // already cancels the scroll natively — but this screen owns the
+        // scroller its two reorderable lists sit in, so it says so.
+        scrollEnabled={!scrub}
         contentContainerStyle={[styles.body, { paddingBottom: 20 + insets.bottom }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
@@ -363,6 +369,7 @@ export function SettingsOverlay() {
             onLabel={(i, v) => setLabel('groups', i, v)}
             onDelete={(i) => patch((st) => ({ groups: st.groups.filter((_, j) => j !== i) }))}
             onReorder={(from, to) => reorder('groups', from, to)}
+            onScrub={setScrub}
           />
           <Btn
             variant="ghost"
@@ -382,6 +389,7 @@ export function SettingsOverlay() {
             onLabel={(i, v) => setLabel('kinds', i, v)}
             onDelete={(i) => patch((st) => ({ kinds: st.kinds.filter((_, j) => j !== i) }))}
             onReorder={(from, to) => reorder('kinds', from, to)}
+            onScrub={setScrub}
           />
           <Btn
             variant="ghost"

@@ -2,18 +2,25 @@
  * The Settings screen's editable, reorderable list — used for both muscle
  * groups and equipment, which are identical in the design.
  *
- * The web original reorders with HTML5 drag-and-drop; here a pan gesture on the
- * grip does the same job. Both of the original's cues are kept: the grip turns
- * accent while dragging, and a 2px accent line marks where the row will land.
+ * The web original reorders with HTML5 drag-and-drop; here `DragList` does the
+ * same job — hold the row, move it, let go. Both of the original's cues are
+ * kept: the grip turns accent while dragging, and a 2px accent line marks where
+ * the row will land.
+ *
+ * The grip is no longer the handle — the row is — but it stays, because a list
+ * has to *say* it reorders and this is the app's word for that. See `DragList`.
+ * The label itself is a text field, so a hold that starts there goes to the
+ * keyboard rather than to the drag; the grip, the count and the space between
+ * them are what a thumb reaching to move a row lands on.
  *
  * A row with an empty label is a divider in the lists that read these — hence
  * the "leave empty for a divider" placeholder. A divider is an added row like
  * any other, so it drags anywhere, the seeded block included; only the × is
  * withheld from the seeded rows themselves (see `fixed`).
  */
-import { useState } from 'react';
-import { Animated, PanResponder, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
+import { DragList } from '@/components/drag-list';
 import { GripIcon } from '@/components/icon';
 import { HoldBtn } from '@/components/hold-btn';
 import { Input } from '@/design/ui';
@@ -45,78 +52,36 @@ export function ReorderRows({
   onLabel,
   onDelete,
   onReorder,
+  onScrub,
 }: {
   rows: ReorderRow[];
   placeholder: string;
   onLabel: (index: number, value: string) => void;
   onDelete: (index: number) => void;
   onReorder: (from: number, to: number) => void;
+  /** Passed up to the Settings scroller for the length of a drag. */
+  onScrub?: (on: boolean) => void;
 }) {
   const styles = useThemed(sheet);
   const c = useColors();
   const { L } = useStore();
-  const [drag, setDrag] = useState<{ from: number; to: number } | null>(null);
-  const [rowHeight, setRowHeight] = useState(36);
-  const [dy] = useState(() => new Animated.Value(0));
-
-  /** Row pitch — the distance one row travels to displace the next. */
-  const pitch = rowHeight + GAP;
-  const landing = (from: number, offset: number) =>
-    Math.max(0, Math.min(rows.length - 1, from + Math.round(offset / pitch)));
-
-  // Rebuilt every render, so the closures always see the current pitch and row
-  // count. React Native reads the handler props at event time, so a gesture in
-  // flight picks up the newest ones.
-  const responderFor = (from: number) =>
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 2,
-      onPanResponderGrant: () => {
-        dy.setValue(0);
-        setDrag({ from, to: from });
-      },
-      onPanResponderMove: (_, g) => {
-        dy.setValue(g.dy);
-        const to = landing(from, g.dy);
-        setDrag((d) => (d && d.to !== to ? { ...d, to } : d));
-      },
-      onPanResponderRelease: (_, g) => {
-        const to = landing(from, g.dy);
-        if (to !== from) onReorder(from, to);
-        dy.setValue(0);
-        setDrag(null);
-      },
-      onPanResponderTerminate: () => {
-        dy.setValue(0);
-        setDrag(null);
-      },
-    });
 
   return (
-    <View style={{ gap: GAP }}>
-      {rows.map((row, i) => {
-        const isDragging = drag?.from === i;
-        const isTarget = !!drag && drag.to === i && drag.from !== i;
+    <DragList
+      count={rows.length}
+      keyOf={(i) => rows[i].key}
+      rowStyle={() => styles.row}
+      liftStyle={{ backgroundColor: c.bg }}
+      gap={GAP}
+      onReorder={onReorder}
+      onScrub={onScrub}
+    >
+      {(i, d) => {
+        const row = rows[i];
         return (
-          <Animated.View
-            key={row.key}
-            onLayout={i === 0 ? (e) => setRowHeight(e.nativeEvent.layout.height) : undefined}
-            style={[
-              styles.row,
-              { borderTopColor: isTarget ? c.accent : 'transparent' },
-              isDragging && {
-                transform: [{ translateY: dy }],
-                zIndex: 2,
-                elevation: 2,
-              },
-            ]}
-          >
-            <View
-              {...responderFor(i).panHandlers}
-              accessibilityLabel={L.dragReorder}
-              style={styles.grip}
-            >
-              <GripIcon color={isDragging ? c.accent : c.neutral700} />
+          <>
+            <View accessibilityLabel={L.dragReorder} style={styles.grip}>
+              <GripIcon color={d.held ? c.accent : c.neutral700} />
             </View>
             <Input
               style={styles.input}
@@ -144,10 +109,10 @@ export function ReorderRows({
                 labelStyle={styles.delGlyph}
               />
             )}
-          </Animated.View>
+          </>
         );
-      })}
-    </View>
+      }}
+    </DragList>
   );
 }
 

@@ -59,9 +59,68 @@ to the ported palette, and that is the property to preserve.
   cross-fade two layers instead. The hand-tuned decorative tails — fades,
   glows, the counter nudge, the hold rewind — are durations in `linger`,
   named for the role; a screen never carries a raw timing literal.
-- **Small controls share one reach.** Every × glyph, grip and shutter is drawn
-  at 20–26px and takes `hitSlop={slop}` from tokens — no per-site guesses, so
-  no two ×s in the app are differently hard to hit. The selectable pill is
+- **A list reorders by hold-to-grab, and there is one implementation of it.**
+  `DragList` in `src/components/drag-list.tsx`: hold a row for `HOLD_MS`
+  (220 ms), move it, let go. Four lists used to hand-roll the same
+  `PanResponder` on a 20px grip — the Settings groups and equipment, the
+  routine editor's rows, the co-draft's, and the session overview's stops —
+  each calling itself "the ReorderRows pattern" in a comment while quietly
+  disagreeing with the others about pitch. Calvin's call: one grammar, and this
+  is it. Five things follow, and each is a place the old grip was hiding a
+  decision:
+  - **The number drag is the stated exception, and it stays one.**
+    `num-drag.tsx` takes the cell after 4px of travel with no wait. That is the
+    same trade decided the other way, not an inconsistency: a number cell buys
+    its immediacy by giving up the scroll *on that cell*, which it can afford
+    because it is a 74px target in a row that is mostly not cells. A full-width
+    row has nothing beside it, so an immediate grab would cost the screen its
+    scroll outright. Never "unify" that one.
+  - **The grip stays, and stops being the handle.** The row is what you hold
+    now, so the glyph is no longer a control — but a list still has to *say*
+    it reorders, and this is the app's word for that. It keeps its 20×26 slot
+    and still goes accent to report which row is in the air; it loses nothing
+    else, and the same choice is applied at all four sites so no list is
+    differently discoverable. It is still withheld where a list of one would
+    make a drag furniture, which is the same thing `DragList` refuses to arm
+    for.
+  - **Pitch is measured per row, everywhere.** Two of the four used to take the
+    first row's height for all of them, which is true of theirs and false of
+    the other two — a superset pair's block is taller than a lone stop, and the
+    routine editor's slot carries its pair gap along inside it. The landing
+    walks the real heights outward from the row in hand, which is also exactly
+    what the uniform lists were already getting.
+  - **A control that holds the finger longer than the grab does says so**
+    (`useDragGuard`). A `HoldBtn`'s own hold runs 700 ms, so a 220 ms grab
+    would take the touch off every × in a reorderable list and nothing could be
+    deleted from one. A pressed `HoldBtn` claims the touch and the list stands
+    its gesture down — declared by the control, because the control is what
+    knows. A `TextInput` needs no such thing: Android's `ReactEditText`
+    disallow already cancels the grab, which is the one place in the app that
+    fact helps rather than hurts. A tap — the pair gutter, the overview's jump
+    — is over before the hold lands.
+  - **The week board's `skew` has no twin in `DragList`, and that is not an
+    oversight.** `skew` reconciles a gesture's `absoluteY` with
+    `measureInWindow`, two spaces that differ by the status bar under
+    edge-to-edge, and the week board enters both because a routine travels
+    between two *different* lists. A reorder never leaves its own list, so it
+    never leaves relative space — the offset is `translationY` and nothing is
+    measured in window coordinates. If this ever grows absolute hit-testing
+    (auto-scroll at the edges, the week board folded in), the calibration to
+    copy is that one, read off the row under the finger. Never a status-bar
+    constant.
+
+  What it costs: on a screen whose scroller is `keyboardShouldPersistTaps` =
+  `handled`, a grab does not land while the keyboard is up — the ScrollView
+  takes the touch so it can dismiss the keyboard, and taking it cancels every
+  handler the orchestrator owns (the same fact the session list answers with
+  `always`). Accepted rather than fixed: you are not reordering while you type,
+  and buying it back would cost those screens tap-away-to-dismiss with nothing
+  to replace it.
+- **Small controls share one reach.** Every × glyph and shutter is drawn at
+  20–26px and takes `hitSlop={slop}` from tokens — no per-site guesses, so
+  no two ×s in the app are differently hard to hit. (A grip is drawn to the
+  same 20×26 and takes none, being an affordance rather than a control — see
+  hold-to-grab above.) The selectable pill is
   `Chip` in ui.tsx (radio semantics, `missing`-translation styling built in);
   four screens had hand-rolled it apart before it was extracted.
 - **`color-mix()` has no RN equivalent** — use the `wash.*` helpers in tokens,
@@ -1157,10 +1216,12 @@ Keep these; they're decisions, not drift. Each is commented at its site.
     costs nothing.
 - **Numbers are also a gesture**: touch a kg or reps cell and slide up or down
   to step it. While a drag runs, the list's `scrollEnabled` goes off. Most sets
-  never need the keyboard. This one gesture is the reason
+  never need the keyboard. This gesture and `DragList` are why
   `react-native-gesture-handler` is mounted at all (`GestureHandlerRootView` in
   `src/app/_layout.tsx`). Everything else on this screen — the swipe between
   exercises included — is still a plain `PanResponder`, and should stay one.
+  **It is the app's one drag with no hold in front of it** — the stated
+  exception to hold-to-grab, for the reason the next bullet gives.
   - **Touch and slide, with nothing in front of it — and the list pays for
     that.** There used to be a 120 ms stillness test (`HOLD_MS`,
     `activateAfterLongPress`), which is what told a scrub apart from the list's
@@ -1269,12 +1330,12 @@ Keep these; they're decisions, not drift. Each is commented at its site.
   unticked stays legal and logs nothing at Finish; removing is for when the
   shorter day *is* the plan.
 - **The overview reorders the session, and it moves stops, not exercises.**
-  The same grip-and-landing drag as every other list here, with one
-  difference: the pitch is measured per stop, because a pair's block is
-  taller than a lone row and a uniform pitch would land a long drag rows
-  away from the line it drew. A pair travels whole — a grip that could pull
-  one apart would be an unpairing control, and a running workout has no
-  pairing controls — and `moveSessionStop` clears a dangling `with` rather
+  `DragList` like every other list here — hold the stop, move it, let go — and
+  the pitch it measures is per stop, because a pair's block is taller than a
+  lone row and a uniform one would land a long drag rows away from the line it
+  drew. A pair travels whole — a hold that could pull one apart would be an
+  unpairing control, and a running workout has no pairing controls — and
+  `moveSessionStop` clears a dangling `with` rather
   than handing it the partner it never had (`appendSessionEx`'s rule, met
   from the other side). `active` keeps naming the exercise it named,
   wherever that exercise lands; the buddy needs no protocol change, because
@@ -1565,9 +1626,11 @@ Keep these; they're decisions, not drift. Each is commented at its site.
   machine you're standing at.
 - The routine editor has no Edit button. The design's only ever swapped its own
   label; the rows were always editable.
-- **The plain editor's rows reorder too, not just the co-draft's.** Same grip,
-  same `moveRoutineItem`; the dragged slot carries its pair gap along, and the
-  pitch is measured per row for it. A drag out of a pair breaks it with no
+- **The plain editor's rows reorder too, not just the co-draft's.** Same
+  `DragList`, same `moveRoutineItem`. What travels is the *slot*, not the row
+  inside it: the pair gutter lives in the slot, so a dragged row carries its
+  own gap along and the pitch measured for it is the one the eye sees. A drag
+  out of a pair breaks it with no
   bookkeeping and a drag back into adjacency remakes it — `with` is adjacency,
   and the gap glyph right there shows which of the two you just did.
 - **A routine's reps and kg are a plan, and only a plan reaches the session.**
