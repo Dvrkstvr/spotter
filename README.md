@@ -182,6 +182,33 @@ Neither is visible anywhere in the UI — the launcher shows `expo.name`. If the
 package id is ever worth changing, it needs an export/import path first, and
 both phones migrated in the same session.
 
+## Releasing it
+
+The sideload loop above signs with Expo's debug keystore, which Play will not
+accept and which a release-signed build cannot install over. Before the first
+real release, read **[docs/release-signing.md](docs/release-signing.md)** —
+switching keys costs an uninstall on every phone that already has the app, so
+both diaries have to be backed up first.
+
+```bash
+npm run build:aab     # the App Bundle Play takes
+npm run build:apk     # the APK to sideload
+```
+
+Both check that `app.json` and `package.json` state the same version (`npm run
+version -- --fix` syncs them, app.json being the source of truth) and print which
+key is about to sign. A debug-signed artefact is named `-debugsigned` so the file
+says what it is.
+
+Store-submission material lives in `docs/`:
+
+| File | What it is |
+| ---- | ---------- |
+| [privacy-policy.md](docs/privacy-policy.md) | English privacy policy — needs a public URL and a postal address |
+| [datenschutz.md](docs/datenschutz.md) | the German one, for the German listing |
+| [play-data-safety.md](docs/play-data-safety.md) | the Data safety answers, with the reason for each, plus the two permission declarations Play will ask about |
+| [release-signing.md](docs/release-signing.md) | making the upload key, and the one-time migration off the debug key |
+
 ## Checks
 
 ```bash
@@ -191,6 +218,14 @@ npm run typecheck
 ```bash
 npm run lint
 ```
+
+```bash
+npm run test
+```
+
+Vitest over the pure modules in `src/data` — the storage migrations and backup
+merge (`migrate.ts`) and the AI coach's parse/resolve seam (`coach.ts`). Plain
+Node, no React Native harness; `npm run test:watch` while working on either.
 
 ## What's in it
 
@@ -259,3 +294,10 @@ design (which was in-memory and pinned to Friday 7 August 2026):
 - **"Today" is live.** Dates come from `src/data/date.ts`; the Plan screen
   shows the real current month; finished sessions are logged by real date and
   feed the "last time" ghosts and "last done N days ago".
+
+## Licence
+
+Proprietary — see [LICENSE](LICENSE). The open-source components bundled into
+the app keep their own terms; the notices they require are in
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md), regenerated with `npm run
+licenses`.

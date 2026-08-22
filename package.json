@@ -1,7 +1,7 @@
 {
   "name": "spotter",
   "main": "expo-router/entry",
-  "version": "1.0.0",
+  "version": "1.2.6",
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.2",
     "@react-native-async-storage/async-storage": "2.2.0",
@@ -41,7 +41,8 @@
     "@types/react": "~19.1.10",
     "eslint": "^9.0.0",
     "eslint-config-expo": "~10.0.0",
-    "typescript": "~5.9.2"
+    "typescript": "~5.9.2",
+    "vitest": "^4.1.11"
   },
   "scripts": {
     "start": "expo start",
@@ -51,8 +52,13 @@
     "update:emu": "node scripts/update-emulators.mjs",
     "buddy-relay": "node scripts/buddy-relay.mjs",
     "build:apk": "node scripts/build-apk.mjs",
+    "build:aab": "node scripts/build-apk.mjs --aab",
     "install:apk": "node scripts/install-apk.mjs",
     "icons": "node scripts/make-icons.mjs",
+    "version": "node scripts/sync-version.mjs",
+    "licenses": "node scripts/licenses.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "android": "expo run:android",
     "ios": "expo run:ios",

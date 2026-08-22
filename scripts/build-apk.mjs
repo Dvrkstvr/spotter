@@ -1,14 +1,21 @@
 /**
- * Release-APK build, one command: Gradle-builds the app and drops the APK
+ * Release build, one command: Gradle-builds the app and drops the artefact
  * into `_builds/` with a date + git-hash name — the file you sideload onto
  * the two phones. Windows-only, like the rest of this project's tooling.
  *
- *   npm run build:apk
+ *   npm run build:apk        the APK to sideload
+ *   npm run build:aab        the App Bundle Play wants
  *
  * Skip-if-already-there: `android/` is regenerated (expo prebuild) when it is
  * missing or older than `app.json`; ANDROID_HOME / JAVA_HOME are only filled in
  * when the environment doesn't provide them (Unity's SDK and JDK, same as the
  * rest of the repo).
+ *
+ * Two things are checked before Gradle runs, because both are cheap here and
+ * expensive afterwards: that the two files stating the version agree, and which
+ * key is about to sign this. A debug-signed build still happens — it is the
+ * sideload loop — but it is *named* `-debugsigned`, so the file in `_builds/`
+ * says what it is rather than looking like the one you meant to upload.
  */
 import { execFileSync } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, statSync } from 'node:fs';
@@ -36,6 +43,33 @@ if (!env.JAVA_HOME) {
 const run = (exe, args, cwd) =>
   execFileSync(exe, args, { cwd: cwd ?? repoRoot, env, stdio: 'inherit', shell: true });
 
+/* — what we are building — */
+
+// `--aab` is the same errand with a different Gradle task: Play takes an App
+// Bundle, a phone takes an APK, and both are this one release build.
+const aab = process.argv.includes('--aab');
+
+/* — the version the two files state has to be one version — */
+
+// A release artefact carrying the wrong versionName is a wrong artefact, so
+// this fails the build rather than warning. The dev loop never runs it.
+try {
+  execFileSync('node', [path.join(repoRoot, 'scripts', 'sync-version.mjs')], {
+    cwd: repoRoot, env, stdio: 'inherit', shell: true,
+  });
+} catch {
+  process.exit(1);
+}
+
+/* — which key is about to sign this (see plugins/with-release-signing.js) — */
+
+const signed = existsSync(path.join(repoRoot, 'keystore.properties')) || !!env.SPOTTER_KEYSTORE;
+if (!signed) {
+  log('no keystore.properties and no SPOTTER_KEYSTORE — signing with the DEBUG key');
+  log('  a debug-signed build cannot be uploaded to Play, and will not install');
+  log('  over a release-signed one — see docs/release-signing.md');
+}
+
 /* — native project: generated, so regenerate when absent or behind — */
 
 // Staleness matters as much as absence: app name, icons, scheme and permission
@@ -52,12 +86,15 @@ if (missing || stale) {
 
 /* — the build — */
 
-log('gradlew assembleRelease');
-run(path.join(repoRoot, 'android', 'gradlew.bat'), ['assembleRelease'], path.join(repoRoot, 'android'));
+const task = aab ? 'bundleRelease' : 'assembleRelease';
+log(`gradlew ${task}`);
+run(path.join(repoRoot, 'android', 'gradlew.bat'), [task], path.join(repoRoot, 'android'));
 
-const apk = path.join(repoRoot, 'android', 'app', 'build', 'outputs', 'apk', 'release', 'app-release.apk');
-if (!existsSync(apk)) {
-  log(`build finished but ${apk} is missing`);
+const built = aab
+  ? path.join(repoRoot, 'android', 'app', 'build', 'outputs', 'bundle', 'release', 'app-release.aab')
+  : path.join(repoRoot, 'android', 'app', 'build', 'outputs', 'apk', 'release', 'app-release.apk');
+if (!existsSync(built)) {
+  log(`build finished but ${built} is missing`);
   process.exit(1);
 }
 
@@ -74,6 +111,7 @@ const stamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${p
 
 const outDir = path.join(repoRoot, '_builds');
 mkdirSync(outDir, { recursive: true });
-const out = path.join(outDir, `spotter-${stamp}-${hash}.apk`);
-copyFileSync(apk, out);
+const mark = signed ? '' : '-debugsigned';
+const out = path.join(outDir, `spotter-${stamp}-${hash}${mark}.${aab ? 'aab' : 'apk'}`);
+copyFileSync(built, out);
 log(`done → ${path.relative(repoRoot, out)}`);

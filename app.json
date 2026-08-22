@@ -87,7 +87,8 @@
           }
         }
       ],
-      "./plugins/with-android-build-tools"
+      "./plugins/with-android-build-tools",
+      "./plugins/with-release-signing"
     ],
     "experiments": {
       "typedRoutes": true,

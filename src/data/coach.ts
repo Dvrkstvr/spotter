@@ -48,6 +48,19 @@ export type CoachOptions = {
    * prompt is shown in full precisely so this switch means something.
    */
   shareProfile: boolean;
+  /**
+   * Whatever the six goals and the week seg can't say, in the user's own
+   * words — a two-week block, every second day, explosive compounds, a shoulder
+   * to work around. The fixed chips will never anticipate what somebody wants
+   * next month, and everything here is prose being handed to a model that reads
+   * prose: this is the cheapest thing in the flow and the widest.
+   *
+   * Optional, so a phone that stored `coach` before this key existed simply
+   * lacks it — `PERSIST` is additive and the whole blob replaces the seeded
+   * one, so every read has to survive its absence rather than trust the
+   * default. Bounded by `NOTE_MAX` at the field, since it is persisted.
+   */
+  note?: string;
 };
 
 export const DEFAULT_COACH: CoachOptions = {
@@ -55,7 +68,11 @@ export const DEFAULT_COACH: CoachOptions = {
   perWeek: 3,
   kinds: [],
   shareProfile: false,
+  note: '',
 };
+
+/** How long the free-text ask may get. Generous — it is a sentence or three. */
+export const NOTE_MAX = 400;
 
 const goalKey = (g: GoalKey) => `goal${g[0].toUpperCase()}${g.slice(1)}` as `goal${Capitalize<GoalKey>}`;
 
@@ -121,12 +138,25 @@ export function buildPrompt(i: PromptInput): string {
     ''
   );
 
+  // The user's own words, under their own heading rather than appended to the
+  // goal line: the six chips are a taxonomy and this is a sentence, and running
+  // them together would read as though the sentence were qualifying the chip.
+  // Read defensively — `note` postdates the stored `coach` object.
+  const note = (opts.note ?? '').trim();
+  if (note) out.push(`${L.promptNoteHead}  ${note}`, '');
+
   // The balance, in the same six regions the screen draws — and the weak ones
   // named again in words, because that is the finding rather than the table.
+  //
+  // The unit is spelled out rather than left as `%`: these are shares of
+  // *volume divided by the muscle each region carries*, so a model told only
+  // "%" would read them as sets and call a 12% Legs a neglected one. Prose,
+  // and therefore in the user's language — unlike the identifiers in the
+  // fenced block, which are this app's data and never translated.
   const shares = stats.balance
     .map((b) => `${i.regionName(b.region)} ${Math.round(b.share * 100)}`)
     .join(' · ');
-  out.push(`${L.promptBalanceHead} (${i.periodLabel}, %)  ${shares}`);
+  out.push(`${L.promptBalanceHead} (${i.periodLabel}, ${L.promptBalanceUnit})  ${shares}`);
   if (stats.weak.length)
     out.push(
       `${L.promptWeakHead} ` +
@@ -184,6 +214,19 @@ export function buildPrompt(i: PromptInput): string {
   out.push(`- ${L.promptRuleMeasure.replace('{list}', measureMenu(L))}`);
   out.push(`- ${L.promptRuleGroup.replace('{list}', i.groupKeys.join(', '))}`);
   out.push(`- ${L.promptRuleKind.replace('{list}', i.kindKeys.join(', '))}`);
+  // A superset is the one thing about *how* a routine is run that the routine
+  // itself holds, so it is the one that can cross this seam. `with` is
+  // adjacency rather than a group id — see `RoutineItem` — which is why the rule
+  // is phrased as "the first of the two" and not as a pair id.
+  out.push(`- ${L.promptRuleWith}`);
+  // And the one that can't, said out loud rather than left to be guessed at. A
+  // drop is a decision about how *that set* went, made in the session and never
+  // a week early, so there is no field to write it in and no honest way to add
+  // one — a planned drop would have to invent the weight it drops to. A model
+  // told nothing either ignores drops or encodes them somewhere the parser
+  // drops on the floor; told this, it puts them in the prose, which is where
+  // advice about how hard to push a set belongs anyway.
+  out.push(`- ${L.promptRuleDrop}`);
   // The library goes in so the answer builds on what is here rather than
   // inventing "Flat Barbell Chest Press" next to Bench Press. Names are the
   // join key on the way back — see `parsePlan`.
@@ -224,7 +267,14 @@ export type PlanExercise = {
   equipment?: string;
   measure?: string;
 };
-export type PlanItem = { exercise: string; sets?: number; reps?: number; kg?: number };
+export type PlanItem = {
+  exercise: string;
+  sets?: number;
+  reps?: number;
+  kg?: number;
+  /** A superset: this item and the one after it, back to back. */
+  with?: 'next';
+};
 export type PlanRoutine = { name: string; items: PlanItem[] };
 export type Plan = { exercises: PlanExercise[]; routines: PlanRoutine[] };
 
@@ -253,6 +303,40 @@ const capName = (v: unknown) => str(v).slice(0, MAX_NAME);
 
 /** The prompt's own example placeholders — an echoed one must not import. */
 const isPlaceholder = (s: string) => s === '…' || s === '...';
+
+/**
+ * The pairing flag, read liberally.
+ *
+ * `parsePlan` already takes an untagged fence, because a model drops the tag
+ * more often than it drops the block; the same argument runs one level down to
+ * a boolean where a literal was asked for. `"next"` is what the prompt asks for
+ * and `true` is what a model reaches for instead, and in a field with exactly
+ * one meaning both can only mean it.
+ */
+const pairNext = (v: unknown): 'next' | undefined =>
+  v === true || (typeof v === 'string' && v.trim().toLowerCase() === 'next')
+    ? 'next'
+    : undefined;
+
+/**
+ * Keep a pair only where both halves survived the filter that ran over them.
+ *
+ * `with` is adjacency rather than a group id, so *any* filter that drops a row
+ * silently marries its neighbours: an item paired with a placeholder row, or
+ * with one naming an exercise this phone can't resolve, would arrive joined to
+ * whatever slid up into its place. That is not the orphan case the rest of the
+ * app resolves where it reads (`stopsOf`) — an orphan is a pair with a half
+ * missing and reads back as no pair, where this is a pair between two exercises
+ * nobody joined and nothing downstream could tell. So it is cleared at each of
+ * the two seams that can drop a row, and a trailing `with` goes with it: every
+ * other *writer* here clears one too (`appendSessionEx`, `saveAsRoutine`), and
+ * resolve-at-read is the rule for data already stored, not for data being made.
+ *
+ * Takes the array with a null where a row was dropped, because after the filter
+ * the adjacency it is asking about is gone.
+ */
+const keepPairs = <T extends { with?: 'next' }>(rows: readonly (T | null)[]): T[] =>
+  rows.flatMap((it, k) => (it ? [it.with && rows[k + 1] ? it : { ...it, with: undefined }] : []));
 
 const numOr = (v: unknown): number | undefined => {
   const n = typeof v === 'number' ? v : parseFloat(String(v).replace(',', '.'));
@@ -315,18 +399,23 @@ export function parsePlan(reply: string): ParseResult {
       const o = (r ?? {}) as Record<string, unknown>;
       return {
         name: capName(o.name),
-        items: (Array.isArray(o.items) ? o.items : [])
-          .slice(0, MAX_ITEMS)
-          .map((it): PlanItem => {
-            const p = (it ?? {}) as Record<string, unknown>;
-            return {
-              exercise: capName(p.exercise) || capName(p.name),
-              sets: numOr(p.sets),
-              reps: numOr(p.reps),
-              kg: numOr(p.kg),
-            };
-          })
-          .filter((it) => it.exercise && !isPlaceholder(it.exercise)),
+        items: keepPairs(
+          (Array.isArray(o.items) ? o.items : [])
+            .slice(0, MAX_ITEMS)
+            .map((it): PlanItem => {
+              const p = (it ?? {}) as Record<string, unknown>;
+              return {
+                exercise: capName(p.exercise) || capName(p.name),
+                sets: numOr(p.sets),
+                reps: numOr(p.reps),
+                kg: numOr(p.kg),
+                with: pairNext(p.with),
+              };
+            })
+            // Nulled rather than filtered, so the pair each dropped row was
+            // half of is broken instead of being handed a new partner.
+            .map((it) => (it.exercise && !isPlaceholder(it.exercise) ? it : null))
+        ),
       };
     })
     .filter((r) => r.name && !isPlaceholder(r.name) && r.items.length > 0);
@@ -356,6 +445,8 @@ export type ResolvedItem = {
   kg: number;
   /** Index into `ResolvedPlan.exercises`. */
   ref: number;
+  /** A superset with the item after it, carried straight into `RoutineItem`. */
+  with?: 'next';
 };
 
 export type ResolvedRoutine = {
@@ -448,33 +539,34 @@ export function resolvePlan(
   const routines: ResolvedRoutine[] = plan.routines.map((r) => ({
     name: r.name,
     duplicate: routineNames.some((n) => norm(n) === norm(r.name)),
-    items: r.items.flatMap((it): ResolvedItem[] => {
-      const key = norm(it.exercise);
-      // A routine may name an exercise the block never declared — if this
-      // phone already has it that is fine and common (the prompt asked for
-      // reuse); if it doesn't, there is nothing to create it from.
-      const known = indexOfName.has(key) || byName.has(key);
-      if (!known) {
-        dropped.push(it.exercise);
-        return [];
-      }
-      const ref = indexOfName.get(key) ?? add({ name: it.exercise });
-      // Clamped both ways at the seam: these numbers come off the wire, get
-      // persisted into a routine, and `sessionFrom` sizes an array by `sets` —
-      // a pasted 1e9 must become a bounded plan here, not a crash that recurs
-      // on every start of the imported routine. The caps are generous for
-      // every measure (reps carries seconds for a hold, kg carries km for a
-      // run), just not absurd.
-      return [
-        {
+    items: keepPairs(
+      r.items.map((it): ResolvedItem | null => {
+        const key = norm(it.exercise);
+        // A routine may name an exercise the block never declared — if this
+        // phone already has it that is fine and common (the prompt asked for
+        // reuse); if it doesn't, there is nothing to create it from.
+        const known = indexOfName.has(key) || byName.has(key);
+        if (!known) {
+          dropped.push(it.exercise);
+          return null;
+        }
+        const ref = indexOfName.get(key) ?? add({ name: it.exercise });
+        // Clamped both ways at the seam: these numbers come off the wire, get
+        // persisted into a routine, and `sessionFrom` sizes an array by
+        // `sets` — a pasted 1e9 must become a bounded plan here, not a crash
+        // that recurs on every start of the imported routine. The caps are
+        // generous for every measure (reps carries seconds for a hold, kg
+        // carries km for a run), just not absurd.
+        return {
           name: it.exercise,
           sets: Math.min(20, Math.max(1, Math.round(it.sets ?? 3))),
           reps: Math.min(1000, Math.max(1, Math.round(it.reps ?? 8))),
           kg: Math.min(2000, Math.max(0, it.kg ?? 0)),
           ref,
-        },
-      ];
-    }),
+          ...(it.with ? { with: it.with } : {}),
+        };
+      })
+    ),
   }));
 
   return { exercises, routines, dropped };

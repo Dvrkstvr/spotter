@@ -17,11 +17,15 @@
  * dialog is already an irreversible conversation with Android, and Train
  * alone flipping on the spot is the honest preview of what declining means.
  */
-import { useEffect, useState } from 'react';
-import { Animated, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Animated, Keyboard, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { GestureDetector } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CHECK_D, Icon } from '@/components/icon';
+import { DragDemo, PX_PER_REP, PX_PER_STEP, useNumberDrag } from '@/components/num-drag';
+import { WeekBoard } from '@/components/week-board';
+import { TimeStepper } from '@/components/time-stepper';
 import { FullScreen } from '@/components/sheet';
 import { ensureRadioPermissions, hasRadio, sayGoodbye } from '@/data/buddy-radio';
 import {
@@ -40,18 +44,39 @@ import { weekSlots } from '@/data/plan';
 import { ensureAlarmPermission } from '@/data/alarms';
 import { useBackClose } from '@/hooks/use-back-close';
 import { themed, useColors, useThemed } from '@/design/theme';
-import { color, fill, font, motion, radius, t, tracking, wash } from '@/design/tokens';
+import { color, fill, font, linger, motion, radius, t, tracking, wash } from '@/design/tokens';
 import { Btn, CardKicker, H2, H3, H6, missingName } from '@/design/ui';
-import { Profile, resolveNames, schemeLine, useStore } from '@/store/workout-store';
+import { num, Profile, resolveNames, schemeLine, useStore } from '@/store/workout-store';
 
 /* ── step order ──────────────────────────────────────────────────────────── */
 
-const STEPS = ['welcome', 'how', 'you', 'perms', 'style', 'level', 'pick', 'week', 'done'] as const;
+const STEPS = [
+  // The welcome hero and the rundown were one screen's worth of content spread
+  // over two — the hero said what the app is and the rundown said what it does,
+  // and neither filled a page. They are one screen now, and it is the first.
+  'how',
+  // The buddy screen explains the feature *and* carries its own radio
+  // permission — the reason and the ask on one screen, rather than the ask
+  // arriving later beside an unrelated one. It comes before `you` because the
+  // name field ("so your side of a shared session has a name on it") is a
+  // question with no reason on it until this has been read.
+  'buddy',
+  'you',
+  'perms',
+  'style',
+  'level',
+  'pick',
+  'week',
+  // The coach is last before the seal, because it is the one feature that has
+  // nothing to say yet: it reads eight weeks of a diary that is still empty.
+  // Introduced as something waiting rather than something to do now.
+  'coach',
+  'done',
+] as const;
 type Step = (typeof STEPS)[number];
 
 /* ── glyphs (24×24, the app's stroke grammar) ───────────────────────────── */
 
-const FEAT_TICK_D = 'M4.5 4.5h15v15h-15zM8 12l3 3 5.5-6.5';
 const FEAT_DRAG_D = 'M12 4.5v15M12 4.5 8.5 8M12 4.5 15.5 8M12 19.5 8.5 16M12 19.5 15.5 16';
 const FEAT_REST_D = 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM12 7v5.2l3.4 2';
 const FEAT_BUDDY_D =
@@ -59,23 +84,50 @@ const FEAT_BUDDY_D =
 const BELL_D = 'M18 8.5a6 6 0 1 0-12 0c0 5.2-2 6.5-2 6.5h16s-2-1.3-2-6.5M13.7 19a2 2 0 0 1-3.4 0';
 
 /**
- * The features the rundown teaches. Takes `L` so nothing here gets hoisted.
+ * The features the rundown teaches, and it is deliberately down to two.
  *
- * The first three read the **tip** strings rather than a set of their own —
- * they are the same three features `data/tips.ts` teaches in place, and two
- * wordings for one gesture is exactly the drift this pre-empts. The rundown
- * still earns its screen: it is what the app is, said before there is an app
- * to point at. What it cannot do is be present at minute forty, in a gym,
- * which is the half the tips carry.
+ * A rundown can only ever *describe* a gesture, and the two it used to open
+ * with are both better shown: the drag has moved to the profile step, where it
+ * is demonstrated on a field you can drag while reading about it, and the tick
+ * is left to `data/tips.ts` to teach on the first set row it applies to. What
+ * stays here is the pair a screen cannot demonstrate at minute zero — a rest
+ * that starts itself, and a second phone that isn't in the room yet.
  *
- * The buddy card keeps its own copy — there is no buddy tip, because the
- * button that opens it has a label on it.
+ * They read the **tip** strings rather than a set of their own, and so does the
+ * profile step's drag row: one list, every surface, so an in-place hint and a
+ * tour card can never phrase one gesture two ways. The buddy card keeps its own
+ * copy — there is no buddy tip, because the button that opens it has a label.
  */
 const features = (L: Strings) => [
-  { d: FEAT_TICK_D, title: L.tipTick, sub: L.tipTickSub },
-  { d: FEAT_DRAG_D, title: L.tipDrag, sub: L.tipDragSub },
   { d: FEAT_REST_D, title: L.tipRest, sub: L.tipRestSub },
   { d: FEAT_BUDDY_D, title: L.obFeatBuddy, sub: L.obFeatBuddySub },
+];
+
+/**
+ * The buddy screen's three steps. Takes `L`, like `features`.
+ *
+ * Deliberately the flow rather than the feature list: pairing is the only part
+ * of this app two people have to do *together*, in the right order, before
+ * anything works — and it is the part a screenshot cannot show. What happens
+ * inside a shared session is one line, because by then the session is drawing
+ * it for you.
+ */
+const buddyWalk = (L: Strings) => [
+  { title: L.obBuddyPair, sub: L.obBuddyPairSub },
+  { title: L.obBuddyStart, sub: L.obBuddyStartSub },
+  { title: L.obBuddyLive, sub: L.obBuddyLiveSub },
+];
+
+/**
+ * The coach screen's three steps — read, send, read back. The same three the
+ * coach overlay is built in, said once before anyone stands in front of them:
+ * the middle one leaves the app entirely, which is the part that needs saying
+ * in advance, and the third is what makes leaving safe to do.
+ */
+const coachWalk = (L: Strings) => [
+  { title: L.obCoachRead, sub: L.obCoachReadSub },
+  { title: L.obCoachSend, sub: L.obCoachSendSub },
+  { title: L.obCoachBack, sub: L.obCoachBackSub },
 ];
 
 const styleName = (k: StyleKey, L: Strings) =>
@@ -115,6 +167,35 @@ const PREVIEW_LINES: readonly [string, string][] = [
   ['easyrun', 'run'],
 ];
 
+/**
+ * The profile step's three fields, and what a drag on each one is worth.
+ *
+ * Whole units for age and height on the coarser `PX_PER_REP` travel, half-kilos
+ * for body weight on `PX_PER_STEP` — the same pairing the set row makes, and for
+ * the same reason: the smaller the unit, the less finger it should cost. The
+ * labels are thunks because they read the dictionary, which the React Compiler
+ * would otherwise freeze into whichever language loaded first.
+ */
+const MEASURES = [
+  { key: 'age', label: (L: Strings) => L.age, unit: (L: Strings) => L.yrs,
+    keyboard: 'number-pad', step: 1, px: PX_PER_REP, base: 30 },
+  { key: 'weight', label: (L: Strings) => L.bodyWeight, unit: () => 'kg',
+    keyboard: 'decimal-pad', step: 0.5, px: PX_PER_STEP, base: 70 },
+  { key: 'height', label: (L: Strings) => L.height, unit: () => 'cm',
+    keyboard: 'number-pad', step: 1, px: PX_PER_REP, base: 175 },
+] as const;
+
+/**
+ * How much still has to be below the fold before the cue appears.
+ *
+ * A few pixels of overhang is a rounding error, not a page — an arrow that
+ * showed for one would be pointing at nothing.
+ */
+const MORE_EPS = 24;
+
+/** The profile fields' one column width — the demo's lane is written against it. */
+const MEASURE_W = 74;
+
 /** Mon / Wed / Fri — where the picked routines land until the user says otherwise. */
 const WEEK_SLOTS = [0, 2, 4];
 
@@ -131,8 +212,23 @@ export function OnboardingOverlay() {
   // not change meaning mid-flow because of it.
   const [reopened] = useState(() => s.onboarded);
 
+  // Dropped on a build with no radio at all — plain Expo Go, where there is no
+  // pairing to teach and a screen promising a dialog that never comes teaches
+  // the wrong lesson. (With the dev sim the card stands and answers instantly,
+  // exactly as it did on the perms screen: `ensureRadioPermissions` short-
+  // circuits on `isSimRadio`.) That is the *whole* gate, deliberately: the same
+  // fact the permission card itself is gated on. Not Train alone as well: the
+  // card lives here now, so this is the only place a re-run can say "Train
+  // alone is on" — a phone already training alone still gets the screen, in
+  // its answered state.
+  // Captured at mount, because a list that renumbered mid-flow would move the
+  // steps under a back press.
+  const [steps] = useState<readonly Step[]>(() =>
+    hasRadio ? STEPS : STEPS.filter((k) => k !== 'buddy')
+  );
+
   const [step, setStep] = useState(0);
-  const id: Step = STEPS[step];
+  const id: Step = steps[step];
 
   /* — drafts, prefilled from the store so a re-run starts from the answers — */
   const [profile, setProfile] = useState<Profile>(() => ({ ...s.profile }));
@@ -141,6 +237,13 @@ export function OnboardingOverlay() {
   const [showAll, setShowAll] = useState(false);
   const [permRadio, setPermRadio] = useState<PermState>(() => (s.privateMode ? 'no' : 'ask'));
   const [permNotif, setPermNotif] = useState<PermState>('ask');
+  // A drag anywhere on the current step takes the scroll away from it, the
+  // same trade the session list makes: the gesture and the scroll are the
+  // same finger going the same direction, so one of them has to yield.
+  const [scrubbing, setScrubbing] = useState(false);
+  // A re-run meets it already answered when the setting is on — the tour
+  // shows the state rather than asking a second time.
+  const [permPlan, setPermPlan] = useState<PermState>(() => (s.planAlert ? 'ok' : 'ask'));
 
   // Mostly-in-style ranks over barely-in-style: one pull-up must not put a
   // barbell day above the all-bodyweight ones on a calisthenics list. Ties
@@ -183,16 +286,36 @@ export function OnboardingOverlay() {
   });
 
   /* — the progress fill: travels on `move`, like everything that moves — */
-  const [prog] = useState(() => new Animated.Value((0 + 1) / STEPS.length));
+  const [prog] = useState(() => new Animated.Value((0 + 1) / steps.length));
   useEffect(() => {
     Animated.timing(prog, {
-      toValue: (step + 1) / STEPS.length,
+      toValue: (step + 1) / steps.length,
       ...motion.move,
       useNativeDriver: true,
     }).start();
-  }, [step, prog]);
+  }, [step, steps.length, prog]);
 
-  const next = () => setStep((n) => Math.min(n + 1, STEPS.length - 1));
+  const next = () => setStep((n) => Math.min(n + 1, steps.length - 1));
+
+  /**
+   * Whether this step's button travels with the content instead of sitting over
+   * it.
+   *
+   * The two steps whose lower half is the point. On buddy it is the permission
+   * card; on the week it is the pool you drag from and the reminder under it —
+   * both are screens where a button parked on the glass is a way past the thing
+   * the screen is for. Everywhere else the answer is already in view, and a
+   * primary action that moved about would be worse than one that waits.
+   */
+  const footInScroll = id === 'buddy' || id === 'week';
+
+  /* — whether this step has content below the fold, and the cue that says so — */
+  const [more, setMore] = useState(false);
+  const seen = useRef({ view: 0, content: 0, at: 0 });
+  const gauge = () => {
+    const g = seen.current;
+    setMore(g.content - g.view - g.at > MORE_EPS);
+  };
 
   const proposeFor = (k: StyleKey) =>
     DEFAULT_ROUTINES.filter((r) => routineInStyle(r, k, ex))
@@ -238,10 +361,31 @@ export function OnboardingOverlay() {
     setPermNotif('no');
   };
 
-  /** Leaving the permission screen resolves anything unanswered as a no —
-      skipping the question and answering "not now" are the same fact. */
-  const leavePerms = () => {
+  // The same permission as `allowNotif` — Android grants POST_NOTIFICATIONS to
+  // the app rather than to a channel, so whichever of the two was answered
+  // first has already asked, and this one resolves without a second dialog.
+  const allowPlanAlert = async () => {
+    const ok = await ensureAlarmPermission();
+    patch({ planAlert: ok });
+    setPermPlan(ok ? 'ok' : 'no');
+  };
+
+  const denyPlanAlert = () => {
+    patch({ planAlert: false });
+    setPermPlan('no');
+  };
+
+  /* Leaving either permission screen resolves an unanswered card as a no —
+     skipping the question and answering "not now" are the same fact. Two
+     screens, two cards, so the rule is stated twice rather than once over
+     both. */
+
+  const leaveBuddy = () => {
     if (permRadio === 'ask') goPrivate();
+    next();
+  };
+
+  const leavePerms = () => {
     if (permNotif === 'ask') denyNotif();
     next();
   };
@@ -263,15 +407,11 @@ export function OnboardingOverlay() {
     next();
   };
 
-  /** Tap a day: cycle rest → each picked routine → rest. Small list, honest
-      control — the Plan tab's full sheet exists for everything past it. */
-  const cycleDay = (dow: number) =>
+  /** Put a routine on a day, or take the day back to rest. The board's one write. */
+  const setDay = (dow: number, rid: string | null) =>
     setWeek((w) => {
-      const cur = w[dow];
-      const i = cur ? picked.indexOf(cur) : -1;
-      const nextRid = picked[i + 1];
       const out = { ...w };
-      if (nextRid) out[dow] = nextRid;
+      if (rid) out[dow] = rid;
       else delete out[dow];
       return out;
     });
@@ -285,11 +425,21 @@ export function OnboardingOverlay() {
 
   const seedName = (r: Routine) => resolveNames(r.names, s.lang);
 
+  // What the week board has to place — the picks, in the order they were made,
+  // resolved once here rather than per row. A pick whose seed has gone simply
+  // drops out, which is the same thing `applyOnboarding` does on the way out.
+  const weekPool = picked.flatMap((rid) => {
+    const r = DEFAULT_ROUTINES.find((x) => x.id === rid);
+    if (!r) return [];
+    const name = seedName(r);
+    return [{ rid, text: name.text, missing: name.missing }];
+  });
+
   /* ── per-step content ──────────────────────────────────────────────────── */
 
   const body = () => {
     switch (id) {
-      case 'welcome':
+      case 'how':
         return (
           <>
             <View style={styles.hero}>
@@ -300,26 +450,7 @@ export function OnboardingOverlay() {
               <Text style={styles.heroTagline}>{L.obTagline}</Text>
               <Text style={styles.sub}>{L.obWelcomeSub}</Text>
             </View>
-            <View style={styles.featList}>
-              {features(L)
-                .slice(0, 2)
-                .map((f) => (
-                  <View key={f.title} style={styles.featRow}>
-                    <View style={styles.featGlyph}>
-                      <Icon d={f.d} size={16} color={c.accent300} />
-                    </View>
-                    <Text style={styles.featTitle}>{f.title}</Text>
-                  </View>
-                ))}
-              <Text style={styles.tiny}>{L.obAndMore}</Text>
-            </View>
-          </>
-        );
-
-      case 'how':
-        return (
-          <>
-            <H2 size={t.h2} style={styles.title}>
+            <H2 size={t.h2} style={styles.howTitle}>
               {L.obHowTitle}
             </H2>
             <Text style={styles.sub}>{L.obHowSub}</Text>
@@ -339,6 +470,38 @@ export function OnboardingOverlay() {
           </>
         );
 
+      case 'buddy':
+        return (
+          <>
+            <H2 size={t.h2} style={styles.title}>
+              {L.obBuddyTitle}
+            </H2>
+            <Text style={styles.sub}>{L.obBuddySub}</Text>
+            <Walk items={buddyWalk(L)} />
+            <Text style={styles.tiny}>{L.obBuddyNote}</Text>
+            {/* The explanation closes on its own note, and the ask stands under
+                a heading of its own: three numbered rows followed by a fourth
+                glyph row would read as a fourth step until you saw the buttons.
+                No `hasRadio` guard — the step does not exist without one. */}
+            <H6 style={styles.sectionHead}>{L.obBuddyAsk}</H6>
+            <PermCard
+              d={FEAT_BUDDY_D}
+              name={L.obPermRadio}
+              why={L.obPermRadioWhy}
+              no={L.obPermRadioNo}
+              state={permRadio}
+              onAllow={allowRadio}
+              onDeny={goPrivate}
+            />
+            {permRadio === 'no' && (
+              <View style={styles.aloneBar}>
+                <Icon d={CHECK_D} size={12} strokeWidth={2.2} color={c.accent} />
+                <Text style={styles.aloneText}>{L.obAloneOn}</Text>
+              </View>
+            )}
+          </>
+        );
+
       case 'you':
         return (
           <>
@@ -348,20 +511,36 @@ export function OnboardingOverlay() {
             <Text style={styles.sub}>{L.obYouSub}</Text>
             <NameField value={profile.name} onChange={(name) => setProfile((p) => ({ ...p, name }))} />
             <H6 style={styles.sectionHead}>{L.aboutYou}</H6>
-            {(
-              [
-                [L.age, L.yrs, 'age', 'number-pad'],
-                [L.bodyWeight, 'kg', 'weight', 'decimal-pad'],
-                [L.height, 'cm', 'height', 'number-pad'],
-              ] as const
-            ).map(([label, unit, key, keyboard]) => (
+            {/* The rundown used to describe this gesture two screens ago and a
+                screen away from anything you could try it on. It says the same
+                words here — `tipDrag`, the tip's own — standing directly above
+                three fields that answer to it, with the demo playing over one
+                of them. A number nobody's training depends on is the right
+                place to meet a control your sets will. */}
+            <View style={styles.featRow}>
+              <View style={styles.featGlyph}>
+                <Icon d={FEAT_DRAG_D} size={16} color={c.accent300} />
+              </View>
+              <View style={styles.featText}>
+                <Text style={styles.featTitle}>{L.tipDrag}</Text>
+                <Text style={styles.featSub}>{L.tipDragSub}</Text>
+              </View>
+            </View>
+            {MEASURES.map(({ label, unit, key, keyboard, step, px, base }) => (
               <MeasureRow
                 key={key}
-                label={label}
-                unit={unit}
+                label={label(L)}
+                unit={unit(L)}
                 keyboard={keyboard}
+                step={step}
+                px={px}
+                base={base}
+                // One demo, on the field where half-steps and scrubbing are
+                // most obviously the point. Two would be a slideshow.
+                demo={key === 'weight'}
                 value={profile[key]}
                 onChange={(v) => setProfile((p) => ({ ...p, [key]: v }))}
+                onScrub={setScrubbing}
               />
             ))}
           </>
@@ -374,20 +553,10 @@ export function OnboardingOverlay() {
               {L.obPermsTitle}
             </H2>
             <Text style={styles.sub}>{L.obPermsSub}</Text>
-            {/* The radio card only exists on a build with a radio: Expo Go's
-                mock transport has nothing to permit, and a card promising a
-                dialog that never comes teaches the wrong lesson. */}
-            {hasRadio && (
-              <PermCard
-                d={FEAT_BUDDY_D}
-                name={L.obPermRadio}
-                why={L.obPermRadioWhy}
-                no={L.obPermRadioNo}
-                state={permRadio}
-                onAllow={allowRadio}
-                onDeny={goPrivate}
-              />
-            )}
+            {/* The rest alert alone — the radio card moved onto the buddy
+                screen, where the reason for it is. What is left here is the one
+                permission with no feature screen of its own to sit on, plus the
+                note about the one this tour deliberately never asks for. */}
             <PermCard
               d={BELL_D}
               name={L.obPermNotif}
@@ -397,12 +566,6 @@ export function OnboardingOverlay() {
               onAllow={allowNotif}
               onDeny={denyNotif}
             />
-            {permRadio === 'no' && (
-              <View style={styles.aloneBar}>
-                <Icon d={CHECK_D} size={12} strokeWidth={2.2} color={c.accent} />
-                <Text style={styles.aloneText}>{L.obAloneOn}</Text>
-              </View>
-            )}
             <Text style={styles.tiny}>{L.obPhotosNote}</Text>
           </>
         );
@@ -539,30 +702,78 @@ export function OnboardingOverlay() {
               {L.obWeekTitle}
             </H2>
             <Text style={styles.sub}>{L.obWeekSub}</Text>
-            <View style={styles.weekList}>
-              {DAYS_OF_WEEK.map((dow) => {
-                const rid = week[dow];
-                const r = rid ? DEFAULT_ROUTINES.find((x) => x.id === rid) : undefined;
-                const name = r ? seedName(r) : null;
-                return (
-                  <Pressable key={dow} onPress={() => cycleDay(dow)} style={styles.weekRow}>
-                    <Text style={styles.weekDay}>{dayLabel(s.lang, dow)}</Text>
-                    <Text
-                      style={[
-                        styles.weekName,
-                        !name && styles.weekRest,
-                        name?.missing && missingName(c),
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {name ? name.text : L.rest}
-                    </Text>
-                    <Text style={styles.weekChevron}>›</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-            <Text style={styles.tiny}>{L.obWeekTap}</Text>
+            {/* Empty picks means an empty pool, and a board with nothing to
+                drag is a gesture with no answer — the day list still stands,
+                because seven rest days is a legitimate week. */}
+            {weekPool.length === 0 ? (
+              <>
+                <View style={styles.weekList}>
+                  {DAYS_OF_WEEK.map((dow) => (
+                    <View key={dow} style={styles.weekRow}>
+                      <Text style={styles.weekDay}>{dayLabel(s.lang, dow)}</Text>
+                      <Text style={[styles.weekName, styles.weekRest]}>{L.rest}</Text>
+                    </View>
+                  ))}
+                </View>
+                <Text style={styles.tiny}>{L.obWeekPoolEmpty}</Text>
+              </>
+            ) : (
+              <>
+                <WeekBoard
+                  dows={DAYS_OF_WEEK}
+                  week={week}
+                  pool={weekPool}
+                  dayLabel={(dow) => dayLabel(s.lang, dow)}
+                  restLabel={L.rest}
+                  removeLabel={L.remove}
+                  poolLabel={L.obWeekPool}
+                  onSet={setDay}
+                  onScrub={setScrubbing}
+                />
+                <Text style={styles.tiny}>{L.obWeekDrag}</Text>
+              </>
+            )}
+            {/* Only once the week actually holds something: a reminder about
+                days you have not set is furniture, and this is the rule the
+                settings screen already applies to the time row under its own
+                switch. Off is the default, so leaving it unanswered needs no
+                resolving on the way out — unlike the radio card, where an
+                unanswered question has to become Train alone. */}
+            {Object.keys(week).length > 0 && (
+              <>
+                <H6 style={styles.sectionHead}>{L.obWeekRemind}</H6>
+                <PermCard
+                  d={BELL_D}
+                  name={L.planAlertLabel}
+                  why={L.planAlertHint}
+                  no={L.obPlanAlertNo}
+                  state={permPlan}
+                  onAllow={allowPlanAlert}
+                  onDeny={denyPlanAlert}
+                />
+                {permPlan === 'ok' && (
+                  <View style={styles.timeRow}>
+                    <Text style={styles.timeLabel}>{L.planAlertTime}</Text>
+                    <TimeStepper
+                      at={s.planAlertAt}
+                      set={(at) => patch({ planAlertAt: at })}
+                    />
+                  </View>
+                )}
+              </>
+            )}
+          </>
+        );
+
+      case 'coach':
+        return (
+          <>
+            <H2 size={t.h2} style={styles.title}>
+              {L.obCoachTitle}
+            </H2>
+            <Text style={styles.sub}>{L.obCoachSub}</Text>
+            <Walk items={coachWalk(L)} />
+            <Text style={styles.tiny}>{L.obCoachNote}</Text>
           </>
         );
 
@@ -609,7 +820,7 @@ export function OnboardingOverlay() {
 
   const foot = () => {
     switch (id) {
-      case 'welcome':
+      case 'how':
         return (
           <>
             <Btn variant="primary" block label={L.obGetStarted} style={styles.cta} onPress={next} />
@@ -623,18 +834,28 @@ export function OnboardingOverlay() {
             <Btn variant="ghost" block label={L.obSkipForNow} onPress={next} />
           </>
         );
-      case 'perms': {
-        const answered = (!hasRadio || permRadio !== 'ask') && permNotif !== 'ask';
+      // Both permission screens carry one button whose label says what leaving
+      // it unanswered will mean.
+      case 'buddy':
         return (
           <Btn
             variant="primary"
             block
-            label={answered ? L.obContinue : L.obSkipBoth}
+            label={permRadio === 'ask' ? L.obSkipAlone : L.obContinue}
+            style={styles.cta}
+            onPress={leaveBuddy}
+          />
+        );
+      case 'perms':
+        return (
+          <Btn
+            variant="primary"
+            block
+            label={permNotif === 'ask' ? L.obSkipAlert : L.obContinue}
             style={styles.cta}
             onPress={leavePerms}
           />
         );
-      }
       case 'pick':
         return (
           <Btn
@@ -659,6 +880,12 @@ export function OnboardingOverlay() {
               variant="ghost"
               block
               label={L.obSkipNoPlan}
+              // The reminder is deliberately not switched back off here. It is
+              // an answer the user gave out loud, it announces nothing while
+              // the plan is empty (`<PlanAlarm>` derives its fortnight from
+              // `plannedOn`), and it starts working by itself the day a plan
+              // exists — where un-asking it would be this screen quietly
+              // overruling a choice made on it.
               onPress={() => {
                 setWeek({});
                 next();
@@ -695,17 +922,53 @@ export function OnboardingOverlay() {
       </View>
 
       {/* Remounts per step, so each screen rises in the way tabs do. */}
+      <View style={styles.scrollWrap}>
       <ScrollView
         key={step}
         style={styles.scroll}
-        contentContainerStyle={styles.body}
-        keyboardShouldPersistTaps="handled"
+        scrollEventThrottle={32}
+        onScroll={(e) => {
+          seen.current.at = e.nativeEvent.contentOffset.y;
+          gauge();
+        }}
+        onLayout={(e) => {
+          seen.current.view = e.nativeEvent.layout.height;
+          gauge();
+        }}
+        onContentSizeChange={(_w, h) => {
+          seen.current.content = h;
+          gauge();
+        }}
+        contentContainerStyle={[styles.body, footInScroll && { paddingBottom: 14 + insets.bottom }]}
+        // `"always"`, not `"handled"`: under `handled` a ScrollView grabs any
+        // touch that isn't already a responder so it can dismiss the keyboard,
+        // and that grab is a `setJSResponder` which gesture-handler answers by
+        // cancelling everything it owns — including the profile step's number
+        // drag. What it costs is tap-away-to-dismiss, which the cell's own
+        // second tap hands back. See the note in `num-drag`.
+        keyboardShouldPersistTaps="always"
+        scrollEnabled={!scrubbing}
         showsVerticalScrollIndicator={false}
       >
         {body()}
+        {/* The buddy screen's button is the end of its own content rather than
+            a bar over it: the screen is an explanation with a permission under
+            it, and a CTA parked at the bottom of the glass is a way past both
+            without reading either. Every other step's answer is on the screen
+            already, so only this one earns the scroll. */}
+        {footInScroll && <View style={styles.inlineFoot}>{foot()}</View>}
       </ScrollView>
+      {/* Only ever a cue: it never takes a touch, and it is gone the moment the
+          bottom is reached. On the two steps whose button is down there with
+          the rest of the content, it is also the only thing saying so. */}
+      {/* With the button in the scroll there is no footer under this wrapper,
+          so the cue has to clear the gesture bar itself. */}
+      <MoreBelow show={more} inset={footInScroll ? insets.bottom : 0} />
+      </View>
 
-      <View style={[styles.foot, { paddingBottom: 14 + insets.bottom }]}>{foot()}</View>
+      {!footInScroll && (
+        <View style={[styles.foot, { paddingBottom: 14 + insets.bottom }]}>{foot()}</View>
+      )}
     </FullScreen>
   );
 }
@@ -736,35 +999,139 @@ function NameField({ value, onChange }: { value: string; onChange: (v: string) =
   );
 }
 
+/**
+ * One profile figure — a field that is also a slider, which is the whole reason
+ * this step now exists before the first workout rather than only beside it.
+ *
+ * The gesture, the glide and the pan/tap race come from `num-drag`; what this
+ * row owns is how it is drawn. The two rules that module states are both
+ * obeyed here: the field sits inside a `box-only` wrapper so the editor never
+ * sees an ACTION_DOWN, and the tour's ScrollView is `"always"` so it cannot
+ * take the touch away — see the note at the ScrollView.
+ */
 function MeasureRow({
   label,
   unit,
   value,
   keyboard,
+  step,
+  px,
+  base,
+  demo,
   onChange,
+  onScrub,
 }: {
   label: string;
   unit: string;
   value: string;
   keyboard: 'number-pad' | 'decimal-pad';
+  step: number;
+  px: number;
+  /**
+   * Where a drag on this field starts when it is empty, and what the demo
+   * scrubs from.
+   *
+   * A set row gets this for free — an empty cell starts from last time's ghost.
+   * Nothing has been logged yet here, and starting from zero makes the gesture
+   * useless on the one screen that is teaching it: reaching a real body weight
+   * from 0 is a sweep nobody would finish. So each field states a plausible
+   * figure. It is not a claim about you and is never drawn — the placeholder
+   * stays a dash, and the field is empty until you move it — it only decides
+   * where the first notch lands.
+   */
+  base: number;
+  /** Whether this row is the one the demo plays over. */
+  demo: boolean;
   onChange: (v: string) => void;
+  onScrub: (on: boolean) => void;
 }) {
   const styles = useThemed(sheet);
   const c = useColors();
+  const ref = useRef<TextInput>(null);
+  const [editing, setEditing] = useState(false);
+
+  // The IME swallows Android's back key, so the keyboard goes down without the
+  // app hearing it and the field keeps focus — leaving a cell drawn as being
+  // typed into while the next tap on it would only blur it.
+  useEffect(() => {
+    if (!editing) return;
+    const sub = Keyboard.addListener('keyboardDidHide', () => ref.current?.blur());
+    return () => sub.remove();
+  }, [editing]);
+
+  const { gesture, dragging } = useNumberDrag({
+    value,
+    // Not drawn as a placeholder anywhere — `ghost` is only where a drag on an
+    // empty field begins. See `base`.
+    ghost: String(base),
+    step,
+    px,
+    onText: onChange,
+    onScrub,
+    onTapToggle: () => (editing ? ref.current?.blur() : ref.current?.focus()),
+  });
+
   return (
     <View style={styles.measureRow}>
       <Text style={styles.measureLabel}>{label}</Text>
-      <TextInput
-        value={value}
-        placeholder="—"
-        placeholderTextColor={c.neutral600}
-        cursorColor={c.accent}
-        selectionColor={c.accent}
-        keyboardType={keyboard}
-        onChangeText={onChange}
-        style={styles.measureInput}
-      />
+      {/* The demo's lane is this wrapper exactly, which is what lets it be
+          `left: 0` here where the session's is written against a column. */}
+      <View style={styles.measureField}>
+        <GestureDetector gesture={gesture}>
+          {/* Never `auto`, focused or not: the editor must not see an
+              ACTION_DOWN or the drag is cancelled before it starts. */}
+          <View pointerEvents="box-only">
+            <TextInput
+              ref={ref}
+              value={value}
+              placeholder="—"
+              placeholderTextColor={c.neutral600}
+              cursorColor={c.accent}
+              selectionColor={c.accent}
+              keyboardType={keyboard}
+              onChangeText={onChange}
+              onFocus={() => setEditing(true)}
+              onBlur={() => setEditing(false)}
+              style={[styles.measureInput, dragging && styles.measureInputDragging]}
+            />
+          </View>
+        </GestureDetector>
+        {demo && (
+          <DragDemo
+            width={MEASURE_W}
+            lane={{ left: 0 }}
+            size={14}
+            step={step}
+            px={px}
+            base={num(value, base)}
+          />
+        )}
+      </View>
       <Text style={styles.measureUnit}>{unit}</Text>
+    </View>
+  );
+}
+
+/**
+ * A numbered walkthrough — the feature rows' shape with the glyph tile spending
+ * its 30px on a digit instead. The tile is `featGlyph` itself rather than a
+ * copy of it, so the icon rows and the numbered ones cannot drift apart.
+ */
+function Walk({ items }: { items: readonly { title: string; sub: string }[] }) {
+  const styles = useThemed(sheet);
+  return (
+    <View style={styles.featList}>
+      {items.map((it, i) => (
+        <View key={it.title} style={styles.featRow}>
+          <View style={styles.featGlyph}>
+            <Text style={styles.walkNum}>{i + 1}</Text>
+          </View>
+          <View style={styles.featText}>
+            <Text style={styles.featTitle}>{it.title}</Text>
+            <Text style={styles.featSub}>{it.sub}</Text>
+          </View>
+        </View>
+      ))}
     </View>
   );
 }
@@ -849,6 +1216,73 @@ function PermCard({
   );
 }
 
+/**
+ * The "there is more below" cue: one chevron, over the foot of the scroll.
+ *
+ * It nudges **twice and then holds still**, which is `DragDemo`'s rule and for
+ * the same reason — a mark that bobbed for as long as you stayed on the screen
+ * would be the furniture this tour is trying not to have. Two is enough to
+ * catch the eye; after that the arrow is a sign rather than an animation, and
+ * scrolling to the end takes it away entirely.
+ *
+ * `pointerEvents="none"` throughout: it says where to go and never intercepts
+ * the gesture that goes there.
+ */
+function MoreBelow({ show, inset }: { show: boolean; inset: number }) {
+  const styles = useThemed(sheet);
+  const [fade] = useState(() => new Animated.Value(0));
+  const [bob] = useState(() => new Animated.Value(0));
+
+  useEffect(() => {
+    const to = Animated.timing(fade, {
+      toValue: show ? 1 : 0,
+      ...motion.quick,
+      useNativeDriver: true,
+    });
+    to.start();
+    if (!show) return () => to.stop();
+    const nudge = Animated.loop(
+      Animated.sequence([
+        Animated.timing(bob, {
+          toValue: 1,
+          duration: linger.beckon,
+          easing: motion.move.easing,
+          useNativeDriver: true,
+        }),
+        Animated.timing(bob, {
+          toValue: 0,
+          duration: linger.beckon,
+          easing: motion.move.easing,
+          useNativeDriver: true,
+        }),
+      ]),
+      { iterations: 2 }
+    );
+    nudge.start();
+    return () => {
+      to.stop();
+      nudge.stop();
+      bob.setValue(0);
+    };
+  }, [show, fade, bob]);
+
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[
+        styles.more,
+        {
+          bottom: 6 + inset,
+          opacity: fade,
+          transform: [{ translateY: bob.interpolate({ inputRange: [0, 1], outputRange: [0, 4] }) }],
+        },
+      ]}
+    >
+      <Text style={styles.moreGlyph}>▾</Text>
+    </Animated.View>
+  );
+}
+
 /** The seal pop — the system's one overshoot, spent on arrival. */
 function Seal() {
   const styles = useThemed(sheet);
@@ -880,12 +1314,27 @@ const sheet = themed(() => ({
   progTrack: { flex: 1, height: 2, borderRadius: 1, backgroundColor: t.rule, overflow: 'hidden' },
   progFill: { ...fill, backgroundColor: color.accent, transformOrigin: 'left' },
 
+  scrollWrap: { flex: 1 },
   scroll: { flex: 1 },
   body: { paddingTop: 14, paddingHorizontal: 16, paddingBottom: 12 },
   foot: { paddingHorizontal: 16, paddingTop: 8, gap: 2 },
+  inlineFoot: { marginTop: 20, gap: 2 },
+  more: {
+    position: 'absolute',
+    alignSelf: 'center',
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: wash.accent(12),
+  },
+  moreGlyph: { fontFamily: font.regular, fontSize: 13, lineHeight: 15, color: color.accent },
   cta: { height: 44 },
 
   title: { letterSpacing: tracking(t.h2, -0.02) },
+  /** The rundown's heading, which now sits under the welcome hero. */
+  howTitle: { marginTop: 26, letterSpacing: tracking(t.h2, -0.02) },
   sub: {
     fontFamily: font.regular,
     fontSize: 12.5,
@@ -945,6 +1394,12 @@ const sheet = themed(() => ({
     color: color.neutral500,
     marginTop: 3,
   },
+  walkNum: {
+    fontFamily: font.regular,
+    fontSize: 12.5,
+    color: color.accent300,
+    fontVariant: ['tabular-nums'],
+  },
 
   nameInput: {
     width: '100%',
@@ -969,8 +1424,9 @@ const sheet = themed(() => ({
     borderBottomColor: t.rule,
   },
   measureLabel: { flex: 1, fontFamily: font.regular, fontSize: 14, color: color.text },
+  measureField: { width: MEASURE_W },
   measureInput: {
-    width: 74,
+    width: MEASURE_W,
     minHeight: 36,
     textAlign: 'center',
     paddingVertical: 5,
@@ -984,6 +1440,7 @@ const sheet = themed(() => ({
     borderRadius: radius.md,
     fontVariant: ['tabular-nums'],
   },
+  measureInputDragging: { borderColor: color.accent },
   measureUnit: { width: 26, fontFamily: font.regular, fontSize: 11.5, color: color.neutral600 },
 
   choice: {
@@ -1130,6 +1587,9 @@ const sheet = themed(() => ({
   weekName: { flex: 1, fontFamily: font.regular, fontSize: 13.5, color: color.text },
   weekRest: { color: color.neutral600 },
   weekChevron: { fontFamily: font.regular, fontSize: 15, color: color.accent },
+
+  timeRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 14 },
+  timeLabel: { flex: 1, fontFamily: font.regular, fontSize: 14, color: color.text },
 
   doneHero: { marginTop: 34, alignItems: 'center' },
   doneTitle: { marginTop: 15, letterSpacing: tracking(t.h3, -0.02) },

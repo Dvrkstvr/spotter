@@ -450,6 +450,38 @@ it is a *setting*, added the additive way `PERSIST` allows.
   rename, reorder and extend, while these six are an analysis this app
   performs. That is also why the mapping is deliberately partial: a group
   someone invented, plus `FullBody`, `Cardio` and `Other`, map to nothing.
+- **A region's share is volume, divided by the muscle that region carries.**
+  Both halves are one decision, because neither works without the other. Sets
+  were the first reading and they weigh a set of curls against a set of squats
+  as equals, which is not what an evening in a gym feels like. Volume alone
+  swings the other way and harder: a working set of squats moves five times
+  what a working set of curls does, so a raw-kilo chart says *Legs enormous,
+  Arms starving* about every diary ever kept — a statement about barbells
+  rather than about anybody. `REGION_MASS` divides each region's kilos by
+  roughly the share of skeletal muscle it holds, and the six re-normalise over
+  that, so an evenly trained body still reads as six equal shares and
+  `EVEN_SHARE`, `WEAK_AT`, the radar's ring and the coach's prompt all keep
+  exactly the meaning they had. The table is deliberately coarse — only the
+  ratios are ever read, and four decimals would claim a measurement nobody
+  took.
+- **The balance counts *work*, which is not `vol`, and the two differences are
+  the point.** A bodyweight set stores no left-hand figure, so by `vol` a diary
+  of pull-ups, push-ups and planks moves zero kilos — and would draw a body
+  with no back, chest or core in it. So the load is the person: the profile's
+  weight when the phone has been told it, `DEFAULT_BODY_KG` when it hasn't,
+  plus whatever was on the belt (a `Bodyweight` *kind* is what says which, so a
+  weighted pull-up is you plus twenty rather than twenty). Leverage is not
+  modelled and there is nothing to model it from. Holds are the second: `time`
+  sets are kilo-seconds, which is why `totals()` refuses them, but three of the
+  seeded core exercises are planks and a Core that empties the moment you train
+  it that way is the opposite of a finding — so seconds convert at
+  `HOLD_SECONDS_PER_REP`, a stated rate rather than a measured one. `distance`
+  and `duration` are still worth nothing and still land in `looseSets`.
+- **`bodyKg` is the one thing here that is a fact about the person**, which is
+  why `trainingStats` alone takes an options bag: it and `sinceDays` are both
+  `number | null`, and side by side as positionals they typecheck in either
+  order — a call site that goes wrong silently, on a screen whose numbers
+  nobody can check by eye.
 - **Weak is below three quarters of an even split, not below even.** In any real
   week three regions are under the mean by definition, and a screen that flags
   half the body every time is noise rather than a finding.
@@ -470,12 +502,15 @@ it is a *setting*, added the additive way `PERSIST` allows.
   to show, so it is stated under the weak points instead of being left out.
   What the six percentages *do* leave out is disclosed at the foot
   (`looseSets`), or a cardio-heavy month reads as a missing one.
-- **`distanceKm` is the one number re-derived from the stored set strings.**
-  Everything else is taken off `history` as written — volume is each entry's
-  own `vol`, because that number was written by `totals()` and is already gated
-  to `load` sets, and re-deriving it here would mean re-deciding what counts in
-  a second place. Distance never had a total of its own, so it is parsed; an
-  unrecorded `—` contributes nothing rather than zero.
+- **`distanceKm` and the balance's work are re-derived from the stored set
+  strings; the headline volume never is.** `volume` is each entry's own `vol`,
+  because that number was written by `totals()` and is already gated to `load`
+  sets — re-deriving it here would mean re-deciding what counts in a second
+  place, and it is the number reported back to you in kilos. The other two are
+  re-derived because they are answers to questions `vol` deliberately refuses:
+  distance never had a total of its own, and the balance needs bodyweight and
+  holds to count (above). An unrecorded `—` contributes nothing rather than
+  zero, in both.
 - **A fun fact compares against the largest thing you have cleared twice over.**
   The threshold does two jobs: "about 1 elephant" says less than the number did,
   and always being plural is what lets every line read "{n} cars" and skip
@@ -501,12 +536,53 @@ a chat app reached through the Android share sheet, and a tiny on-device model
 later answers the same fenced block with the preview and the import path
 untouched.
 
+- **The balance line names its unit** (`promptBalanceUnit`). A model handed
+  bare percentages reads them as sets and calls a 12% Legs neglected, where 12%
+  of *volume per unit of muscle* is a leg that has been worked. Prose, so it is
+  in the user's language — unlike the identifiers in the fenced block.
 - **The prompt is in the user's language; the contract inside it is not.** They
   read it before they send it — it is shown in full, which is what makes the
   privacy switch on the step before it mean something rather than being a
   promise. But `"measure": "load"` is an identifier in this app's data, not a
   word being translated, and a German reply carrying `"gewicht"` imports as
   nothing.
+- **The chips are a taxonomy; the ask is a sentence.** Six goals, a week seg and
+  a gear list will never anticipate what somebody wants next month — a
+  fortnight's rotation, every second day, a shoulder to work around — so
+  `coach.note` is free text under its own `ALSO` heading, in the user's own
+  words, and the far end reads prose anyway. It is the cheapest thing in this
+  flow and the widest. Additive inside a key that already exists, so no
+  `STORAGE_VERSION` bump — and **optional rather than defaulted**, because a
+  stored `coach` replaces the seeded object wholesale, so a phone that saved one
+  before this existed has no `note` and every read has to survive its absence.
+  It is also why `promptIntro` stopped asking for "weekly routines": an intro
+  that had already decided the cycle length would be arguing with the sentence
+  under it.
+- **Exactly one of the two rest-sharing features crosses this seam, and the
+  other is named so it can't be missed.** A superset is a decision about *which
+  two exercises*, which is what a routine holds — so `with: 'next'` is in the
+  block and lands in `RoutineItem` unchanged, read liberally (`true` is what a
+  model reaches for when a literal was asked for, the same argument that makes
+  an untagged fence acceptable). A drop is a decision about how *that set* went,
+  which nobody makes a week early and which has no honest planned form — so it
+  has no field, and the prompt says so out loud rather than leaving it to be
+  guessed at. A model told nothing either ignores drops or encodes them
+  somewhere `parsePlan` drops on the floor; told this, it puts them in the
+  prose, which is where advice about how hard to push a set belongs anyway.
+  - **`with` is adjacency, so every filter that drops a row owns the pair it
+    just broke.** `keepPairs` is that one reading, at the two seams that can
+    drop one — a placeholder row in `parsePlan`, an unresolvable name in
+    `resolvePlan`. This is *not* the orphan case the rest of the app resolves
+    where it reads (`stopsOf`): an orphan is a pair with a half missing and
+    reads back as no pair, where this is a pair between two exercises nobody
+    joined and nothing downstream could tell. A trailing `with` is cleared with
+    it, because every other *writer* here clears one too — `appendSessionEx`,
+    `saveAsRoutine` — and resolve-at-read is the rule for data already stored,
+    not for data being made.
+  - **The preview draws the pair with the editor's own mark** — a hairline in
+    the gutter and the word — rather than a badge beside a name, which would
+    read as a property of one row. A pair arriving unannounced and only turning
+    up afterwards in the routine is the one thing that screen exists to prevent.
 - **Rule 3 makes the answer carry its own way home.** The reply is told to close
   with copy-this-message → open Spotter → paste. Whoever wandered off into a
   chat app has no reason to remember this flow, and `parsePlan` hunting the
@@ -863,6 +939,122 @@ in front of it, and then goes away for good. Mockup:
   one gesture two ways. The buddy card kept its own copy, having no tip twin —
   the button that opens pairing carries a label, so it fails the admission test
   in the right direction.
+- **Two features get a tour screen of their own, and neither is a tip.** The
+  buddy half and the AI coach are the two things in this app that cannot be
+  taught in place: a tip stands next to the control it explains, and both of
+  these are *flows* — pairing is the only thing here two people have to do
+  together in the right order before anything works, and the coach's middle
+  step leaves the app entirely for a chat window that has never heard of
+  Spotter. So they are numbered walkthroughs (`buddyWalk` / `coachWalk`, drawn
+  by `Walk` — the feature rows' own shape with the glyph tile spending its 30px
+  on a digit), and the catalogue in `tips.ts` stays closed.
+  - **The buddy screen carries its own permission.** The radio card sits under
+    the walkthrough that explains it, not on the perms screen — the reason and
+    the ask on one screen, which is also what stopped `obPermRadioWhy` being a
+    compressed second telling of `obBuddySub`; it now says the other half, what
+    Android is about to put on the glass. Grouping the two permission cards
+    only ever grouped them by implementation: a rest alert has nothing to do
+    with a training partner, and on a build with no radio that screen has
+    always been one card under a title that said "two". So `perms` is the rest
+    alert alone, plus `obPhotosNote` — the permission this tour deliberately
+    never asks for, which has no feature screen of its own to sit on.
+  - **Each sits ahead of what it explains, or behind it.** Buddy comes before
+    `you`, because the name field ("so your side of a shared session has a name
+    on it") is a question with no reason on it until it has been read. The
+    coach comes second to last, because it is the one feature with nothing to
+    say yet — it reads eight weeks of a diary that is still empty — so it is
+    introduced as something waiting rather than something to do now, and its
+    closing line says so.
+  - **`hasRadio` is the whole gate**, which is why `steps` is state rather than
+    the module's `STEPS`. Not Train alone as well: the card lives here now, so
+    this is the only place a re-run can say *Train alone is on*, and a phone
+    already training alone still gets the screen in its answered state.
+    Captured at mount, or a list that renumbered mid-flow would move the steps
+    under a back press; the progress fill and `next` read it, not the constant.
+  - **Each permission screen resolves its own unanswered card**, and its one
+    button says what leaving it will mean — *Skip — train alone*, *Skip — no
+    alerts*, the `obSkipNoPlan` grammar. `leavePerms` used to answer for both
+    cards at once; two screens means the rule is stated twice rather than once
+    over both. The week screen's plan reminder is the exception that proves it:
+    off is already its default, so there is nothing to resolve, and Continue
+    stays *Continue* — that button also continues past the week, and
+    relabelling it after the reminder would misdescribe what it does. That
+    third card is also why `obPermsSub` stopped promising nothing would be
+    asked again.
+  - **The coach is not in the `how` rundown.** It has a labelled button on the
+    statistics card, so by the rundown's own heading — things you wouldn't guess
+    by looking at a screen — it doesn't belong there; the buddy row is the
+    headline the very next screen expands.
+- **The tour shows what it can and only describes the rest**, which is what took
+  the opening two screens down to one and the rundown down to two rows.
+  - **Welcome and the rundown were one screen's worth of content over two.** The
+    hero says what the app is, the rundown says what it does, and neither filled
+    a page — so the hero moved onto the rundown and `welcome` is gone, footer
+    and all. *Get started* / *Skip setup* came with it: the first screen is
+    still the one you can leave the tour from.
+  - **The tick and the drag left the rundown, because a rundown can only ever
+    describe a gesture.** The drag moved to the profile step, where it is
+    demonstrated on a field you can drag *while reading the line about it*; the
+    tick is left to `tips.ts`, which teaches it on the first set row it applies
+    to. What stays is the pair no screen can demonstrate at minute zero — a rest
+    that starts itself, and a second phone that isn't in the room. `obAndMore`
+    went with the screen that counted rows.
+  - **The profile fields are the first draggable numbers you meet**, and that is
+    the whole reason they now use the real gesture rather than being three plain
+    inputs: age, weight and height are figures where a wrong answer costs
+    nothing, which is the right place to learn a control your sets depend on.
+    The `drag` row stands directly above them, reading `tipDrag` — the tip's own
+    words, one list, every surface.
+    - **`num-drag.tsx` is where the gesture lives now** — the physics, the
+      glide, the pan/tap race, the `box-only` trap and `DragDemo`, extracted
+      from the session so the two sites cannot drift. `NumCell` keeps only its
+      drawing and its refusal shake and calls `useNumberDrag`.
+    - **The tour's ScrollView had to become `keyboardShouldPersistTaps="always"`**,
+      for the reason the session list already is: under `"handled"` a ScrollView
+      grabs any touch that isn't already a responder, and that grab cancels every
+      gesture-handler gesture — including this one. It also yields `scrollEnabled`
+      while a drag runs.
+    - **An empty field starts its drag from a stated figure** (30 / 70 / 175),
+      because a set row gets that for free from last time's ghost and this
+      screen has no history to read. Starting at zero made the gesture useless
+      on the one screen teaching it — reaching a real body weight from 0 is a
+      sweep nobody finishes. It is never drawn: the placeholder stays a dash and
+      the field is empty until you move it. It only decides where the first
+      notch lands.
+- **The week is dragged, not cycled** (`components/week-board.tsx`). Seven day
+  slots, the picked routines under them, and one gesture between: hold a
+  routine, put it on a day. Tap-to-cycle worked and taught nothing — it was a
+  control invented for this screen and found nowhere else, on the screen whose
+  job is to hand over the app's habits.
+  - **It holds first, where the number drag deliberately doesn't**, and that is
+    the same trade decided the other way. A number cell buys immediacy by giving
+    up the scroll *on that cell* — a 74px target in a row that is mostly not
+    cells. These are full-width rows, so an immediate grab would cost the screen
+    its scroll outright; `HOLD_MS` buys it back, and the lift plus `buzz.grab` is
+    what says the hold landed.
+  - **Pool → day assigns, day → day moves, day → anywhere else clears.** One
+    gesture for all three, and a routine is never consumed: the same one goes on
+    as many days as you like. The × on a filled day is the quick way out, not a
+    second mechanism.
+  - **Positions are measured, and so is the gap between the two coordinate
+    spaces.** `measureInWindow` and a gesture's `absoluteY` do not share an
+    origin on Android — under edge-to-edge they differ by the status bar, which
+    landed every drop one row off until it was found. Nothing in either API
+    states the gap, so `skew` reads it off the one thing in both spaces at once:
+    the row under the finger, whose top is `absoluteY - y` in touch coordinates
+    and `srcRect.top` in measured ones. Do not replace this with a constant.
+- **Two steps carry their button at the end of their own content**, rather than
+  on a bar over it: buddy, where the lower half is a permission to answer, and
+  the week, where it is the pool you drag from and the reminder under it. A
+  primary action parked on the glass is a way past the thing the screen is for.
+  Everywhere else the answer is already in view, and a button that moved about
+  would be worse than one that waits.
+  - **`MoreBelow` is the cue that those steps need**, and it earns its place by
+    disappearing: one chevron over the foot of the scroll, gone the moment the
+    bottom is reached, never taking a touch. It nudges **twice and then holds
+    still** — `DragDemo`'s rule, for the same reason — after which it is a sign
+    rather than an animation. `MORE_EPS` keeps it from pointing at a rounding
+    error, and `linger.beckon` is its one leg.
 - **The catalogue is closed on purpose.** The admission test is *"could a
   careful person use this for a month and never find it?"* — and if the answer
   is yes for something not on the list, the honest fix is usually the control.
@@ -1215,8 +1407,12 @@ Keep these; they're decisions, not drift. Each is commented at its site.
     `LoggedExercise.note?: string` — additive, so waiting for someone to ask
     costs nothing.
 - **Numbers are also a gesture**: touch a kg or reps cell and slide up or down
-  to step it. While a drag runs, the list's `scrollEnabled` goes off. Most sets
-  never need the keyboard. This gesture and `DragList` are why
+  to step it. The gesture itself lives in `components/num-drag.tsx` — it is
+  shared with the setup tour's profile step, which is where a first-run user now
+  meets it; `NumCell` keeps the drawing and the refusal shake and calls
+  `useNumberDrag` for the rest. Everything below is that module's. While a drag
+  runs, the list's `scrollEnabled` goes off. Most sets never need the keyboard.
+  This gesture and `DragList` are why
   `react-native-gesture-handler` is mounted at all (`GestureHandlerRootView` in
   `src/app/_layout.tsx`). Everything else on this screen — the swipe between
   exercises included — is still a plain `PanResponder`, and should stay one.
@@ -1743,6 +1939,19 @@ Keep these; they're decisions, not drift. Each is commented at its site.
     grammar twice, minutes by `MINUTE_STEP`), not a preset list and not a
     keyboard — and it is drawn only while the switch is on, the same reason the
     plan sheet's Repeats field steps aside under *just this day*.
+  - **Being asked for is why the tour asks.** The setup tour's week screen —
+    the one place you decide you train Mon/Wed/Fri — offers it under the day
+    list, gated on the week actually holding something, because a reminder
+    about days you have not set is furniture. It uses the tour's `PermCard`
+    rather than a switch, that being already this app's grammar for *an
+    optional thing that needs Android's permission*, and it reads
+    `planAlertLabel` / `planAlertHint` straight off the settings row rather
+    than restating them. `TimeStepper` moved to `components/time-stepper.tsx`
+    when the second caller arrived: two copies of a control are two things to
+    keep in step. Skipping the week does **not** switch it back off — it
+    announces nothing while the plan is empty and starts working by itself the
+    day one exists, where un-asking would be the screen quietly overruling a
+    choice made on it.
   - **`planAlert` / `planAlertAt` are additive `PERSIST` keys**, so
     `STORAGE_VERSION` stays 4. They ride in a backup like every other setting,
     are untouched by `mergePersisted`, and never cross to a buddy — when you
@@ -2015,5 +2224,75 @@ npm run typecheck
 npm run lint
 ```
 
+```bash
+npm run test
+```
+
 `npx expo export --platform android` catches things that only break at bundle
-time. There are no tests yet.
+time.
+
+## The tests
+
+Vitest, in plain Node, over the pure modules — `npm run test`, or
+`test:watch`. There is no React Native harness and adding one is not the plan:
+what is tested is `data/`, which takes values and hands answers back, and the
+one stub in the suite (`test/react-native-stub.ts`) exists only because
+`data/migrate` asks `design/tokens` whether a stored theme name is real and
+`tokens` reads `Easing` at module scope. Keeping that list at one entry is the
+property to defend — a setup needing a stub per native import rots the first
+time the code gains one, which is the argument for testing `data/` rather than
+screens.
+
+`__DEV__` is defined `true`, so every run also fires the drift check in
+`tokens` that asserts `buildPalette('blurple', true)` still equals the ported
+Nocturne palette exactly. That is the one design invariant nothing else
+checked.
+
+What is covered, and why it is these two:
+
+- **`data/migrate`** — the version chain, the shape guard and the backup
+  merge. Every bug in it is silent and lands on real training data: a key
+  dropped to its seeded default, a plan that wakes up empty, a merge that
+  overwrites what you actually lifted. The chain is tested through
+  `migrateBlob` rather than through `migrateV1/V2/V3` one at a time, because
+  the *order* is the thing that has been wrong before — `migrateV3` reads the
+  raw blob and the other two read the filtered one, and a refactor loses that
+  fact quietly. There is a test named for exactly that.
+- **`data/coach`** — `parsePlan` and `resolvePlan`, the seam. The far end is a
+  chat model that will phrase things however it likes, so the fixtures are
+  replies rather than payloads: prose around the block, a dropped tag, a
+  placeholder row copied out of the template, `1e999`, and a German
+  `"gewicht"` where a measure identifier belongs.
+
+Both suites were checked by mutation rather than trusted for passing: putting
+the `migrateV3(data, data)` bug back fails five tests, and flipping `fillGaps`
+so a backup wins fails a sixth.
+
+## Releasing
+
+The repo is **proprietary** (`LICENSE`) — it used to carry Expo's MIT
+boilerplate, which credited 650 Industries and licensed the app to everybody.
+The bundled open-source components keep their own terms in
+`THIRD-PARTY-NOTICES.md`, regenerated by `npm run licenses`; regenerate it when
+dependencies change, because that file is the attribution their licences
+actually require.
+
+- **`app.json` states the version; `package.json` copies it.** `npm run version`
+  checks, `-- --fix` syncs. A release build fails on a mismatch — the dev loop
+  never runs it.
+- **Release signing goes through `plugins/with-release-signing.js`**, because
+  `android/` is generated and the template's `signingConfig signingConfigs.debug`
+  comes back on every prebuild. The key is *named* by `keystore.properties` (repo
+  root, gitignored) or `SPOTTER_KEYSTORE*`, never stored here. With neither, the
+  release build falls back to the debug key, says so, and names the artefact
+  `-debugsigned`; a keystore that is named but missing is an error rather than a
+  fallback. `docs/release-signing.md` carries the one thing that has to be read
+  first — switching keys costs an uninstall, and an uninstall costs that phone's
+  diary.
+- **Play material lives in `docs/`** — the two privacy policies (EN + DE, both
+  still needing a postal address and a public URL) and `play-data-safety.md`,
+  which records the Data safety answers *with the reason for each*, so a feature
+  that changes one is checked against a stated position rather than re-derived.
+  It also holds the arguments for the two declarations Play will ask about,
+  `USE_EXACT_ALARM` and `FOREGROUND_SERVICE_SPECIAL_USE`, and the fallback if
+  either is refused.

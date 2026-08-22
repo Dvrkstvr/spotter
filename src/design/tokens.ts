@@ -402,6 +402,8 @@ export const linger = {
   shake: 60,
   /** one radar ring's flight in the scan sheet */
   radar: 1600,
+  /** one leg of the setup tour's "there is more below" nudge */
+  beckon: 620,
 } as const;
 
 /**

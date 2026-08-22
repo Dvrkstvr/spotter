@@ -8,7 +8,7 @@ import { Screen } from '@/components/screen';
 import { StatsCard, STATS_WINDOW_DAYS } from '@/components/stats-card';
 import { hasRadio, radio, sayGoodbye } from '@/data/buddy-radio';
 import { encodePeerName } from '@/data/buddy-sync';
-import { trainingStats } from '@/data/stats';
+import { bodyKgOf, trainingStats } from '@/data/stats';
 import { useBuddyLive } from '@/hooks/use-buddy-live';
 import { themed, useColors, useThemed } from '@/design/theme';
 import { color, font, radius, slop, t, tracking } from '@/design/tokens';
@@ -77,8 +77,12 @@ export default function YouScreen() {
   // Two reads of the same history: the last eight weeks say what to work on,
   // everything ever logged says how much there has been. Derived at render —
   // `history` is the only input and nothing about this is persisted.
-  const recentStats = trainingStats(s.history, ex, STATS_WINDOW_DAYS);
-  const allTimeStats = trainingStats(s.history, ex);
+  // `bodyKg` is what a bodyweight set weighs: the balance would read a diary
+  // of pull-ups and planks as an empty body without it. Blank profile, blank
+  // field and nonsense all fall back inside `bodyKgOf`.
+  const bodyKg = bodyKgOf(s.profile.weight);
+  const recentStats = trainingStats(s.history, ex, STATS_WINDOW_DAYS, { bodyKg });
+  const allTimeStats = trainingStats(s.history, ex, null, { bodyKg });
 
   return (
     <Screen scrollRef={scrollRef}>
