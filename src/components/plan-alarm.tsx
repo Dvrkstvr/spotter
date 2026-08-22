@@ -26,7 +26,7 @@ import { AppState } from 'react-native';
 
 import { PlanAlarm as Alarm, schedulePlanAlarms, setChannelName } from '@/data/alarms';
 import { fromISO, shiftISO, todayISO } from '@/data/date';
-import { plannedOn } from '@/data/plan';
+import { loggedRows, plannedOn } from '@/data/plan';
 import { useStore } from '@/store/workout-store';
 
 /**
@@ -64,18 +64,24 @@ export function PlanAlarm() {
   }, []);
 
   /**
-   * A routine that needs no reminder today: already logged, or being trained
+   * Which of today's rows need no reminder: already logged, or being trained
    * right now. Only today can be either — nothing in the future has happened
-   * yet — so this is asked on day 0 and nowhere else.
+   * yet — so this is consumed on day 0 and nowhere else.
    *
-   * The running session counts because the reminder's whole errand is "this is
+   * Consumed positionally by `loggedRows`, the same arithmetic Plan and Today's
+   * hero read, so a day holding one routine twice and trained once still reminds
+   * about the second row rather than dropping both. The running session counts
+   * as one of the spending sessions because the reminder's errand is "this is
    * still to do", and a workout under way is neither still to do nor yet in
-   * `history`. Abandoning it means one reminder that doesn't fire, which is the
-   * cheaper mistake.
+   * `history`; abandoning it means one reminder that doesn't fire, the cheaper
+   * mistake.
    */
   const live = s.session?.rid ?? null;
-  const handled = (rid: string) =>
-    rid === live || s.history.some((h) => h.date === today && h.rid === rid);
+  const todayRows = plannedOn(s.plan, today);
+  const todayHandled = loggedRows(todayRows, [
+    live,
+    ...s.history.filter((h) => h.date === today).map((h) => h.rid),
+  ]);
 
   /**
    * The chosen minute, clamped on read the way `span()` clamps a plan's
@@ -89,7 +95,7 @@ export function PlanAlarm() {
   if (s.planAlert)
     for (let i = 0; i < HORIZON; i++) {
       const iso = shiftISO(today, i);
-      const rows = plannedOn(s.plan, iso).filter((e) => i > 0 || !handled(e.rid));
+      const rows = i > 0 ? plannedOn(s.plan, iso) : todayRows.filter((_, j) => !todayHandled[j]);
       // One reminder per day, not per rule: a day holding two workouts is one
       // thing to be told about, and it names both.
       const names = [

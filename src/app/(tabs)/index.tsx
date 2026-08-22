@@ -22,7 +22,7 @@ import { Tip } from '@/components/tip';
 import { routineEquals } from '@/data/buddy-sync';
 import { daysSince, shiftISO, todayDow, todayISO } from '@/data/date';
 import { measureOf } from '@/data/exercises';
-import { plannedOn } from '@/data/plan';
+import { loggedRows, plannedOn } from '@/data/plan';
 import { countN, DAYS_SHORT, fmtDayShort, fmtDayTiny, fmtLastDone } from '@/data/i18n';
 import { groupDigits } from '@/data/stats';
 import { pickTip } from '@/data/tips';
@@ -51,16 +51,25 @@ export default function TodayScreen() {
    * is how the two screens would start disagreeing about what to do next.
    */
   const dayRows = plannedOn(s.plan, iso);
-  const loggedRid = (rid: string) => s.history.some((h) => h.date === iso && h.rid === rid);
-  const heroEntry = dayRows.find((e) => !loggedRid(e.rid)) ?? dayRows[dayRows.length - 1];
+  /**
+   * Which rows today's sessions have fulfilled, consumed positionally by
+   * `loggedRows` — one session spends against the first not-yet-logged row of
+   * its routine, so a day holding the same routine twice logs one row and keeps
+   * the other. Same arithmetic Plan and the reminder read, so the hero, the
+   * primary Start and the alarm can never disagree about which is next.
+   */
+  const doneFlags = loggedRows(
+    dayRows,
+    s.history.filter((h) => h.date === iso).map((h) => h.rid)
+  );
+  const heroEntry = dayRows.find((_, i) => !doneFlags[i]) ?? dayRows[dayRows.length - 1];
   const todayRid = heroEntry?.rid;
   const tr = routine(todayRid ?? null);
   /**
    * The rest of the day, named under the hero's own lines. Filtered by entry
    * id, not rid: two rules may name the same routine on one day, and dropping
    * by rid would hide the second copy — an entry you could neither see nor act
-   * on. (Which of two identical-rid rows a logged session belongs to is still
-   * conflated; that needs a session→entry link the store doesn't carry.)
+   * on.
    */
   const alsoToday = dayRows.filter((e) => e.id !== heroEntry?.id);
 
@@ -77,9 +86,7 @@ export default function TodayScreen() {
    * nothing, so there any training counts — and the calendar dot keeps the
    * plain any-session meaning on purpose.
    */
-  const doneToday = dayRows.length
-    ? dayRows.every((e) => loggedRid(e.rid))
-    : doneOn(iso);
+  const doneToday = dayRows.length ? doneFlags.every(Boolean) : doneOn(iso);
 
   /**
    * A workout is running. The hero stops describing the day's plan and

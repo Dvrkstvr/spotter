@@ -115,6 +115,38 @@ export const restChosen = (p: Plan, iso: string) =>
   !!p.skips[iso]?.length && plannedOn(p, iso).length === 0;
 
 /**
+ * Which of a day's planned rows the day's logged sessions fulfil.
+ *
+ * The plan's whole definition of "next" is *the first unlogged row in insertion
+ * order* — and that has to be the only reading. The obvious alternative, "a row
+ * is done iff its routine appears anywhere in today's history", is a second
+ * reading, and it disagrees the moment a day holds the same routine twice: plan
+ * Cardio twice and log it once, and the identity reading ticks *both* rows while
+ * `next` still points at the first. So a logged session is **consumed** against
+ * the first not-yet-consumed row of its routine: the first Cardio row goes done,
+ * the second keeps waiting, and `next` is that second row — one arithmetic for
+ * the tick, the hero and the reminder, so no two can disagree.
+ *
+ * Extra logs beyond the planned rows consume nothing — a freeform session (rid
+ * absent), or a second improvised run — and simply live in the day's Logged
+ * block. `entries` is insertion order; `loggedRids` are the rids logged on the
+ * day, one per session, order irrelevant. Returns a boolean per entry, aligned.
+ */
+export const loggedRows = (
+  entries: PlanEntry[],
+  loggedRids: readonly (string | null | undefined)[]
+): boolean[] => {
+  const pool = new Map<string, number>();
+  for (const rid of loggedRids) if (rid) pool.set(rid, (pool.get(rid) ?? 0) + 1);
+  return entries.map((e) => {
+    const n = pool.get(e.rid) ?? 0;
+    if (n <= 0) return false;
+    pool.set(e.rid, n - 1);
+    return true;
+  });
+};
+
+/**
  * Days from `fromISO` to each routine's next planned day, routine id → offset
  * (0 = today). Routines with nothing inside the horizon are absent.
  *

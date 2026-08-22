@@ -26,7 +26,7 @@ import { Tip } from '@/components/tip';
 import { fromISO, toISO, todayISO } from '@/data/date';
 import { measureOf } from '@/data/exercises';
 import { countN, DAYS_SHORT, fmtDayShort, MONTHS, repeatLabel } from '@/data/i18n';
-import { plannedOn, restChosen, skippedOn } from '@/data/plan';
+import { loggedRows, plannedOn, restChosen, skippedOn } from '@/data/plan';
 import { pickTip } from '@/data/tips';
 import { themed, useColors, useThemed } from '@/design/theme';
 import { color, font, t, tracking } from '@/design/tokens';
@@ -140,13 +140,20 @@ export default function PlanScreen() {
   /**
    * The day's planned workouts, in the order their rules were made.
    *
-   * `logged` is matched by rid rather than by position: a free session belongs
-   * to no row and lands only in the Logged block, which is how a freeform
-   * Saturday reads. `next` is the first row *not* logged — one definition,
-   * shared with Today's hero, so the two screens can never disagree about
-   * which workout is the one to start.
+   * `logged` is consumed positionally, not matched by identity: `loggedRows`
+   * spends each session against the first not-yet-logged row of its routine, so
+   * planning a routine twice and logging it once ticks the first row and leaves
+   * the second waiting. A free session belongs to no row and lands only in the
+   * Logged block. `next` is the first row *not* logged — one definition, shared
+   * with Today's hero and the plan reminder, so none of the three can disagree
+   * about which workout is the one to start.
    */
-  const rows = plannedOn(s.plan, sel).map((e) => {
+  const planned = plannedOn(s.plan, sel);
+  const doneFlags = loggedRows(
+    planned,
+    selSessions.map((x) => x.h.rid)
+  );
+  const rows = planned.map((e, i) => {
     const r = routine(e.rid);
     const name = r ? rInfo(r) : null;
     const sets = r ? r.items.reduce((a, i) => a + i.sets, 0) : 0;
@@ -158,10 +165,10 @@ export default function PlanScreen() {
         ? `${countN(r.items.length, L.exCountOne, L.exCount)} · ${countN(sets, L.setCountOne, L.setCount)}`
         : '',
       rule: repeatLabel(e.repeat, L, s.lang),
-      logged: selSessions.some((x) => x.h.rid === e.rid),
+      logged: doneFlags[i],
     };
   });
-  const next = rows.findIndex((r) => !r.logged);
+  const next = doneFlags.findIndex((d) => !d);
 
   /** Occurrences cancelled on this day — kept on screen so Restore is one tap. */
   const off = skippedOn(s.plan, sel).map((e) => {
