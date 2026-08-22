@@ -1,21 +1,34 @@
-The MIT License (MIT)
+Spotter — Proprietary Software Licence
+Copyright (c) 2026 Calvin Kohl. All rights reserved.
 
-Copyright (c) 2015-present 650 Industries, Inc. (aka Expo)
+This repository — its source code, design files, generated brand assets,
+documentation and copy — is the property of Calvin Kohl ("the Author").
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+NO LICENCE IS GRANTED. You may not use, copy, modify, merge, publish,
+distribute, sublicense, sell, or create derivative works from any part of this
+repository, in source or binary form, without the Author's prior written
+permission. Access to this repository, however obtained, does not grant any
+such permission.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+Installing and using a copy of the Spotter application distributed by the
+Author is permitted for personal use. That permission covers the application
+only; it is not a licence to its source.
+
+THIRD-PARTY COMPONENTS
+
+This project builds on open-source software — React Native, Expo, and their
+dependencies — each licensed by its own authors under its own terms. Those
+terms govern those components and are unaffected by this file. The notices
+they require are reproduced in THIRD-PARTY-NOTICES.md, which is regenerated
+with `npm run licenses`.
+
+NO WARRANTY
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+For permissions beyond this licence, contact kohl.calvin@gmail.com.
