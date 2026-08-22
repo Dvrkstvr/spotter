@@ -117,7 +117,7 @@ export function ScanSheet() {
             <Btn
               variant="primary"
               block
-              label={L.ok}
+              label={L.authConfirm}
               disabled={confirmed}
               style={styles.confirmBtn}
               onPress={confirmIncoming}

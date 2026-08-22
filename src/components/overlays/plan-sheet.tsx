@@ -205,8 +205,12 @@ export function PlanSheet() {
             </View>
           )}
 
+          {/* Anchor on the opened day, not `held.from`: saving re-anchors an
+              edited rule to `iso` (store's `editPlan`, `base = dayPlan.iso`),
+              so reading the stale `held.from` here would show a date the
+              committed rule won't use. A new rule anchors on `iso` too. */}
           <Text style={styles.sentence}>
-            {repeatSentence(repeat, anchorFor(held?.from ?? iso, repeat), L, s.lang)}
+            {repeatSentence(repeat, anchorFor(iso, repeat), L, s.lang)}
           </Text>
         </>
       )}

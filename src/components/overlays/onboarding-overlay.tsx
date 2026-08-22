@@ -276,7 +276,12 @@ export function OnboardingOverlay() {
       return out;
     });
 
-  const finish = () => applyOnboarding({ profile, style, level, picked, week });
+  // `reopened` is `s.onboarded` captured at mount — true iff the tour was
+  // reopened from Settings, which is exactly first-run-vs-re-run. On a re-run
+  // `applyOnboarding` skips the plan write, so a plan built since setup (dated
+  // rules, intervals, one-offs, chosen rest days) is not flattened back to
+  // weekday slots.
+  const finish = () => applyOnboarding({ profile, style, level, picked, week, rerun: reopened });
 
   const seedName = (r: Routine) => resolveNames(r.names, s.lang);
 

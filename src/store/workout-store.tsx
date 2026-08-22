@@ -181,6 +181,16 @@ export type LoggedExercise = {
   marks?: (MarkNote | null)[];
   links?: boolean[];
   with?: 'next';
+  /**
+   * The exercise's measure, frozen at log time — but written only when it is
+   * *not* the default `load`, so pre-existing entries and every lift keep their
+   * shape and this stays absent almost everywhere. It exists so `stats.ts` can
+   * still tell a run or a hold from a lift after the exercise has been deleted:
+   * `measureOf(ex(id))` returns `load` for a missing exercise, which would
+   * silently erase a since-deleted `distance`/`duration` session from the
+   * cardio and distance totals. Optional ⇒ no `STORAGE_VERSION` bump.
+   */
+  measure?: Measure;
 };
 /**
  * One finished session: which local day it landed on, from which routine, and
@@ -768,6 +778,24 @@ const dropLive = (
 ): Omit<Persisted, 'session' | 'active' | 'elapsed' | 'rest' | 'sessionRole'> => {
   const { session: _s, active: _a, elapsed: _e, rest: _r, sessionRole: _o, ...durable } = o;
   return durable;
+};
+
+/**
+ * The radio-identity keys, stripped from any blob on the way *in* from a
+ * backup. Approved decision: a restore brings back diary / library / plan /
+ * settings only — never who this phone *is* on the buddy radio. Left in, a
+ * foreign backup's `selfId` / `knownBuddies` / `buddyIds` / `buddySecrets`
+ * would install over this phone's, hijacking its identity and its buddies'
+ * trust; a new phone simply re-pairs each buddy through the code flow. Enforced
+ * on import, not export — a backup file may still carry them, the guarantee is
+ * that they never land. `mergePersisted` already returns only its parts' keys,
+ * so the "Add what's missing" path needs no stripping.
+ */
+const dropIdentity = <T extends Partial<Persisted>>(
+  o: T
+): Omit<T, 'selfId' | 'knownBuddies' | 'buddyIds' | 'buddySecrets'> => {
+  const { selfId: _i, knownBuddies: _k, buddyIds: _b, buddySecrets: _y, ...rest } = o;
+  return rest;
 };
 
 const pickPersisted = (s: State): Persisted => {
@@ -1936,6 +1964,16 @@ function useWorkoutState() {
     level: Level;
     picked: string[];
     week: Record<number, string>;
+    /**
+     * True when the tour was reopened from Settings rather than being the true
+     * first run (the overlay reads it off `onboarded`, captured at mount). A
+     * re-run re-applies the profile / level / routine picks but must **not**
+     * write `plan`: the plan is now dated rules, interval repeats, one-offs and
+     * chosen rest days, and `planFromSchedule` flattens all of that back to
+     * seven weekday slots. A first run has no plan to lose, so it still seeds
+     * one — that path stays byte-identical to before.
+     */
+    rerun: boolean;
   }) =>
     patch((s) => {
       const seeds = o.picked
@@ -1957,10 +1995,12 @@ function useWorkoutState() {
         style: o.style,
         level: o.level,
         routines,
-        // The tour's seven slots become weekly rules, anchored on this week's
-        // Monday — the same lift the v3 migration performs, from the same
-        // function, so a fresh setup and a migrated phone hold one shape.
-        plan: planFromSchedule(week, mondayISO()),
+        // First run only: the tour's seven slots become weekly rules, anchored
+        // on this week's Monday — the same lift the v3 migration performs, from
+        // the same function, so a fresh setup and a migrated phone hold one
+        // shape. A re-run leaves `plan` alone: re-seeding it would flatten every
+        // dated rule, interval, one-off and chosen rest day built since setup.
+        ...(o.rerun ? {} : { plan: planFromSchedule(week, mondayISO()) }),
         onboarded: true,
         onboardingOpen: false,
       };
@@ -2380,7 +2420,13 @@ function useWorkoutState() {
     // `dropLive` on the way in too: the seeded side now carries the LIVE keys
     // (session: null included), and patching those through would end a workout
     // in progress — the one thing a restore has always promised not to touch.
-    const restored = dropLive({ ...pickPersisted(initialState), ...migrateBlob(env.data, env.v) });
+    // `dropIdentity` strips the radio keys for the reason its own comment gives:
+    // a Replace-restore must not let a foreign backup install its `selfId` /
+    // roster / secrets over this phone's. Both keys stay absent from `restored`,
+    // so `patch` leaves this phone's own identity untouched.
+    const restored = dropIdentity(
+      dropLive({ ...pickPersisted(initialState), ...migrateBlob(env.data, env.v) })
+    );
     // Replace throws this phone's images away; the files they pointed at are now
     // orphaned in the document dir. Clean up only the URIs the restore doesn't
     // keep — `deletePersisted` ignores anything it didn't write, so a shared or
@@ -2789,7 +2835,8 @@ function useWorkoutState() {
         // the measure decides which one gets written down. A `duration` set
         // has no left field at all and always takes the dash, which is what
         // keeps its stored string the same shape as everything else.
-        const blank = blankOf(measureOf(ex(e.ex)));
+        const measure = measureOf(ex(e.ex));
+        const blank = blankOf(measure);
         // The store is the last line against a poisoned `× 0`: the right-hand
         // figure is what makes a set a set, and a fractional rep in (0, 0.5)
         // rounds to zero here even though the screen-side tick took it as
@@ -2853,6 +2900,11 @@ function useWorkoutState() {
             // whose second half was never ticked isn't one, and a bracket
             // drawn over a single block would be describing nothing.
             ...(e.with && s.session.list[k + 1]?.sets.some((x) => x.done) ? { with: e.with } : {}),
+            // The measure, frozen so a since-deleted run or hold keeps counting
+            // as cardio in `stats.ts`. Written only when it isn't the default
+            // `load` — every lift, and every entry that predates this, stays
+            // exactly as it was.
+            ...(measure !== 'load' ? { measure } : {}),
           });
           lastLog[e.ex] = { date: today, sets: ghostSets };
           // Read off `ghostMarks`, not `marked`: a verdict left on a drop

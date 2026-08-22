@@ -13,7 +13,7 @@
  * of the question — no colours, no hooks, nothing to hoist.
  */
 
-import { measureOf, type Exercise } from './exercises';
+import { measureOf, type Exercise, type Measure } from './exercises';
 
 /**
  * The history this reads, structurally rather than by importing
@@ -26,10 +26,34 @@ export type StatsSession = {
   /** What the session was called on the day — frozen at log time. */
   name?: string;
   /** Ticked sets per exercise. Absent on entries logged before the day view. */
-  list?: { ex: string; sets: string[] }[];
+  list?: {
+    ex: string;
+    sets: string[];
+    /**
+     * The measure this exercise was logged under, stamped at log time and
+     * present only when it wasn't the default `load`. Read through
+     * `measureOfLogged`: it lets a since-deleted run or hold keep counting as
+     * cardio, where `measureOf(ex(id))` would default a missing exercise to
+     * `load`. Absent on entries logged before the stamp existed.
+     */
+    measure?: Measure;
+  }[];
   /** Load volume as the summary counted it. Absent on those same old entries. */
   vol?: number;
 };
+
+/**
+ * The measure a logged exercise was recorded under. Prefer the stamp
+ * `finishSession` now writes, and fall back to the exercise's live measure —
+ * so a distance/duration exercise that has since been *deleted* keeps its
+ * cardio identity instead of `measureOf(undefined)` quietly defaulting it to
+ * `load` and erasing it from the cardio and distance totals. Old, unstamped
+ * entries have no `measure` and behave exactly as before.
+ */
+const measureOfLogged = (
+  entry: { ex: string; measure?: Measure },
+  ex: (id: string) => Exercise | undefined
+): Measure => entry.measure ?? measureOf(ex(entry.ex));
 
 /* ── regions ───────────────────────────────────────────────────────────────
  *
@@ -176,7 +200,7 @@ export function trainingStats(
     let hasCardio = false;
     for (const entry of h.list ?? []) {
       const e = ex(entry.ex);
-      const m = measureOf(e);
+      const m = measureOfLogged(entry, ex);
       if (m === 'distance' || m === 'duration') hasCardio = true;
       if (m === 'distance')
         for (const set of entry.sets) {
@@ -486,7 +510,9 @@ export function keyLifts(
   for (const h of history) {
     if (sinceDays !== null && daysAgo(h.date, today) >= sinceDays) continue;
     for (const entry of h.list ?? []) {
-      if (measureOf(ex(entry.ex)) !== 'load') continue;
+      // Same stamp-first read: a since-deleted run must not fall back to `load`
+      // and slip into the key-lift trends as if it were a barbell exercise.
+      if (measureOfLogged(entry, ex) !== 'load') continue;
       let top: Seen | null = null;
       for (const set of entry.sets) {
         const kg = setKg(set);
