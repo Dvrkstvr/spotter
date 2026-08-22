@@ -147,10 +147,16 @@ export function buildPrompt(i: PromptInput): string {
 
   // The balance, in the same six regions the screen draws — and the weak ones
   // named again in words, because that is the finding rather than the table.
+  //
+  // The unit is spelled out rather than left as `%`: these are shares of
+  // *volume divided by the muscle each region carries*, so a model told only
+  // "%" would read them as sets and call a 12% Legs a neglected one. Prose,
+  // and therefore in the user's language — unlike the identifiers in the
+  // fenced block, which are this app's data and never translated.
   const shares = stats.balance
     .map((b) => `${i.regionName(b.region)} ${Math.round(b.share * 100)}`)
     .join(' · ');
-  out.push(`${L.promptBalanceHead} (${i.periodLabel}, %)  ${shares}`);
+  out.push(`${L.promptBalanceHead} (${i.periodLabel}, ${L.promptBalanceUnit})  ${shares}`);
   if (stats.weak.length)
     out.push(
       `${L.promptWeakHead} ` +

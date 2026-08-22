@@ -33,7 +33,7 @@ import {
 } from '@/data/coach';
 import { measureOf } from '@/data/exercises';
 import type { Strings } from '@/data/i18n';
-import { keyLifts, periodOf, trainingStats, type Region } from '@/data/stats';
+import { bodyKgOf, keyLifts, periodOf, trainingStats, type Region } from '@/data/stats';
 import { useBackClose } from '@/hooks/use-back-close';
 import { themed, useColors, useThemed } from '@/design/theme';
 import { color, font, radius, slop, t, tracking } from '@/design/tokens';
@@ -128,7 +128,7 @@ export function CoachOverlay() {
   const opts = s.coach;
   const setOpts = (d: Partial<typeof opts>) => patch({ coach: { ...opts, ...d } });
 
-  const stats = trainingStats(s.history, ex, COACH_DAYS);
+  const stats = trainingStats(s.history, ex, COACH_DAYS, { bodyKg: bodyKgOf(s.profile.weight) });
   const lifts = keyLifts(s.history, ex, COACH_DAYS);
   const library = allEx();
 
