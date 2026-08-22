@@ -1952,8 +1952,49 @@ npm run typecheck
 npm run lint
 ```
 
+```bash
+npm run test
+```
+
 `npx expo export --platform android` catches things that only break at bundle
-time. There are no tests yet.
+time.
+
+## The tests
+
+Vitest, in plain Node, over the pure modules — `npm run test`, or
+`test:watch`. There is no React Native harness and adding one is not the plan:
+what is tested is `data/`, which takes values and hands answers back, and the
+one stub in the suite (`test/react-native-stub.ts`) exists only because
+`data/migrate` asks `design/tokens` whether a stored theme name is real and
+`tokens` reads `Easing` at module scope. Keeping that list at one entry is the
+property to defend — a setup needing a stub per native import rots the first
+time the code gains one, which is the argument for testing `data/` rather than
+screens.
+
+`__DEV__` is defined `true`, so every run also fires the drift check in
+`tokens` that asserts `buildPalette('blurple', true)` still equals the ported
+Nocturne palette exactly. That is the one design invariant nothing else
+checked.
+
+What is covered, and why it is these two:
+
+- **`data/migrate`** — the version chain, the shape guard and the backup
+  merge. Every bug in it is silent and lands on real training data: a key
+  dropped to its seeded default, a plan that wakes up empty, a merge that
+  overwrites what you actually lifted. The chain is tested through
+  `migrateBlob` rather than through `migrateV1/V2/V3` one at a time, because
+  the *order* is the thing that has been wrong before — `migrateV3` reads the
+  raw blob and the other two read the filtered one, and a refactor loses that
+  fact quietly. There is a test named for exactly that.
+- **`data/coach`** — `parsePlan` and `resolvePlan`, the seam. The far end is a
+  chat model that will phrase things however it likes, so the fixtures are
+  replies rather than payloads: prose around the block, a dropped tag, a
+  placeholder row copied out of the template, `1e999`, and a German
+  `"gewicht"` where a measure identifier belongs.
+
+Both suites were checked by mutation rather than trusted for passing: putting
+the `migrateV3(data, data)` bug back fails five tests, and flipping `fillGaps`
+so a backup wins fails a sixth.
 
 ## Releasing
 

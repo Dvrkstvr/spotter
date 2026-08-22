@@ -41,7 +41,8 @@
     "@types/react": "~19.1.10",
     "eslint": "^9.0.0",
     "eslint-config-expo": "~10.0.0",
-    "typescript": "~5.9.2"
+    "typescript": "~5.9.2",
+    "vitest": "^4.1.11"
   },
   "scripts": {
     "start": "expo start",
@@ -56,6 +57,8 @@
     "icons": "node scripts/make-icons.mjs",
     "version": "node scripts/sync-version.mjs",
     "licenses": "node scripts/licenses.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "android": "expo run:android",
     "ios": "expo run:ios",

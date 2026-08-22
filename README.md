@@ -219,6 +219,14 @@ npm run typecheck
 npm run lint
 ```
 
+```bash
+npm run test
+```
+
+Vitest over the pure modules in `src/data` — the storage migrations and backup
+merge (`migrate.ts`) and the AI coach's parse/resolve seam (`coach.ts`). Plain
+Node, no React Native harness; `npm run test:watch` while working on either.
+
 ## What's in it
 
 Five tabs, plus a Plan screen reached from Today:
