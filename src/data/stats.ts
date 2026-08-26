@@ -223,9 +223,6 @@ const setKg = (s: string): number | null => {
   return isNaN(n) ? null : n;
 };
 
-/** An even split across the six. The line every share is read against. */
-export const EVEN_SHARE = 1 / REGIONS.length;
-
 /**
  * The weekly-set range a muscle is read against.
  *
@@ -339,8 +336,6 @@ export type RegionStat = {
   sets: number;
   /** Those sets per week. What the row states, and what a bar is drawn to. */
   perWeek: number;
-  /** Fraction of the six regions' sets — 0…1, summing to 1 across them. */
-  share: number;
   /** The muscles under it, in `MUSCLES_OF` order. */
   muscles: MuscleStat[];
   /**
@@ -477,8 +472,6 @@ export function trainingStats(
     if (hasCardio) cardioSessions++;
   }
 
-  const total = REGIONS.reduce((a, r) => a + sets[r], 0);
-
   // Whole weeks the window spans, so 8 weeks and 12 months are read against
   // the same band. A bounded period divides by its own length; all-time has no
   // length of its own and takes the diary's, from the oldest session logged.
@@ -509,7 +502,6 @@ export function trainingStats(
       region,
       sets: sets[region],
       perWeek: sets[region] / weeks,
-      share: total === 0 ? 0 : sets[region] / total,
       muscles,
       low: muscles.filter((m) => m.low).length,
     };
@@ -579,17 +571,15 @@ export const headlineOf = (st: TrainingStats): Headline | null => {
 /**
  * A weekly rate as the screens print it: one decimal, and no trailing `.0`.
  *
- * One rounding for every surface, like `pct` — a card saying 2 and a row
- * saying 2.4 about the same muscle is the kind of disagreement nobody can
- * debug from a screenshot.
+ * One rounding for every surface — a card saying 2 and a row saying 2.4 about
+ * the same muscle is the kind of disagreement nobody can debug from a
+ * screenshot.
  */
 export const rate = (perWeek: number): string => {
   const n = Math.round(perWeek * 10) / 10;
   return Number.isInteger(n) ? String(n) : n.toFixed(1);
 };
 
-/** A share as whole percent. One rounding, so no two screens disagree by 1. */
-export const pct = (share: number) => Math.round(share * 100);
 
 /**
  * 428000 → "428,000". `toLocaleString` would be the obvious call and is not

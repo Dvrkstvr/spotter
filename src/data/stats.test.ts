@@ -23,7 +23,6 @@ import { describe, expect, it } from 'vitest';
 import type { Exercise } from './exercises';
 import {
   e1rmOf,
-  EVEN_SHARE,
   headlineOf,
   keyLifts,
   rate,
@@ -120,15 +119,15 @@ describe('counting sets, fractionally', () => {
     expect(st.countedSets).toBe(1);
   });
 
-  it('sums the six shares to one, in drawing order, however lopsided', () => {
+  it('reports every region in drawing order, however lopsided the week', () => {
     const st = stats([day([reps('squat', 5)])]);
-    expect(st.balance.reduce((a, b) => a + b.share, 0)).toBeCloseTo(1, 6);
     expect(st.balance.map((b) => b.region)).toEqual([...REGIONS]);
+    expect(st.balance).toHaveLength(REGIONS.length);
   });
 
   it('reads an evenly trained body as even', () => {
     const st = over(14, [day(evenBody(24))]);
-    for (const b of st.balance) expect(b.share).toBeCloseTo(EVEN_SHARE, 6);
+    for (const b of st.balance) expect(b.sets).toBe(24);
   });
 
   it('calls an even split even and still short, which a share never could', () => {
@@ -138,7 +137,9 @@ describe('counting sets, fractionally', () => {
     // difference between this and the fixture above.
     const st = over(14, [day(evenBody(24))]); // 12 a week — inside the range
     const thin = over(14, [day(evenBody(4))]); // 2 a week — the same shape
-    expect(thin.balance.map((b) => b.share)).toEqual(st.balance.map((b) => b.share));
+    // Identical shape: six regions in the same proportion to one another.
+    const shape = (x: typeof st) => x.balance.map((b) => b.sets / x.balance[0].sets);
+    expect(shape(thin)).toEqual(shape(st));
     expect(st.weak).toEqual([]);
     expect(thin.weak.length).toBeGreaterThan(0);
     expect(thin.weak.every((w) => w.perWeek === 2)).toBe(true);
@@ -195,7 +196,7 @@ describe('a set is a set, whatever was on the bar', () => {
   it('counts a hold as one set rather than as kilo-seconds', () => {
     const st = stats([day([{ ex: 'plank', sets: ['BW × 60', 'BW × 45'] }])]);
     expect(region([day([{ ex: 'plank', sets: ['BW × 60', 'BW × 45'] }])], 'Core').sets).toBe(2);
-    expect(st.balance.find((b) => b.region === 'Core')!.share).toBe(1);
+    expect(st.balance.filter((b) => b.sets > 0).map((b) => b.region)).toEqual(['Core']);
   });
 
   it('leaves `volume` the summary’s own number, untouched by any of it', () => {
@@ -261,7 +262,7 @@ describe('loose sets', () => {
   it('claims nothing at all about an empty window', () => {
     const st = stats([]);
     expect(st.weak).toEqual([]);
-    expect(st.balance.every((b) => b.share === 0 && b.low === 0)).toBe(true);
+    expect(st.balance.every((b) => b.sets === 0 && b.low === 0)).toBe(true);
   });
 });
 

@@ -279,8 +279,10 @@ export const DICT = {
     promptIntro: 'You are an experienced strength coach. Below is real data from my workout diary. Recommend exercises and routines for my goal.',
     promptGoalHead: 'MY GOAL', promptWeek: '{n} sessions per week.', promptGear: 'Equipment: {gear}.',
     promptAnyGear: 'whatever I have',
-    promptBalanceHead: 'MUSCLE BALANCE', promptBalanceUnit: '% of sets, counting a secondary muscle as half',
-    promptWeakHead: 'Behind:', promptBandNote: 'sets per week; {min}–{max} is the range',
+    promptBalanceHead: 'MUSCLE BALANCE',
+    promptBalanceUnit:
+      'sets per week, counting a secondary muscle as half; {min}–{max} per muscle is the usual range',
+    promptWeakHead: 'Behind:',
     promptPushPull:
       'Push : pull  1 : {ratio} — {push} pushing sets a week against {pull} pulling, upper body only; 1 : 1 or more is the usual aim.',
     promptCardioHead: 'Cardio:', promptCardioNone: 'no sessions at all.',
@@ -768,8 +770,10 @@ export const DICT = {
     promptIntro: 'Du bist ein erfahrener Trainer für Krafttraining. Unten stehen echte Daten aus meinem Trainingstagebuch. Empfiehl mir Übungen und Routinen für mein Ziel.',
     promptGoalHead: 'MEIN ZIEL', promptWeek: '{n} Einheiten pro Woche.', promptGear: 'Geräte: {gear}.',
     promptAnyGear: 'was ich habe',
-    promptBalanceHead: 'MUSKELBALANCE', promptBalanceUnit: '% der Sätze, ein sekundärer Muskel zählt halb',
-    promptWeakHead: 'Im Rückstand:', promptBandNote: 'Sätze pro Woche; {min}–{max} wäre der Bereich',
+    promptBalanceHead: 'MUSKELBALANCE',
+    promptBalanceUnit:
+      'Sätze pro Woche, ein sekundärer Muskel zählt halb; {min}–{max} pro Muskel wäre der Bereich',
+    promptWeakHead: 'Im Rückstand:',
     promptPushPull:
       'Drücken : Ziehen  1 : {ratio} — {push} Sätze Drücken pro Woche gegen {pull} Ziehen, nur Oberkörper; 1 : 1 oder mehr ist üblich.',
     promptCardioHead: 'Cardio:', promptCardioNone: 'gar keine Einheiten.',

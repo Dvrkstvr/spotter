@@ -675,13 +675,21 @@ a chat app reached through the Android share sheet, and a tiny on-device model
 later answers the same fenced block with the preview and the import path
 untouched.
 
-- **The balance line names its unit** (`promptBalanceUnit`), and the unit has
-  changed once already — it said "% of volume, weighted by muscle size" while
-  the balance counted kilos. A model handed bare percentages guesses, and a
-  wrong guess about the unit is a confident recommendation about the wrong
-  muscle, so this string moves whenever the arithmetic does. Prose, so it is in
-  the user's language — unlike the identifiers in the fenced block. Its twin on
-  the screen is `insightsBalanceHint`, which has to say the same thing.
+- **Every figure in the prompt is sets a week**, and the balance line names the
+  unit and the range once for all of them (`promptBalanceUnit`). It has been
+  wrong twice: it said "% of volume, weighted by muscle size" while the balance
+  counted kilos, and later sent percentages while the line under it already
+  sent rates — one reading in two units a line apart, which a model has to
+  guess its way out of. A wrong guess about the unit is a confident
+  recommendation about the wrong muscle, so this string moves whenever the
+  arithmetic does. Stated once rather than beside every number: the weak line
+  repeats neither. Prose, so it is in the user's language — unlike the
+  identifiers in the fenced block.
+- **`RegionStat` carries no share, and `stats.ts` has no `pct`.** Both went
+  when the prompt stopped sending percentages — the last reader of either.
+  Nothing on a screen or in the prompt is a proportion of your own training any
+  more; every figure is a rate against a stated range, which is the point of
+  the whole rebuild.
 - **The prompt is in the user's language; the contract inside it is not.** They
   read it before they send it — it is shown in full, which is what makes the
   privacy switch on the step before it mean something rather than being a

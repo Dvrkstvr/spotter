@@ -152,28 +152,35 @@ export function buildPrompt(i: PromptInput): string {
   const note = (opts.note ?? '').trim();
   if (note) out.push(`${L.promptNoteHead}  ${note}`, '');
 
-  // The balance, in the same six regions the screen draws — and the weak ones
-  // named again in words, because that is the finding rather than the table.
+  // The balance, in the same six regions the screen draws — and the short
+  // muscles named again in words, because that is the finding rather than the
+  // table.
   //
-  // The unit is spelled out rather than left as `%`: these are shares of
-  // *fractionally counted sets*, and a model told only "%" guesses. Prose, and
-  // therefore in the user's language — unlike the identifiers in the fenced
-  // block, which are this app's data and never translated.
-  const shares = stats.balance
-    .map((b) => `${i.regionName(b.region)} ${Math.round(b.share * 100)}`)
+  // **Sets a week, on both lines.** These were percentages while the weak line
+  // below was already a rate, which left one reading in two units a line
+  // apart: a model handed "Chest 21" and "Calves 2" in the same breath has to
+  // work out that one is a share and the other a count. It is also the weaker
+  // of the two figures — a share can only say *relatively less*, where a rate
+  // against a stated range can say *not enough*.
+  //
+  // The unit and the range are spelled out once, here, rather than repeated
+  // beside every number. Prose, and therefore in the user's language — unlike
+  // the identifiers in the fenced block, which are this app's data and never
+  // translated.
+  const unit = L.promptBalanceUnit
+    .replace('{min}', String(BAND.min))
+    .replace('{max}', String(BAND.max));
+  const rates = stats.balance
+    .map((b) => `${i.regionName(b.region)} ${rate(b.perWeek)}`)
     .join(' · ');
-  out.push(`${L.promptBalanceHead} (${i.periodLabel}, ${L.promptBalanceUnit})  ${shares}`);
-  // Named muscles and weekly rates rather than regions and percentages: a
-  // share tells a model only that something is relatively less, where "Calves
-  // 2/week against 10-20" is a number it can act on — and the muscle is the
-  // level a plan can actually be written at.
+  out.push(`${L.promptBalanceHead} (${i.periodLabel}, ${unit})  ${rates}`);
+  // The muscle is the level a plan can actually be written at, and the level
+  // the range is stated at — "Calves 2" is something to act on where "Legs
+  // behind" is not. The range is not repeated: it is on the line above.
   if (stats.weak.length)
     out.push(
       `${L.promptWeakHead} ` +
-        stats.weak
-          .map((w) => `${i.muscleName(w.group)} ${rate(w.perWeek)}`)
-          .join(', ') +
-        ` (${L.promptBandNote.replace('{min}', String(BAND.min)).replace('{max}', String(BAND.max))})`
+        stats.weak.map((w) => `${i.muscleName(w.group)} ${rate(w.perWeek)}`).join(', ')
     );
   // Push against pull, which is the one finding on this screen the six regions
   // cannot state: Arms merges biceps and triceps, so a diary that presses
