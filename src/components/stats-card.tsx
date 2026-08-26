@@ -23,7 +23,6 @@ import { color, font, radius, t, tracking, wash } from '@/design/tokens';
 import { CardKicker } from '@/design/ui';
 import type { Strings } from '@/data/i18n';
 import {
-  EVEN_SHARE,
   MIN_SESSIONS,
   type Region,
   type TrainingStats,
@@ -31,7 +30,6 @@ import {
   BAND,
   headlineOf,
   rate,
-  pct,
 } from '@/data/stats';
 
 /** The window the headline and the bars read. Eight weeks of real training. */
@@ -95,10 +93,12 @@ export function StatsCard({
           .replace('{region}', regionLabel(head.region, L))
           .replace('{n}', rate(head.perWeek));
 
-  // The tallest bar sets the scale, so the shape reads even in a lopsided
-  // eight weeks; the even-split line is drawn against the same scale and is
-  // what makes a short bar mean something.
-  const peak = Math.max(EVEN_SHARE, ...recent.balance.map((b) => b.share));
+  // Sets a week, on the same reading as the screen this opens: the line is the
+  // *bottom of the range* rather than an even split, so a card of six short
+  // bars means "not enough" rather than "evenly not much". The top of the range
+  // floors the scale, so a lopsided eight weeks still reads as lopsided and a
+  // week where everything is short still draws everything short.
+  const peak = Math.max(BAND.max, ...recent.balance.map((b) => b.perWeek));
 
   return (
     <Pressable
@@ -120,7 +120,7 @@ export function StatsCard({
       {!empty && (
         <View
           accessibilityLabel={recent.balance
-            .map((b) => `${regionLabel(b.region, L)} ${pct(b.share)}%`)
+            .map((b) => `${regionLabel(b.region, L)} ${L.insightsPerWeek.replace('{n}', rate(b.perWeek))}`)
             .join(', ')}
         >
           <View style={styles.bars}>
@@ -133,7 +133,7 @@ export function StatsCard({
                       // Never zero: a region you have not trained at all is the
                       // most interesting bar on the card, and a bar of no height
                       // is one the eye files as absent rather than as empty.
-                      height: Math.max(3, (b.share / peak) * BAR_H),
+                      height: Math.max(3, (b.perWeek / peak) * BAR_H),
                       // A weak region is drawn quieter rather than redder: the
                       // chart's job is to show the shape, and the sentence above
                       // it has already named the one that matters.
@@ -143,8 +143,8 @@ export function StatsCard({
                 />
               </View>
             ))}
-            {/* An even split — the line every bar is read against, and the
-                only reason a short bar means anything. Drawn last on purpose:
+            {/* The bottom of the range — the line every bar is read against,
+                and the only reason a short bar means anything. Drawn last on purpose:
                 an absolutely-positioned first child paints above its siblings
                 on web and below them on Android, so the layering has to be
                 stated rather than left to paint order. On top is also where a
@@ -152,7 +152,7 @@ export function StatsCard({
                 them. */}
             <View
               pointerEvents="none"
-              style={[styles.even, { bottom: (EVEN_SHARE / peak) * BAR_H }]}
+              style={[styles.even, { bottom: (BAND.min / peak) * BAR_H }]}
             />
           </View>
           {/* Named, because the sentence above picks one of these out — a

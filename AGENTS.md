@@ -540,6 +540,30 @@ it is a *setting*, added the additive way `PERSIST` allows.
     is the usual aim* and *upper body only*, in prose and in the user's
     language. It rides with the balance rather than behind `shareProfile`:
     nothing here is a fact about the person.
+- **The radar is retired, and the reason is the unit rather than the shape.**
+  `BandBars` replaced `BalanceRadar`, which is deleted. A radar plots six
+  numbers against each other, which is all a share could ever be; these plot
+  sets a week against 10–20 on a track identical for every row, so a bar is
+  read against a target *and* against the other bars. Four things it does that
+  the polygon could not:
+  - **A region opens to its muscles**, one at a time — six regions each opening
+    five is a screen you scroll past rather than read, and "why is that one
+    short?" is asked about one region at a time.
+  - **The track runs to `BAND.max × 1.2`**, so an over-trained muscle has
+    somewhere to go. A track ending at the top of the range would draw *at the
+    range* and *twice it* identically, which is the one thing this chart exists
+    not to do.
+  - **An untrained muscle draws a dash and no fill**, never a zero: `trained`
+    is a different fact from `low`, and this is the level that shows it.
+  - **Under the range is a quieter fill (`accent700`), never `warn`** — the
+    same one-step-down grammar the diary uses for a superset's rule, and for
+    the same reason a tip borrows no dashed outline.
+- **The You card reads on the same scale as the screen it opens.** Its six mini
+  bars are sets a week with the line at the *bottom of the range* rather than
+  at an even split, and the scale is floored at the top of the range — so a
+  card of six short bars says "not enough" where it used to say "evenly not
+  much". A card and a screen disagreeing about what their one line means is
+  worse than either reading alone.
 - **Under `MIN_SESSIONS` the card makes no claims.** Balance across two workouts
   is a Tuesday, not a weakness, and a coach prompt built on it would be
   confident nonsense. The card still stands, because it is the door — its

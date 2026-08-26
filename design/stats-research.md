@@ -10,7 +10,8 @@ pass, answering three questions Calvin put to the first one.*
 table, the balance counting fractional sets, the per-muscle range, key lifts by
 estimated 1RM, and the push:pull line. Each carries a dated note at its own
 heading. **§7E** (the strength card, which needs the sex decision in
-§5) is the last one open, as is the region-expansion UI the §9.1 mockup drew.
+§5) is the last one open. The §9.1 mockup's region-expansion UI is built —
+`BandBars`, which retired the radar.
 Sections 1–6 describe the state of things **before** any of it and are left
 that way deliberately: they are the argument, and rewriting them into the past
 tense would leave the decisions with nothing to have been decided against.*
@@ -322,7 +323,8 @@ simplification as well as a correction.
 ### C. Report a rate against a band, and let "weak" mean something
 
 *Applied, 26 Aug 2026, with §8's open question answered the way §9.1's mockup
-argued: the range is stated **per muscle**, so `RegionStat` carries its rate
+argued, and the mockup's expandable rows built (`BandBars`, which retired
+`BalanceRadar`): the range is stated **per muscle**, so `RegionStat` carries its rate
 plus a `low` count and `TrainingStats.weak` became a list of muscles. One rule
 had to be invented that the share model never needed — an untrained muscle is
 not a weak one, or `Neck` is flagged every week for ever. The coach prompt

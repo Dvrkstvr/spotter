@@ -15,7 +15,7 @@ import { useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { BalanceRadar } from '@/components/balance-radar';
+import { BandBars } from '@/components/band-bars';
 import { FullScreen } from '@/components/sheet';
 import { Tip } from '@/components/tip';
 import type { Strings } from '@/data/i18n';
@@ -71,7 +71,6 @@ export function InsightsOverlay() {
   const p = periodOf(period);
 
   // Width the charts get: the screen, less the body padding on both sides.
-  const [width, setWidth] = useState(0);
 
   const st = trainingStats(s.history, ex, p.days);
   const fav = favourites(s.history, p.days);
@@ -101,7 +100,6 @@ export function InsightsOverlay() {
         style={styles.scroll}
         contentContainerStyle={[styles.body, { paddingBottom: 20 + insets.bottom }]}
         showsVerticalScrollIndicator={false}
-        onLayout={(e) => setWidth(e.nativeEvent.layout.width - 32)}
       >
         <H2 size={t.h2} style={styles.tight}>
           {L.insights}
@@ -141,20 +139,31 @@ export function InsightsOverlay() {
                 window has none, so these step aside while the rest stays. */}
             {st.countedSets > 0 && (
               <>
-                {/* The hint reads as a caption *under* the chart rather than
-                    opposite the heading: the radar's top label is centred and
-                    lands level with that row, and three things competing for
-                    one line is what made the first version look broken. */}
+                {/* Bars against the range, where a radar used to be. The
+                    change is the unit rather than the shape: a radar plots six
+                    numbers against each other, which is all a share could ever
+                    be, and a share cannot say *not enough*. A region opens to
+                    its muscles, because that is the level the range is stated
+                    at. The caption explains the fractional count instead of
+                    naming a unit — "16.5 sets" is the one figure here that
+                    looks like a mistake until you know why. */}
                 <View style={styles.card}>
-                  <H6 style={styles.cardTitle}>{L.insightsBalance}</H6>
-                  {width > 0 && (
-                    <BalanceRadar
+                  <View style={styles.cardHead}>
+                    <H6 style={styles.cardTitle}>{L.insightsBalance}</H6>
+                    <Text style={styles.cardHint}>
+                      {L.insightsBand
+                        .replace('{min}', String(BAND.min))
+                        .replace('{max}', String(BAND.max))}
+                    </Text>
+                  </View>
+                  <View style={styles.bandBars}>
+                    <BandBars
                       balance={st.balance}
-                      label={(r) => regionLabel(r, L)}
-                      size={width - 28}
-                      c={c}
+                      regionName={(r) => regionLabel(r, L)}
+                      muscleName={(g) => gInfo(g).text}
+                      L={L}
                     />
-                  )}
+                  </View>
                   <Text style={styles.caption}>{L.insightsBalanceHint}</Text>
                 </View>
 
@@ -390,6 +399,7 @@ const sheet = themed(() => ({
   },
   cardHead: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
   cardTitle: { color: color.neutral500 },
+  bandBars: { marginTop: 4 },
   caption: { fontFamily: font.regular, fontSize: 10, color: color.neutral600, marginTop: 2 },
   cardHint: { flex: 1, textAlign: 'right', fontFamily: font.regular, fontSize: 10, color: color.neutral600 },
 
