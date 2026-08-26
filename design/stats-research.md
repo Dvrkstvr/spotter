@@ -314,7 +314,7 @@ bag are gone; `regionsOf` arrived with them, taking the maximum within a set.
 Two strings had to move with the arithmetic — `promptBalanceUnit` and
 `insightsBalanceHint` both still said "% of volume, weighted by muscle size",
 which for the coach is a wrong unit handed to a model that will act on it.
-§§C–F are still open.*
+§§C–F followed.
 
 `RegionStat.sets` becomes the fractional sum and `share` is computed off it.
 Then, in one stroke:
@@ -339,8 +339,8 @@ plus a `low` count and `TrainingStats.weak` became a list of muscles. One rule
 had to be invented that the share model never needed — an untrained muscle is
 not a weak one, or `Neck` is flagged every week for ever. The coach prompt
 sends named muscles and weekly rates now instead of regions and percentages.
-§§D–F are still open, and the region-expansion UI from the mockup is not
-built: Insights lists the short muscles, but a region row does not yet open.*
+§§D–F followed, and the mockup's expandable region rows arrived with
+`BandBars`.*
 
 `sets / weeks(window)` per region, drawn against 10–20 sets/week. That target
 is stated per *muscle*, so a region rolling up two to five of them needs its
@@ -399,7 +399,8 @@ unchanged; the best set of a session is now chosen by estimate rather than by
 weight, and `KeyLift` gained `e1rm` while `deltaKg` became a delta of estimates.
 The coach prompt carries the figure beside the set it came from, labelled — a
 bare second number reads as a target. Only the prompt consumes `keyLifts`
-today; the Insights key-lift rows from the mockup are not built.*
+when this landed; the mockup's key-lift rows arrived afterwards, as the
+strength card of §7E, which draws each lift's estimate beside its level.*
 
 Epley off the best set of each session. Independent of everything above,
 smaller than all of it, and it closes a real blind spot: the current top-weight
