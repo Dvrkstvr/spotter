@@ -20,7 +20,6 @@ import { FullScreen } from '@/components/sheet';
 import { Tip } from '@/components/tip';
 import type { Strings } from '@/data/i18n';
 import {
-  bodyKgOf,
   EVEN_SHARE,
   favourites,
   funFact,
@@ -74,7 +73,7 @@ export function InsightsOverlay() {
   // Width the charts get: the screen, less the body padding on both sides.
   const [width, setWidth] = useState(0);
 
-  const st = trainingStats(s.history, ex, p.days, { bodyKg: bodyKgOf(s.profile.weight) });
+  const st = trainingStats(s.history, ex, p.days);
   const fav = favourites(s.history, p.days);
   const series = volumeSeries(s.history, p.days, p.bucketDays);
   const fact = funFact(st.volume, st.distanceKm);

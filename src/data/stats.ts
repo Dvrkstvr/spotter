@@ -13,7 +13,7 @@
  * of the question — no colours, no hooks, nothing to hoist.
  */
 
-import { measureOf, type Exercise, type Measure } from './exercises';
+import { contribOf, measureOf, type Exercise, type Measure } from './exercises';
 
 /**
  * The history this reads, structurally rather than by importing
@@ -100,75 +100,69 @@ const REGION_OF: Record<string, Region> = {
 export const regionOf = (group: string): Region | null => REGION_OF[group] ?? null;
 
 /**
- * Roughly what fraction of a body's skeletal muscle each region carries.
+ * One set's muscle contributions, rolled up to the six regions.
  *
- * This is what makes a *volume* balance readable at all. Kilos are not
- * comparable across the six: a working set of squats moves five times what a
- * working set of curls does, and that is a fact about the leverage of a leg
- * rather than about how hard the arm was trained. Read raw, every diary in
- * the world says the same thing — Legs enormous, Arms starving — which is a
- * statement about barbells rather than about anybody.
+ * **The largest contribution among a region's own muscles, never their sum.**
+ * `regionOf` is many-to-one, and a squat naming Quads, Glutes, Hamstrings and
+ * the lower back would credit **Legs** two and a half sets out of one set if
+ * these were added. One squat set is one Legs set; a leg extension set and a
+ * leg curl set are two, because sets add across the window and only the
+ * within-a-set collapse is a maximum.
  *
- * So a region's kilos are divided by the muscle that region actually carries
- * before the six are compared, and the shares re-normalise over that. The
- * consequence worth stating: an evenly trained body still reads as six equal
- * shares, so `EVEN_SHARE`, `WEAK_AT`, the radar's ring and the coach's prompt
- * all keep exactly the meaning they had when this was a count of sets.
- *
- * The figures are proportions of total skeletal muscle mass, and only their
- * ratios are ever read. They are deliberately coarse — a table anyone can
- * argue with in the tenths is honest, where four decimals would claim a
- * measurement nobody took.
+ * This is the single mistake this feature can make that still draws a
+ * plausible chart, which is why it is a named function with a test rather than
+ * a `+=` inside the loop. It is also the compromise that belongs to the
+ * *region* view and not to the data: at muscle level there is nothing to
+ * reconcile, because quads got a whole set and glutes got a whole set and both
+ * are true.
  */
-const REGION_MASS: Record<Region, number> = {
-  Legs: 0.42,
-  Back: 0.2,
-  Arms: 0.12,
-  Shoulders: 0.1,
-  Chest: 0.09,
-  Core: 0.07,
+const regionsOf = (contrib: Record<string, number>): Partial<Record<Region, number>> => {
+  const out: Partial<Record<Region, number>> = {};
+  for (const [group, n] of Object.entries(contrib)) {
+    const r = regionOf(group);
+    if (r) out[r] = Math.max(out[r] ?? 0, n);
+  }
+  return out;
 };
 
-/* ── work ──────────────────────────────────────────────────────────────────
+/* ── what a set is worth ───────────────────────────────────────────────────
  *
- * What the balance counts, and deliberately not `vol`. That number is the
- * summary's own — gated to `load` sets and reported to you in kilos — and a
- * balance needs the two things it refuses:
+ * **One.** The balance counts *sets*, not kilos, and this is the decision the
+ * rest of the file falls out of.
  *
- * - **A bodyweight set is not zero work.** `BW × 20` stores no left-hand
- *   figure, so a diary of pull-ups, push-ups and planks has a volume of 0 and
- *   would draw a body with no back, chest or core in it. Here the load is the
- *   person: the profile's weight when the phone has been told it,
- *   `DEFAULT_BODY_KG` when it hasn't, plus whatever was on the belt. Leverage
- *   is not modelled — a push-up is nearer two thirds of you than all of you —
- *   because there is no per-exercise figure for it and none to invent for a
- *   custom one, and being out by a third beats being out by everything.
- * - **A hold is work too.** `time` sets are kilo-*seconds*, which is why
- *   `totals()` won't add them into volume — but three of the seeded core
- *   exercises are planks, and a Core that empties out the moment you train it
- *   that way is the opposite of a finding. Seconds convert at
- *   `HOLD_SECONDS_PER_REP`, a stated rate rather than a measured one.
+ * It used to count work — kilos moved, with a bodyweight set charged at the
+ * profile's weight, a hold's seconds converted to reps at a stated rate, and
+ * every region divided by the muscle it carries so that a squat and a curl
+ * could be compared at all. Each of those was a correction, and every one of
+ * them was correcting the same thing: that kilos are not comparable across the
+ * six. A working set of squats moves five times what a working set of curls
+ * does, which is a fact about the leverage of a leg rather than about how hard
+ * an arm was trained.
+ *
+ * Counting sets never introduces that distortion, so none of the corrections
+ * is needed and all of them are gone — `REGION_MASS`, `HOLD_SECONDS_PER_REP`,
+ * `bodyKgOf` and `DEFAULT_BODY_KG` with them. **The balance no longer needs to
+ * know anything about the person**, which is a simplification as much as a
+ * correction: the majority of phones never filled the weight field in, and a
+ * default was silently shaping every share on the screen.
+ *
+ * It is also what the literature actually counts. The unit in every published
+ * figure this could be read against — 10–20 a week, and the dose-response
+ * meta-analyses behind it — is the hard set per muscle per week, and volume
+ * load is a poor proxy for the stimulus. See `design/stats-research.md`.
+ *
+ * Two consequences worth stating:
+ *
+ * - **A bodyweight set counts like any other**, which is what the old
+ *   bodyweight arithmetic was straining to achieve. A diary of pull-ups and
+ *   push-ups reads correctly with no figure invented for it.
+ * - **A hold counts as a set.** A plank is one set of core, not forty-five
+ *   kilo-seconds needing a conversion rate nobody measured.
  *
  * `distance` and `duration` are still worth nothing here and still land in
- * `looseSets`: a run is not a muscle to be balanced against the others, and
- * it has the cardio line of its own that says so.
+ * `looseSets`: a run is not a muscle to be balanced against the others, and it
+ * has the cardio line of its own that says so.
  */
-
-/** What a bodyweight rep is worth on a phone whose profile has no weight in it. */
-export const DEFAULT_BODY_KG = 75;
-
-/** A hold's seconds, as reps. Stated, not measured — see above. */
-const HOLD_SECONDS_PER_REP = 3;
-
-/**
- * The profile's weight field as kilos. It is free text — blank on most
- * phones, and the field takes anything — so anything that isn't a plausible
- * adult falls back rather than skewing every share on the screen.
- */
-export const bodyKgOf = (weight: string | undefined | null): number => {
-  const n = parseFloat(String(weight ?? '').replace(',', '.'));
-  return isFinite(n) && n >= 20 && n <= 400 ? n : DEFAULT_BODY_KG;
-};
 
 /** The left-hand field of a stored set, in kg. BW is 0; an unrecorded dash isn't a number. */
 const setKg = (s: string): number | null => {
@@ -177,36 +171,6 @@ const setKg = (s: string): number | null => {
   if (left === 'BW') return 0;
   const n = parseFloat(left.replace(',', '.'));
   return isNaN(n) ? null : n;
-};
-
-/** The right-hand field: reps, or a hold's seconds. Absent reads as none. */
-const setRight = (s: string): number => {
-  const n = parseFloat((String(s).split('×')[1] ?? '').trim().replace(',', '.'));
-  return isNaN(n) ? 0 : n;
-};
-
-/**
- * One stored set as work, in kilos moved.
- *
- * The *kind* decides whether the left-hand figure is the whole load or only
- * what was added to you: a `Bodyweight` exercise carries you plus the belt,
- * everything else carries what it says. An exercise deleted since resolves to
- * nothing, so the stored blank is read as the bodyweight it stood for — the
- * same shape of fallback `measureOfLogged` makes for a deleted run's measure.
- */
-const workOf = (
-  set: string,
-  measure: Measure,
-  e: Exercise | undefined,
-  bodyKg: number
-): number => {
-  if (measure !== 'load' && measure !== 'time') return 0;
-  const left = setKg(set);
-  if (left === null) return 0;
-  const bw = e ? e.kind === 'Bodyweight' : left === 0;
-  const load = bw ? bodyKg + left : left;
-  const reps = measure === 'time' ? setRight(set) / HOLD_SECONDS_PER_REP : setRight(set);
-  return load * reps;
 };
 
 /** An even split across the six. The line every share is read against. */
@@ -229,14 +193,17 @@ export const MIN_SESSIONS = 5;
 
 export type RegionStat = {
   region: Region;
-  /** Working sets logged in the window. */
-  sets: number;
-  /** Work landed on the region, in kilos moved — before the size weighting. */
-  work: number;
   /**
-   * Fraction of the size-weighted work — 0…1, summing to 1 across the six.
-   * Weighted, so this is not `work` over the total: see `REGION_MASS`.
+   * Sets credited to the region in the window, **fractionally** — so this is
+   * rarely a whole number. A bench press set is a whole chest set and half a
+   * triceps set, and within one set a region takes the largest contribution
+   * among its own muscles rather than their sum (`regionsOf`).
+   *
+   * Not to be confused with `TrainingStats.countedSets`, which counts logged
+   * rows and is a whole number.
    */
+  sets: number;
+  /** Fraction of the six regions' sets — 0…1, summing to 1 across them. */
   share: number;
   /** Below three quarters of an even split, and therefore worth naming. */
   weak: boolean;
@@ -253,14 +220,13 @@ export type TrainingStats = {
   balance: RegionStat[];
   /** The weak ones, worst first. Empty when the split is even enough. */
   weak: RegionStat[];
-  /** Working sets that rolled into a region. What the loose count is measured against. */
-  countedSets: number;
   /**
-   * Those sets as work, in kilos moved — the six regions' `work` added up.
-   * Not `volume`: bodyweight counts as the body and a hold counts at all, so
-   * the two answer different questions and are deliberately not one number.
+   * Logged sets that reached at least one region — **whole rows**, not the
+   * fractional figure `RegionStat.sets` carries. It is what `looseSets` is
+   * measured against, and the two have to be countable in the same unit for
+   * the disclosure under the chart to mean anything.
    */
-  countedWork: number;
+  countedSets: number;
   /**
    * Sets logged in the window that reached no region: cardio, full-body, and
    * anything filed under a group the user invented. Kept so a screen can
@@ -289,25 +255,23 @@ export type TrainingStats = {
  * Volume is taken from each entry's own `vol` rather than recomputed, because
  * that number was written by `totals()` and is already gated to `load` sets —
  * re-deriving it here would mean re-deciding what counts, in a second place.
- * The *balance* is the one thing that cannot use it and says so at `workOf`.
+ * The *balance* does not use it at all and says so at "what a set is worth".
  * An entry from before the day view carries neither `vol` nor `list`; it still
  * counts as a session, and contributes nothing to the balance. A diary that
  * predates a feature should read as short on detail, never as short on days.
  *
- * `opts` rather than a fifth positional: `bodyKg` is the only thing any reader
- * in this file needs to know about the *person* rather than about the diary,
- * and it and `sinceDays` are both `number | null` — side by side they would
- * typecheck in either order, which is a call site that goes wrong silently.
- * The siblings keep their positional `today`, having nothing to bundle.
+ * `today` is positional again, like the siblings'. It was bundled into an
+ * options bag to keep it apart from `bodyKg` — both `number | null`, so side
+ * by side they typechecked in either order and a call site could go wrong
+ * silently. Counting sets took `bodyKg` out of this function entirely, and
+ * with nothing left to be confused with, the bag had nothing to do.
  */
 export function trainingStats(
   history: readonly StatsSession[],
   ex: (id: string) => Exercise | undefined,
   sinceDays: number | null = null,
-  opts: { today?: Date; bodyKg?: number } = {}
+  today: Date = new Date()
 ): TrainingStats {
-  const today = opts.today ?? new Date();
-  const bodyKg = opts.bodyKg ?? DEFAULT_BODY_KG;
   // One window boundary for every reader: whole local days back, futures
   // excluded, so the footer total, the bars and the coach prompt describe the
   // same slice. `daysAgo` is the same day-count `volumeSeries` and `keyLifts`
@@ -319,9 +283,7 @@ export function trainingStats(
   });
 
   const sets = Object.fromEntries(REGIONS.map((r) => [r, 0])) as Record<Region, number>;
-  const work = Object.fromEntries(REGIONS.map((r) => [r, 0])) as Record<Region, number>;
   let counted = 0;
-  let countedWork = 0;
   let loose = 0;
   let volume = 0;
   let cardioSessions = 0;
@@ -340,42 +302,36 @@ export function trainingStats(
           const km = parseFloat((String(set).split('×')[0]?.trim() ?? '').replace(',', '.'));
           if (!isNaN(km)) distanceKm += km;
         }
-      const region = e ? regionOf(e.group) : null;
-      if (region && m !== 'distance' && m !== 'duration') {
-        sets[region] += entry.sets.length;
-        counted += entry.sets.length;
-        for (const set of entry.sets) {
-          const w = workOf(set, m, e, bodyKg);
-          work[region] += w;
-          countedWork += w;
-        }
-      } else {
+      // Cardio is not a muscle to be balanced against the others, so it is
+      // gated out before the contributions are read at all — which is also
+      // why the seeded cardio exercises carry no `also` to read.
+      const hit = m === 'distance' || m === 'duration' ? {} : regionsOf(contribOf(e));
+      const reached = Object.entries(hit) as [Region, number][];
+      if (reached.length === 0) {
+        // Reached no region: cardio, full body, or filed under a group the
+        // user invented. Counted in rows, because that is the unit the
+        // disclosure under the chart states it in.
         loose += entry.sets.length;
+        continue;
       }
+      counted += entry.sets.length;
+      for (const [region, n] of reached) sets[region] += entry.sets.length * n;
     }
     if (hasCardio) cardioSessions++;
   }
 
-  // Every region's kilos per kilo of the muscle it carries. This is the whole
-  // of the size weighting, and it is a *ratio* — the units cancel on the
-  // normalisation below, so `REGION_MASS` only ever has to be right about the
-  // regions relative to each other.
-  const perMass = REGIONS.map((r) => work[r] / REGION_MASS[r]);
-  const totalPerMass = perMass.reduce((a, b) => a + b, 0);
+  const total = REGIONS.reduce((a, r) => a + sets[r], 0);
 
-  const balance: RegionStat[] = REGIONS.map((region, i) => {
-    const share = totalPerMass === 0 ? 0 : perMass[i] / totalPerMass;
+  const balance: RegionStat[] = REGIONS.map((region) => {
+    const share = total === 0 ? 0 : sets[region] / total;
     return {
       region,
       sets: sets[region],
-      work: work[region],
       share,
-      // Nothing is weak until something has been logged: with no work counted
+      // Nothing is weak until something has been logged: with nothing counted
       // every share is 0, and calling all six weak would be an opinion about
-      // an empty diary. Guarded on the work rather than on the set count —
-      // they part company for a set that moved nothing, and it is the shares
-      // this is defending.
-      weak: totalPerMass > 0 && share < EVEN_SHARE * WEAK_AT,
+      // an empty diary rather than a finding.
+      weak: total > 0 && share < EVEN_SHARE * WEAK_AT,
     };
   });
 
@@ -386,7 +342,6 @@ export function trainingStats(
     balance,
     weak: balance.filter((b) => b.weak).sort((a, b) => a.share - b.share),
     countedSets: counted,
-    countedWork,
     looseSets: loose,
     cardioSessions,
     distanceKm,

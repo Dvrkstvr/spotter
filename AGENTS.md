@@ -450,38 +450,42 @@ it is a *setting*, added the additive way `PERSIST` allows.
   rename, reorder and extend, while these six are an analysis this app
   performs. That is also why the mapping is deliberately partial: a group
   someone invented, plus `FullBody`, `Cardio` and `Other`, map to nothing.
-- **A region's share is volume, divided by the muscle that region carries.**
-  Both halves are one decision, because neither works without the other. Sets
-  were the first reading and they weigh a set of curls against a set of squats
-  as equals, which is not what an evening in a gym feels like. Volume alone
-  swings the other way and harder: a working set of squats moves five times
-  what a working set of curls does, so a raw-kilo chart says *Legs enormous,
-  Arms starving* about every diary ever kept — a statement about barbells
-  rather than about anybody. `REGION_MASS` divides each region's kilos by
-  roughly the share of skeletal muscle it holds, and the six re-normalise over
-  that, so an evenly trained body still reads as six equal shares and
-  `EVEN_SHARE`, `WEAK_AT`, the radar's ring and the coach's prompt all keep
-  exactly the meaning they had. The table is deliberately coarse — only the
-  ratios are ever read, and four decimals would claim a measurement nobody
-  took.
-- **The balance counts *work*, which is not `vol`, and the two differences are
-  the point.** A bodyweight set stores no left-hand figure, so by `vol` a diary
-  of pull-ups, push-ups and planks moves zero kilos — and would draw a body
-  with no back, chest or core in it. So the load is the person: the profile's
-  weight when the phone has been told it, `DEFAULT_BODY_KG` when it hasn't,
-  plus whatever was on the belt (a `Bodyweight` *kind* is what says which, so a
-  weighted pull-up is you plus twenty rather than twenty). Leverage is not
-  modelled and there is nothing to model it from. Holds are the second: `time`
-  sets are kilo-seconds, which is why `totals()` refuses them, but three of the
-  seeded core exercises are planks and a Core that empties the moment you train
-  it that way is the opposite of a finding — so seconds convert at
-  `HOLD_SECONDS_PER_REP`, a stated rate rather than a measured one. `distance`
-  and `duration` are still worth nothing and still land in `looseSets`.
-- **`bodyKg` is the one thing here that is a fact about the person**, which is
-  why `trainingStats` alone takes an options bag: it and `sinceDays` are both
-  `number | null`, and side by side as positionals they typecheck in either
-  order — a call site that goes wrong silently, on a screen whose numbers
-  nobody can check by eye.
+- **A region's share is fractional *sets*, and nothing about the person.** The
+  unit is the hard set per muscle per week, which is what every published
+  figure this could be read against is stated in, and volume load is a poor
+  proxy for the stimulus besides (`design/stats-research.md`). Sets were the
+  first reading here too and were replaced by weighted volume, which was the
+  wrong fix for a real problem: kilos are not comparable across the six, so a
+  raw-kilo chart says *Legs enormous, Arms starving* about every diary ever
+  kept. That needed `REGION_MASS` to divide each region's kilos by the muscle
+  it carries, a body weight to make a pull-up worth anything, and a
+  seconds-to-reps rate to keep planks on the chart. **Counting sets never
+  introduces the distortion, so all three corrections are gone** — with them
+  `bodyKgOf`, `DEFAULT_BODY_KG`, and the options bag `trainingStats` took to
+  keep `bodyKg` from being confused with `sinceDays`. `today` is positional
+  again, like the siblings'. A bodyweight set now counts like any other with no
+  figure invented for it, a hold is one set of core, and the majority of phones
+  that never filled the weight field in are no longer having a default shape
+  every share on their screen.
+- **Which muscles a set reaches is `contribOf`, and the roll-up takes a
+  maximum.** A set credits its filing group 1 and every muscle in `also` its
+  own fraction, so one set legitimately totals more than one *across the body*
+  — see `design/muscle-contribution-spec.md`. But `regionOf` is many-to-one, so
+  a squat naming Quads, Glutes, Hamstrings and Adductors would credit **Legs**
+  three sets out of one if those were added: `regionsOf` takes the **largest**
+  contribution within a set, and sets add across the window. One squat set is
+  one Legs set; a leg extension and a leg curl are two. That compromise belongs
+  to the six-region view rather than to the data — at muscle level quads got a
+  whole set and glutes got a whole set and both are true — and it is the one
+  mistake here that still draws a plausible chart, which is why it has a test
+  named for it.
+- **Cardio is gated by measure, before the contributions are read.** `Cardio`
+  and `FullBody` map to no region anyway, so the gate looks redundant and is
+  not: a `distance` exercise someone filed under Quads is still a run, and
+  without it a cardio month lands on the leg axis.
+- **`countedSets` and `looseSets` are whole rows; `RegionStat.sets` is
+  fractional.** The disclosure under the chart says how many sets reached no
+  muscle group, and it has to be measured in something a person counted.
 - **Weak is below three quarters of an even split, not below even.** In any real
   week three regions are under the mean by definition, and a screen that flags
   half the body every time is noise rather than a finding.
@@ -502,15 +506,14 @@ it is a *setting*, added the additive way `PERSIST` allows.
   to show, so it is stated under the weak points instead of being left out.
   What the six percentages *do* leave out is disclosed at the foot
   (`looseSets`), or a cardio-heavy month reads as a missing one.
-- **`distanceKm` and the balance's work are re-derived from the stored set
-  strings; the headline volume never is.** `volume` is each entry's own `vol`,
-  because that number was written by `totals()` and is already gated to `load`
-  sets — re-deriving it here would mean re-deciding what counts in a second
-  place, and it is the number reported back to you in kilos. The other two are
-  re-derived because they are answers to questions `vol` deliberately refuses:
-  distance never had a total of its own, and the balance needs bodyweight and
-  holds to count (above). An unrecorded `—` contributes nothing rather than
-  zero, in both.
+- **`distanceKm` is re-derived from the stored set strings; the headline volume
+  never is.** `volume` is each entry's own `vol`, because that number was
+  written by `totals()` and is already gated to `load` sets — re-deriving it
+  here would mean re-deciding what counts in a second place, and it is the
+  number reported back to you in kilos. Distance is re-derived because it is an
+  answer to a question `vol` deliberately refuses: it never had a total of its
+  own. An unrecorded `—` contributes nothing rather than zero. The balance
+  re-derives neither, counting rows instead.
 - **A fun fact compares against the largest thing you have cleared twice over.**
   The threshold does two jobs: "about 1 elephant" says less than the number did,
   and always being plural is what lets every line read "{n} cars" and skip
@@ -536,10 +539,13 @@ a chat app reached through the Android share sheet, and a tiny on-device model
 later answers the same fenced block with the preview and the import path
 untouched.
 
-- **The balance line names its unit** (`promptBalanceUnit`). A model handed
-  bare percentages reads them as sets and calls a 12% Legs neglected, where 12%
-  of *volume per unit of muscle* is a leg that has been worked. Prose, so it is
-  in the user's language — unlike the identifiers in the fenced block.
+- **The balance line names its unit** (`promptBalanceUnit`), and the unit has
+  changed once already — it said "% of volume, weighted by muscle size" while
+  the balance counted kilos. A model handed bare percentages guesses, and a
+  wrong guess about the unit is a confident recommendation about the wrong
+  muscle, so this string moves whenever the arithmetic does. Prose, so it is in
+  the user's language — unlike the identifiers in the fenced block. Its twin on
+  the screen is `insightsBalanceHint`, which has to say the same thing.
 - **The prompt is in the user's language; the contract inside it is not.** They
   read it before they send it — it is shown in full, which is what makes the
   privacy switch on the step before it mean something rather than being a

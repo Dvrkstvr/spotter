@@ -289,6 +289,14 @@ Everything else on this list is optional. **This one is the feature.**
 
 ### B. Count fractional hard sets, not mass-weighted kilos
 
+*Applied, 26 Aug 2026, exactly as written below. `REGION_MASS`,
+`HOLD_SECONDS_PER_REP`, `bodyKgOf`, `DEFAULT_BODY_KG`, `workOf` and the options
+bag are gone; `regionsOf` arrived with them, taking the maximum within a set.
+Two strings had to move with the arithmetic — `promptBalanceUnit` and
+`insightsBalanceHint` both still said "% of volume, weighted by muscle size",
+which for the coach is a wrong unit handed to a model that will act on it.
+§§C–F are still open.*
+
 `RegionStat.sets` becomes the fractional sum and `share` is computed off it.
 Then, in one stroke:
 
