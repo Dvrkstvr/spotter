@@ -1,6 +1,6 @@
 # Spotter — Privacy Policy
 
-**Effective:** 22 August 2026 · **Applies to:** the Spotter Android application
+**Effective:** 26 August 2026 · **Applies to:** the Spotter Android application
 
 ## The short version
 
@@ -26,7 +26,7 @@ folder. None of it is transmitted anywhere by the app.
   weights, reps, and any verdicts or notes you attached to a set.
 - **Your library and plan** — routines, custom exercises, muscle-group and
   equipment lists, machine-setup notes, and your dated plan rules.
-- **Your profile** — a display name, and optionally age, bodyweight and height.
+- **Your profile** — a display name, and optionally age, bodyweight, height and sex.
   All free text, all optional.
 - **Photos you add** — a profile picture and any reference images you attach to
   an exercise. Copied into the app's own folder; the originals are untouched.
@@ -52,7 +52,7 @@ workout — live session progress: which sets are ticked, how much rest is left,
 and the turn settings.
 
 **What is never exchanged:** your training history, the notes and verdicts you
-write on a set, your age, bodyweight or height, your photos, your settings, and
+write on a set, your age, bodyweight, height or sex, your photos, your settings, and
 your diagnostics log.
 
 Nearby Connections is part of Google Play services. That layer is Google's, and
@@ -75,8 +75,8 @@ choose the receiving app from the Android share sheet.
 
 **The prompt contains:** a summary of your training (volume, muscle-region
 balance, key lifts), the names in your exercise library, and your answers about
-goal, sessions per week and available equipment. **Your age, bodyweight and
-height are included only if you switch that option on** — it is off by default,
+goal, sessions per week and available equipment. **Your age, bodyweight,
+height and sex are included only if you switch that option on** — it is off by default,
 and the prompt is displayed before you send it so you can see exactly what it
 says.
 

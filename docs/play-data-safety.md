@@ -24,6 +24,16 @@ the device is neither, and the form says so explicitly.
 
 - **No account, no server, no backend.** There is nothing for data to be
   collected *into*.
+- **The profile holds health-adjacent data, and the answer is still "no".**
+  Age, bodyweight, height and sex are stored, all optional and all entered by
+  hand. Data safety asks about data *collected* — sent off the device — and
+  none of it is: the only routes out are the coach prompt, behind a switch that
+  is off by default and which shows the full text before it is sent, and a
+  backup file the user exports themselves. Both are user-initiated transfers
+  through the Android share sheet, which Play's guidance excludes. **Sex was
+  added on 26 August 2026** and changes none of this; it is recorded here
+  because it is the most sensitive field in the app and the next person to read
+  this form will look for it.
 - **No analytics, no ads, no advertising ID, no crash reporting.** No third-party
   SDK in the app contacts a server.
 - **The buddy link is device-to-device.** Data safety's "shared" means

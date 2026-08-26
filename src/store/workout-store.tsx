@@ -162,7 +162,31 @@ export type CoDraft = {
   /** the buddy currently has the exercise picker open */
   buddyPicking: boolean;
 };
-export type Profile = { name: string; age: string; weight: string; height: string };
+/**
+ * `sex` is the one field here that is not a free-text measure, and the one
+ * that is genuinely optional rather than merely often-blank.
+ *
+ * It is stored because it is the largest single moderator in every strength
+ * standard, muscle-distribution table and lean-mass formula there is — larger
+ * than age and height together (`design/stats-research.md` §5). It is
+ * **absent** until answered, never defaulted, and answering it again with the
+ * same value clears it: two chips with neither lit is how "I would rather not
+ * say" is expressed, and inventing a third chip for that would make the
+ * question louder than it is.
+ *
+ * It never crosses to a buddy — `profile` is not in a snapshot at all — and it
+ * reaches the coach only behind `shareProfile`, with the age, weight and
+ * height it belongs beside.
+ */
+export type Sex = 'male' | 'female';
+
+export type Profile = {
+  name: string;
+  age: string;
+  weight: string;
+  height: string;
+  sex?: Sex;
+};
 export type PickerMode = 'routine' | 'session' | null;
 /** How the Routines tab orders your list. */
 export type RoutineSort = 'week' | 'recent' | 'az';

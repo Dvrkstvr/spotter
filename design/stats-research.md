@@ -204,6 +204,15 @@ exponents (0.55 vs 0.50 in the general population). Spotter's `Profile` is
 one — and it carries a Play data-safety cost, so it is a decision rather than
 an oversight to fix quietly.
 
+> **Decided, 26 Aug 2026: added.** `Profile.sex` is `'male' | 'female'`,
+> optional and absent until answered, cleared by pressing the lit chip again —
+> two chips and no third, because a *prefer not to say* option would make the
+> question louder than unanswered already is. It reaches the coach prompt
+> behind `shareProfile` with the other body facts, never crosses to a buddy,
+> and unblocks §7E. Adding it moved both privacy policies, both published
+> pages and `docs/play-data-safety.md`, whose answer it does not change: the
+> field is stored, never collected.
+
 ### And the field that would matter most of all
 
 **Effort — RIR or RPE per set.** Proximity to failure is what decides whether

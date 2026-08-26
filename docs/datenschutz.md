@@ -1,6 +1,6 @@
 # Spotter — Datenschutzerklärung
 
-**Stand:** 22. August 2026 · **Gilt für:** die Android-App Spotter
+**Stand:** 26. August 2026 · **Gilt für:** die Android-App Spotter
 
 <!-- Du-Form, wie in der ganzen App. Rechtlich ist beides zulässig; zwei
      Anreden in einem Produkt wären der Bruch. -->
@@ -32,7 +32,7 @@ Dokumentenordner. Nichts davon wird von der App irgendwohin übertragen.
 - **Deine Bibliothek und dein Plan** — Routinen, eigene Übungen, Muskelgruppen-
   und Gerätelisten, Einstellungsnotizen zu Maschinen und deine datierten
   Planregeln.
-- **Dein Profil** — ein Anzeigename, wahlweise Alter, Körpergewicht und Größe.
+- **Dein Profil** — ein Anzeigename, wahlweise Alter, Körpergewicht, Größe und Geschlecht.
   Alles frei eingegeben, alles freiwillig.
 - **Fotos, die du hinzufügst** — ein Profilbild und Referenzbilder zu Übungen.
   Sie werden in den Ordner der App kopiert; die Originale bleiben unberührt.
@@ -58,7 +58,7 @@ Session — der laufende Fortschritt: welche Sätze abgehakt sind, wie viel Paus
 noch läuft, und die Einstellungen dazu, wer wann dran ist.
 
 **Nie übertragen werden:** dein Trainingsverlauf, die Notizen und Bewertungen zu
-deinen Sätzen, dein Alter, dein Gewicht, deine Größe, deine Fotos, deine
+deinen Sätzen, dein Alter, dein Gewicht, deine Größe, dein Geschlecht, deine Fotos, deine
 Einstellungen und dein Diagnoseprotokoll.
 
 Nearby Connections gehört zu den Google-Play-Diensten. Diese Ebene ist Googles,
@@ -84,8 +84,8 @@ Teilen-Menü von Android selbst aus.
 **Im Prompt stehen:** eine Zusammenfassung deines Trainings (Volumen, Verteilung
 über die Körperregionen, wichtige Übungen), die Namen aus deiner Übungs-
 bibliothek und deine Angaben zu Ziel, Einheiten pro Woche und verfügbaren
-Geräten. **Alter, Gewicht und Größe stehen nur dann darin, wenn du die
-entsprechende Option einschaltest** — sie ist standardmäßig aus, und der Prompt
+Geräten. **Alter, Gewicht, Größe und Geschlecht stehen nur dann darin, wenn du
+die entsprechende Option einschaltest** — sie ist standardmäßig aus, und der Prompt
 wird vor dem Senden angezeigt, damit du genau siehst, was drinsteht.
 
 Sobald der Prompt Spotter verlässt, gelten die Bedingungen der App, an die du ihn

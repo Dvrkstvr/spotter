@@ -12,7 +12,7 @@ import { trainingStats } from '@/data/stats';
 import { useBuddyLive } from '@/hooks/use-buddy-live';
 import { themed, useColors, useThemed } from '@/design/theme';
 import { color, font, radius, slop, t, tracking } from '@/design/tokens';
-import { Btn, H2, H6, missingName } from '@/design/ui';
+import { Btn, Chip, H2, H6, missingName } from '@/design/ui';
 import { myName, useStore } from '@/store/workout-store';
 
 export default function YouScreen() {
@@ -139,7 +139,33 @@ export default function YouScreen() {
             <Text style={styles.measureUnit}>{m.unit}</Text>
           </View>
         ))}
+        {/* Two chips and no third: pressing the lit one clears it, which is
+            how "I would rather not say" is said here — the same grammar a set
+            mark uses, where tapping the verdict you carry removes it. A
+            "prefer not to say" chip would make the question louder than it is,
+            and unanswered is already the state it starts in. */}
+        <View style={styles.measureRow}>
+          <Text style={styles.measureLabel}>{L.sex}</Text>
+          <View style={styles.sexChips}>
+            {(['male', 'female'] as const).map((k) => (
+              <Chip
+                key={k}
+                label={k === 'male' ? L.sexMale : L.sexFemale}
+                on={s.profile.sex === k}
+                onPress={() =>
+                  patch((st) => ({
+                    profile: { ...st.profile, sex: st.profile.sex === k ? undefined : k },
+                  }))
+                }
+              />
+            ))}
+          </View>
+        </View>
       </View>
+      {/* Said once, where it is asked. It is the only field here a person may
+          reasonably wonder about, and the answer is short: it sharpens the
+          statistics and never leaves the phone unless you hand it over. */}
+      <Text style={styles.aboutNote}>{L.aboutYouNote}</Text>
 
       {/* Training alone takes the whole buddy half of this screen with it —
           the roster below included. Nothing is forgotten, it is only put
@@ -507,6 +533,15 @@ const sheet = themed(() => ({
     borderBottomColor: t.rule,
   },
   measureLabel: { flex: 1, fontFamily: font.regular, fontSize: 14, color: color.text },
+  sexChips: { flexDirection: 'row', gap: 7 },
+  aboutNote: {
+    fontFamily: font.regular,
+    fontSize: 11.5,
+    lineHeight: 16,
+    color: color.neutral600,
+    paddingHorizontal: t.rowPadH,
+    paddingTop: 8,
+  },
   measureInput: {
     width: 74,
     minHeight: 36,

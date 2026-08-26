@@ -564,6 +564,19 @@ it is a *setting*, added the additive way `PERSIST` allows.
   card of six short bars says "not enough" where it used to say "evenly not
   much". A card and a screen disagreeing about what their one line means is
   worse than either reading alone.
+- **`Profile.sex` is optional, absent until answered, and clears by re-tapping.**
+  It is stored because it is the largest single moderator in every strength
+  standard, muscle-distribution table and lean-mass formula there is — larger
+  than age and height together (`design/stats-research.md` §5) — and it is the
+  most sensitive field in the app, so it gets the narrowest treatment: two
+  chips and no third, because pressing the lit one clears it and unanswered is
+  where it starts. A "prefer not to say" chip would make the question louder
+  than it is. The balance does not read it (that reading needs nothing about
+  the person at all); today it reaches the coach prompt behind `shareProfile`,
+  with the age, weight and height it belongs beside, and it is what §7E's
+  strength card will need. It never crosses to a buddy — `profile` is not in a
+  snapshot at all — and adding it moved four privacy files and the data-safety
+  note, which is the rule for anything that changes what the app stores.
 - **Under `MIN_SESSIONS` the card makes no claims.** Balance across two workouts
   is a Tuesday, not a weakness, and a coach prompt built on it would be
   confident nonsense. The card still stands, because it is the door — its

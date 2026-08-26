@@ -46,7 +46,9 @@ export const DICT = {
     plannedToday: 'Planned for today', lastDone: 'last done', start: 'Start', startBare: 'Start',
     doneWord: 'done', plannedWord: 'planned', weeklyPlan: 'Weekly plan',
     new: '+ New', search: 'Search',
-    aboutYou: 'About you', training: 'Training', age: 'Age', bodyWeight: 'Body weight', height: 'Height',
+    aboutYou: 'About you', sex: 'Sex', sexMale: 'Male', sexFemale: 'Female',
+    aboutYouNote:
+      'Optional, and only for the statistics — strength standards and muscle balance read differently for different bodies. None of it leaves your phone unless you send it.', training: 'Training', age: 'Age', bodyWeight: 'Body weight', height: 'Height',
     yourName: 'Your name', photo: 'Photo', yrs: 'yrs', machineSetup: 'Machine setup', seatBarHeight: 'Seat / bar height',
     addSetting: '+ Add setting', lastSession: 'Last session', usedIn: 'Used in', howTo: 'How to', close: 'Close',
     // "Add", not "Drop": the slot is filled by the photo picker, not drag-and-drop.
@@ -582,7 +584,9 @@ export const DICT = {
     plannedToday: 'Für heute geplant', lastDone: 'zuletzt', start: 'Starte', startBare: 'Starten',
     doneWord: 'erledigt', plannedWord: 'geplant', weeklyPlan: 'Wochenplan',
     new: '+ Neu', search: 'Suchen',
-    aboutYou: 'Über dich', training: 'Training', age: 'Alter', bodyWeight: 'Körpergewicht', height: 'Größe',
+    aboutYou: 'Über dich', sex: 'Geschlecht', sexMale: 'Männlich', sexFemale: 'Weiblich',
+    aboutYouNote:
+      'Freiwillig, und nur für die Statistik — Kraftwerte und Muskelbalance lesen sich für verschiedene Körper verschieden. Nichts davon verlässt dein Handy, außer du schickst es weg.', training: 'Training', age: 'Alter', bodyWeight: 'Körpergewicht', height: 'Größe',
     yourName: 'Dein Name', photo: 'Foto', yrs: 'J.', machineSetup: 'Geräte-Einstellung', seatBarHeight: 'Sitz-/Stangenhöhe',
     addSetting: '+ Einstellung', lastSession: 'Letzte Einheit', usedIn: 'Verwendet in', howTo: 'Anleitung', close: 'Schließen',
     dropGif: 'GIF oder Videobild hinzufügen', startPos: 'Startposition', endPos: 'Endposition', videoLink: 'Video-Link',

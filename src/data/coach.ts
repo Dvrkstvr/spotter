@@ -101,7 +101,7 @@ export type PromptInput = {
   /** Muscle-group and equipment keys the import can actually resolve. */
   groupKeys: string[];
   kindKeys: string[];
-  profile: { age: string; weight: string; height: string };
+  profile: { age: string; weight: string; height: string; sex?: 'male' | 'female' };
   /** The window the numbers describe, already spelled out ("8 weeks"). */
   periodLabel: string;
   /** "1 session" / "4 sessions" — agreement belongs to the caller's dictionary. */
@@ -218,10 +218,14 @@ export function buildPrompt(i: PromptInput): string {
   }
 
   if (opts.shareProfile) {
+    // Sex rides with the rest of the body facts and behind the same switch:
+    // it is the largest moderator in every strength standard there is, and it
+    // is also the most personal thing in the app. One gate, one decision.
     const bits = [
       i.profile.age && `${i.profile.age} ${L.yrs}`,
       i.profile.weight && `${i.profile.weight} kg`,
       i.profile.height && `${i.profile.height} cm`,
+      i.profile.sex === 'male' ? L.sexMale : i.profile.sex === 'female' ? L.sexFemale : '',
     ].filter(Boolean);
     if (bits.length) out.push(`${L.promptAboutHead}  ${bits.join(', ')}`, '');
   }
