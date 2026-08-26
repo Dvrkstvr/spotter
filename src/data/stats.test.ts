@@ -451,3 +451,52 @@ describe('key lifts, by estimate rather than by weight', () => {
     expect(lifts([on('2026-08-20', ['102.5 × 7'])])[0].e1rm).toBe(126);
   });
 });
+
+/* ── push and pull ─────────────────────────────────────────────────────── */
+
+describe('push against pull', () => {
+  it('says what the six regions structurally cannot', () => {
+    // Arms merges biceps and triceps, which pair oppositely — so a lifter who
+    // presses constantly and never rows reads as a perfectly healthy Arms.
+    // Triceps 10 a week and biceps 12 — both squarely inside the range, so
+    // the Arms row has nothing at all to report.
+    const st = over(14, [day([reps('bench', 40), reps('curl', 24)])]);
+    const arms = st.balance.find((b) => b.region === 'Arms')!;
+    expect(arms.low).toBe(0);
+    // And eighty sets of pushing against twenty-four of pulling, which no
+    // region on the screen is in a position to mention.
+    expect(st.pushPull.ratio).toBeLessThan(0.5);
+  });
+
+  it('counts each half off the muscles, fractionally', () => {
+    // Bench: chest 1, triceps 0.5, shoulders 0.5 — all three on the push side,
+    // so ten sets is twenty of push. Rows are ten of pull.
+    const st = over(14, [day([reps('bench', 10), reps('row', 10)])]);
+    expect(st.pushPull.push).toBe(20);
+    expect(st.pushPull.pull).toBe(10);
+    expect(st.pushPull.ratio).toBe(0.5);
+    expect(st.pushPull.pushPerWeek).toBe(10);
+    expect(st.pushPull.pullPerWeek).toBe(5);
+  });
+
+  it('leaves legs and core out of both halves', () => {
+    // Upper body only: the lower-body version is a different argument with
+    // different numbers, and squats would swamp both sides.
+    const st = over(14, [day([reps('legext', 20), reps('crunch', 20), reps('squat', 20)])]);
+    expect(st.pushPull.push).toBe(0);
+    expect(st.pushPull.pull).toBe(0);
+    expect(st.pushPull.ratio).toBeNull();
+  });
+
+  it('has no ratio to a zero, but reports a pull of none as a finding', () => {
+    // Null and 0 again say different things: "nothing to compare" against
+    // "you never pull".
+    expect(over(14, [day([reps('row', 10)])]).pushPull.ratio).toBeNull();
+    expect(over(14, [day([reps('bench', 10)])]).pushPull.ratio).toBe(0);
+  });
+
+  it('reads a balanced upper body as one to one', () => {
+    const st = over(14, [day([reps('fly', 10), reps('row', 10)])]);
+    expect(st.pushPull.ratio).toBe(1);
+  });
+});

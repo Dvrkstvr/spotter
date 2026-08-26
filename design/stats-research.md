@@ -6,11 +6,11 @@ the exercise-science literature and the comparable apps actually do. Sections 7
 and 8 are the proposals, and each one says what it costs. Section 9 is a second
 pass, answering three questions Calvin put to the first one.*
 
-***Status: §§7A, 7B, 7C and 7F are applied** — the `also` field and its seeded
-table, the balance counting fractional sets, the per-muscle range, and key
-lifts by estimated 1RM. Each carries a dated note at its own heading. **§7D**
-(the push:pull line) and **§7E** (the strength card, which needs the sex
-decision in §5) are open, as is the region-expansion UI the §9.1 mockup drew.
+***Status: §§7A, 7B, 7C, 7D and 7F are applied** — the `also` field and its seeded
+table, the balance counting fractional sets, the per-muscle range, key lifts by
+estimated 1RM, and the push:pull line. Each carries a dated note at its own
+heading. **§7E** (the strength card, which needs the sex decision in
+§5) is the last one open, as is the region-expansion UI the §9.1 mockup drew.
 Sections 1–6 describe the state of things **before** any of it and are left
 that way deliberately: they are the argument, and rewriting them into the past
 tense would leave the decisions with nothing to have been decided against.*
@@ -345,6 +345,14 @@ It also makes an *over*-trained region sayable for the first time, which the
 share form structurally cannot express.
 
 ### D. Keep the six regions, and put a push:pull line under them
+
+*Applied, 26 Aug 2026. `pushPull` on `TrainingStats`, and a card under the
+cardio line on Insights. Two things the writing here did not anticipate: rear
+delts pull and file under `Shoulders`, which is a known inaccuracy now stated
+in `stats.ts` rather than quietly carried; and the ratio needed a null — there
+is no ratio to a zero push, where a zero **pull** is `0` and is the finding
+itself. It is deliberately not in the coach prompt: §7D argued it onto the
+screen, and adding it to the contract is a separate decision.*
 
 Six is right for a glance and the argument in `stats.ts` for it still holds.
 But the roll-up hides one honest thing: **Arms** merges biceps and triceps,

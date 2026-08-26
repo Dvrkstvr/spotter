@@ -508,6 +508,32 @@ it is a *setting*, added the additive way `PERSIST` allows.
   neglected calf has stopped being read — so nothing counts as low until it has
   been trained at all. This is the one place the per-muscle range needed a rule
   the per-region share never did.
+- **Push against pull is the one ratio a diary can honestly compute**, and it
+  is on the screen because the six regions structurally cannot say it: **Arms**
+  merges biceps and triceps, which pair oppositely, so someone who presses
+  constantly and never rows reads as a perfectly healthy Arms. 1:1 is the
+  common default, 1:2 pull-favoured the usual advice for shoulders. Three
+  things about it:
+  - **Upper body only.** The literature's push:pull is about the shoulder
+    girdle; the lower-body version is a different argument with different
+    numbers, and folding squats in would swamp both halves with the largest
+    muscles in the body. Legs, core, neck and the lower back are in neither
+    list — this is a ratio between two named halves, not a partition of
+    everything.
+  - **Counted off the muscle map, not the regions**, which have already
+    collapsed the two halves of Arms into one number by the time anything is
+    drawn.
+  - **Rear delts are the known inaccuracy, and are stated rather than hidden.**
+    They pull and they file under `Shoulders`, which is on the push side. Not
+    fixable without splitting `Shoulders` front from rear — a twenty-first
+    group in the user's own list, for one line. The seeded rear-delt work names
+    `Traps` and `Back` in its `also` and so lands partly on the pull side; the
+    residue is accepted.
+  - `ratio` is **pull over push**, so the line reads `1 : n` and under one is
+    push-heavy. Null when nothing was pushed — there is no ratio to a zero —
+    where a pull of zero against real pressing is `0`, which is a finding. The
+    card hides itself when neither half was trained, a legs-only window having
+    no ratio and a bar of two zeroes being furniture.
 - **Under `MIN_SESSIONS` the card makes no claims.** Balance across two workouts
   is a Tuesday, not a weakness, and a coach prompt built on it would be
   confident nonsense. The card still stands, because it is the door — its

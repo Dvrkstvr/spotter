@@ -243,6 +243,50 @@ export const EVEN_SHARE = 1 / REGIONS.length;
  */
 export const BAND = { min: 10, max: 20 } as const;
 
+/* ── push and pull ─────────────────────────────────────────────────────────
+ *
+ * The one ratio a diary can honestly compute, and it says something the six
+ * regions structurally cannot: **Arms** merges biceps and triceps, which pair
+ * oppositely, so a lifter who never rows and curls constantly reads as a
+ * perfectly healthy Arms. 1:1 is the common default and 1:2 pull-favoured is
+ * the usual advice for shoulders and for a desk worker's posture.
+ *
+ * Upper body only. The literature's push:pull is about the shoulder girdle;
+ * the lower-body version is a different argument with different numbers, and
+ * folding squats into this would swamp both sides with the largest muscles in
+ * the body. So legs, core, neck and the lower back are in neither list — this
+ * is a ratio between two named halves, not a partition of everything.
+ *
+ * **Rear delts are the known inaccuracy.** They pull, and they file under
+ * `Shoulders`, which is on the push side — a `Bodyweight`-kind reverse fly
+ * credits the push half. It is not fixable without splitting `Shoulders` into
+ * front and rear, which would be a twenty-first muscle group in the user's own
+ * list for the sake of one line. The seeded rear-delt work names `Traps` and
+ * `Back` in its `also`, so it does land partly on the pull side; the residue
+ * is accepted and stated rather than hidden.
+ */
+const PUSH_GROUPS = ['Chest', 'Shoulders', 'Triceps'];
+const PULL_GROUPS = ['Back', 'Lats', 'Traps', 'Biceps'];
+
+export type PushPull = {
+  /** Fractional sets on each half, in the window. */
+  push: number;
+  pull: number;
+  /** The same, per week. */
+  pushPerWeek: number;
+  pullPerWeek: number;
+  /**
+   * Pull against push, so the line reads `1 : {ratio}` — under 1 is
+   * push-heavy, which is the direction worth noticing.
+   *
+   * Null when nothing on the push side was logged: there is no ratio to a
+   * zero, and printing one would be inventing the interesting half of it. A
+   * pull of zero against real pushing is `0`, which is a finding rather than
+   * an absence.
+   */
+  ratio: number | null;
+};
+
 /**
  * Sessions to log before the statistics are worth showing. Balance over two
  * workouts is not a weakness, it is a Tuesday — and a coach prompt built on it
@@ -318,6 +362,8 @@ export type TrainingStats = {
   weeks: number;
   /** Every region, in `REGIONS` order, whether or not it was trained. */
   balance: RegionStat[];
+  /** Upper-body pushing against pulling. See `PUSH_GROUPS`. */
+  pushPull: PushPull;
   /**
    * Every **muscle** under the band, furthest short first — never a region,
    * because the band is stated per muscle. Untrained muscles are not in it
@@ -469,12 +515,26 @@ export function trainingStats(
     };
   });
 
+  // Off the muscle map rather than the regions: push and pull is a fact about
+  // muscles, and the region roll-up has already collapsed the two halves of
+  // Arms into one number by the time it is drawn.
+  const half = (groups: string[]) => groups.reduce((a, g) => a + (muscle[g] ?? 0), 0);
+  const push = half(PUSH_GROUPS);
+  const pull = half(PULL_GROUPS);
+
   return {
     days: new Set(inWindow.map((h) => h.date)).size,
     sessions: inWindow.length,
     volume,
     weeks,
     balance,
+    pushPull: {
+      push,
+      pull,
+      pushPerWeek: push / weeks,
+      pullPerWeek: pull / weeks,
+      ratio: push === 0 ? null : pull / push,
+    },
     // Furthest short first, which is the order the screen lists them in and
     // the order the coach prompt names them.
     weak: balance

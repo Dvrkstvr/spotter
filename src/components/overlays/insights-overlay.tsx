@@ -228,6 +228,52 @@ export function InsightsOverlay() {
               {st.cardioSessions === 0 && <Tag label={L.insightsLow} tone="outline" />}
             </View>
 
+            {/* The one ratio a diary can honestly compute, and it says the
+                thing the six regions structurally cannot: Arms merges biceps
+                and triceps, which pair oppositely, so a lifter who presses
+                constantly and never rows reads as a perfectly healthy Arms.
+                Hidden when neither half was trained — a legs-only window has
+                no ratio, and a bar of two zeroes is furniture. */}
+            {st.pushPull.ratio !== null && (
+              <View style={styles.card}>
+                <View style={styles.cardHead}>
+                  <H6 style={styles.cardTitle}>{L.insightsPushPull}</H6>
+                  <Text style={styles.cardHint}>
+                    {L.insightsRatio.replace('{n}', rate(st.pushPull.ratio))}
+                  </Text>
+                </View>
+                <View style={styles.ppBar}>
+                  <View
+                    style={[
+                      styles.ppPush,
+                      // Never zero-width on either side: a half that vanishes
+                      // reads as a rendering fault rather than as a finding,
+                      // and "you never pull" is exactly what this is for.
+                      {
+                        flexGrow: Math.max(0.04, st.pushPull.push),
+                        flexShrink: 1,
+                        flexBasis: 0,
+                      },
+                    ]}
+                  />
+                  <View
+                    style={[
+                      styles.ppPull,
+                      { flexGrow: Math.max(0.04, st.pushPull.pull), flexShrink: 1, flexBasis: 0 },
+                    ]}
+                  />
+                </View>
+                <View style={styles.ppLegend}>
+                  <Text style={styles.ppLabel}>
+                    {L.insightsPush} {L.insightsPerWeek.replace('{n}', rate(st.pushPull.pushPerWeek))}
+                  </Text>
+                  <Text style={[styles.ppLabel, styles.ppLabelEnd]}>
+                    {L.insightsPull} {L.insightsPerWeek.replace('{n}', rate(st.pushPull.pullPerWeek))}
+                  </Text>
+                </View>
+              </View>
+            )}
+
             <View style={styles.card}>
               <View style={styles.cardHead}>
                 <H6 style={styles.cardTitle}>
@@ -355,6 +401,15 @@ const sheet = themed(() => ({
   cardioRow: { borderTopWidth: 1, borderTopColor: t.rule, marginTop: 2 },
   weakName: { width: 88, fontFamily: font.regular, fontSize: 13, color: color.text },
   headAside: { fontFamily: font.regular, fontSize: 10.5, color: color.neutral600, letterSpacing: 0 },
+
+  /* Push against pull: one bar in two tones, because the whole reading is the
+     proportion between them and two separate bars would have to be compared. */
+  ppBar: { flexDirection: 'row', height: 10, borderRadius: 5, overflow: 'hidden', marginTop: 8 },
+  ppPush: { height: '100%', backgroundColor: color.accent },
+  ppPull: { height: '100%', backgroundColor: color.accent700 },
+  ppLegend: { flexDirection: 'row', marginTop: 5 },
+  ppLabel: { flex: 1, fontFamily: font.regular, fontSize: 11, color: color.neutral500 },
+  ppLabelEnd: { textAlign: 'right' },
   track: { flex: 1, height: 8, borderRadius: 4, backgroundColor: t.rule },
   fill: { height: '100%', borderRadius: 4, backgroundColor: color.accent, opacity: 0.5 },
   /* Where the range opens, on a track that runs to where it closes. A muscle
