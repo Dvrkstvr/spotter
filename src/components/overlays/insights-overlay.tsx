@@ -12,10 +12,11 @@
  * can change the diary.
  */
 import { useState } from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import { ScrollView, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BandBars } from '@/components/band-bars';
+import { BodyHeat } from '@/components/body-heat';
 import { FullScreen } from '@/components/sheet';
 import { Tip } from '@/components/tip';
 import type { Strings } from '@/data/i18n';
@@ -81,8 +82,17 @@ export function InsightsOverlay() {
   // looking, and re-opening the screen should start where the screen starts.
   const [period, setPeriod] = useState<PeriodKey>('8w');
   const p = periodOf(period);
+  // Which view of the balance you are on, local for the same reason: it is a
+  // property of looking, like the settings `Fold`, and a fresh open starts
+  // where the screen starts. The body is that start — it is the better glance,
+  // and the verdict it cannot draw is stated in words directly under the card.
+  const [view, setView] = useState<'body' | 'bars'>('body');
 
-  // Width the charts get: the screen, less the body padding on both sides.
+  // Width the charts get: the screen, less the body padding on both sides and
+  // the card's own on both sides. Passed down rather than measured, because a
+  // figure sized on the second frame is a figure that visibly jumps.
+  const { width: screenW } = useWindowDimensions();
+  const chartW = Math.max(0, screenW - BODY_PAD * 2 - CARD_PAD * 2);
 
   const st = trainingStats(s.history, ex, p.days);
   // The strength read is the one thing here that compares you to anybody else,
@@ -168,32 +178,64 @@ export function InsightsOverlay() {
                 window has none, so these step aside while the rest stays. */}
             {st.countedSets > 0 && (
               <>
-                {/* Bars against the range, where a radar used to be. The
-                    change is the unit rather than the shape: a radar plots six
-                    numbers against each other, which is all a share could ever
-                    be, and a share cannot say *not enough*. A region opens to
-                    its muscles, because that is the level the range is stated
-                    at. The caption explains the fractional count instead of
-                    naming a unit — "16.5 sets" is the one figure here that
-                    looks like a mistake until you know why. */}
+                {/* One card, two views of one reading, and each answers a
+                    different question: the body says *where did my work go*,
+                    the bars say *was it enough*. The bars are what replaced a
+                    radar, and the change was the unit rather than the shape —
+                    a radar plots six numbers against each other, which is all
+                    a share could ever be, and a share cannot say *not enough*.
+                    Each view's own caption sits under it: the fractional count
+                    for the bars, because "16.5 sets" is the one figure here
+                    that looks like a mistake until you know why, and what grey
+                    means for the body, where the bottom of the scale is the
+                    finding. */}
                 <View style={styles.card}>
-                  <View style={styles.cardHead}>
+                  {/* The head carries the seg where it used to carry the
+                      range, which is stated again on the heading directly
+                      below it — two tellings within forty pixels, one of them
+                      wrong under the body view anyway. */}
+                  <View style={styles.balanceHead}>
                     <H6 style={styles.cardTitle}>{L.insightsBalance}</H6>
-                    <Text style={styles.cardHint}>
-                      {L.insightsBand
-                        .replace('{min}', String(BAND.min))
-                        .replace('{max}', String(BAND.max))}
-                    </Text>
-                  </View>
-                  <View style={styles.bandBars}>
-                    <BandBars
-                      balance={st.balance}
-                      regionName={(r) => regionLabel(r, L)}
-                      muscleName={(g) => gInfo(g).text}
-                      L={L}
+                    <Seg
+                      style={styles.viewSeg}
+                      options={[
+                        { key: 'body', label: L.bodyView, on: view === 'body', pick: () => setView('body') },
+                        { key: 'bars', label: L.barsView, on: view === 'bars', pick: () => setView('bars') },
+                      ]}
                     />
                   </View>
-                  <Text style={styles.caption}>{L.insightsBalanceHint}</Text>
+                  {view === 'body' ? (
+                    /* Where the work went, at the granularity the data is
+                       stored at: seventeen muscles, no roll-up and no maximum
+                       rule. The ramp is sequential and single-hue on purpose —
+                       under/in/over is the bars' question, and a second hue
+                       here would read as an alarm. */
+                    <View style={styles.bodyHeat}>
+                      <BodyHeat
+                        muscles={st.balance.flatMap((b) => b.muscles)}
+                        muscleName={(g) => gInfo(g).text}
+                        exName={(id) => {
+                          const e = ex(id);
+                          return e ? exInfo(e) : { text: id, missing: false };
+                        }}
+                        sex={s.profile.sex}
+                        width={chartW}
+                        L={L}
+                      />
+                    </View>
+                  ) : (
+                    <View style={styles.bandBars}>
+                      <BandBars
+                        balance={st.balance}
+                        regionName={(r) => regionLabel(r, L)}
+                        muscleName={(g) => gInfo(g).text}
+                        L={L}
+                      />
+                    </View>
+                  )}
+                  <Text style={styles.caption}>
+                    {view === 'body' ? L.bodyGrey : L.insightsBalanceHint}
+                  </Text>
                 </View>
 
                 {/* The honest version of the chart above, and the one thing
@@ -448,11 +490,15 @@ export function InsightsOverlay() {
 /** Volume bar height in px. */
 const VOL_H = 56;
 
+/** The two paddings between the screen edge and a chart — see `chartW`. */
+const BODY_PAD = 16;
+const CARD_PAD = 14;
+
 const sheet = themed(() => ({
   header: { paddingHorizontal: 8, paddingBottom: 4 },
   backLabel: { fontSize: 13 },
   scroll: { flex: 1 },
-  body: { paddingHorizontal: 16 },
+  body: { paddingHorizontal: BODY_PAD },
   tight: { letterSpacing: tracking(t.h2, -0.02) },
   sub: { fontFamily: font.regular, fontSize: 12.5, color: color.neutral500, marginTop: 3 },
   seg: { marginTop: 12 },
@@ -462,15 +508,23 @@ const sheet = themed(() => ({
   card: {
     marginTop: 14,
     paddingVertical: 10,
-    paddingHorizontal: 14,
+    paddingHorizontal: CARD_PAD,
     borderRadius: radius.md,
     backgroundColor: color.surface,
     borderWidth: 1,
     borderColor: color.neutral800,
   },
   cardHead: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
+  // Its own, because a seg is a control rather than a line of text: the
+  // siblings align their hint to the title's baseline, and this one has to
+  // centre a 33px box against a 15px heading.
+  balanceHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   cardTitle: { color: color.neutral500 },
+  // `Seg` states `alignSelf: 'flex-start'` in its own base, so centring it has
+  // to be said here rather than left to the row.
+  viewSeg: { marginLeft: 'auto', alignSelf: 'center' },
   bandBars: { marginTop: 4 },
+  bodyHeat: { marginTop: 6 },
   strengthRows: { marginTop: 2 },
   strengthName: { flex: 1, fontFamily: font.regular, fontSize: 13, color: color.text },
   strengthKg: {

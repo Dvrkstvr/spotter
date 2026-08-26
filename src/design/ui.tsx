@@ -378,7 +378,7 @@ export function Chip({
 
 /* ── tags ──────────────────────────────────────────────────────────────── */
 
-export type TagTone = 'accent' | 'accent-2' | 'neutral' | 'outline';
+export type TagTone = 'accent' | 'accent-2' | 'neutral' | 'outline' | 'quiet';
 
 export function Tag({
   label,
@@ -410,6 +410,10 @@ const tagTone = (tone: TagTone, c: Palette): { box: ViewStyle; color: string } =
     'accent-2': { box: { backgroundColor: c.accent700 }, color: c.accent100 },
     neutral: { box: { backgroundColor: c.neutral800 }, color: c.neutral100 },
     outline: { box: { borderWidth: 1, borderColor: c.accent }, color: c.accent },
+    // `outline` one step down, and the same one-step-down grammar the bars use
+    // for a fill under the range: a pill that labels rather than judges — what
+    // one set of an exercise is worth, or a muscle that is simply fine.
+    quiet: { box: { borderWidth: 1, borderColor: c.neutral700 }, color: c.neutral500 },
   })[tone];
 
 /* ── styles ────────────────────────────────────────────────────────────── */

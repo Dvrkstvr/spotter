@@ -12,10 +12,12 @@ push:pull line, key lifts by estimated 1RM, and the strength card once
 `Profile.sex` existed. Each carries a dated note at its own heading, and two of
 those notes correct this document rather than only recording it. The §9.1
 mockup's region-expansion UI is built as well — `BandBars`, which retired the
-radar. Sections 1–6 describe the state of things **before** any of it and are
-left that way deliberately: they are the argument, and rewriting them into the
-past tense would leave the decisions with nothing to have been decided
-against.*
+radar — and **§9.2's body heatmap shipped beside it**, on the licensed art and
+under a `Body · Bars` seg; that section carries its own note of what was
+decided on the way. Sections 1–6 describe the state of things **before** any of
+it and are left that way deliberately: they are the argument, and rewriting
+them into the past tense would leave the decisions with nothing to have been
+decided against.*
 
 The question that started it: **should the balance take body weight, height,
 muscle group, sets and volume — and age?** The short answer is that four of
@@ -513,7 +515,33 @@ roll-up**. At muscle level there is nothing to reconcile — quads got 1.0 and
 glutes got 0.75, both true, no maximum needed. Which is an argument for §9.2
 rather than against §7C.
 
-### 9.2 A body heatmap — viable, on licensed art and not on drawn geometry
+### 9.2 A body heatmap — built, on licensed art and not on drawn geometry
+
+*Shipped 26 Aug 2026, as `src/components/body-heat.tsx` over
+`src/data/body-map.ts`, reached by a `Body · Bars` seg in the balance card's
+head. Every constraint below survived. Four things this section left open were
+decided on the way, and two of its own recommendations were overtaken:*
+
+- ***Body is the default view.** It is the better glance, and the verdict it
+  cannot draw — the ranked weak points, each against the range — is stated in
+  words directly under the card, so opening on it costs nothing.*
+- ***The provenance panel was built**, which needed the one thing this section
+  did not ask for: `MuscleStat.sources`, an exercise-level breakdown of a
+  muscle's week, built in the same pass as the total it explains. It is the
+  only place fractional counting is ever explained.*
+- ***A region on Bars does not highlight on the Body.** It would need the seg
+  to carry a selection across a switch, which nothing else in the app does, and
+  each view already answers its own question.*
+- ***The figure follows `Profile.sex`, which arrived for the strength card
+  (§7E) as this section predicted.* Unanswered draws the male one — the
+  recommendation below is still the reason nothing on this screen asks.*
+- ***The mockup's crop did not survive.* It is computable only from the
+  package's private viewBox, and the female wrapper uses three different ones;
+  the figure keeps its margin and is sized to draw a body the width the mockup
+  drew one at. Nor did `disabledParts`, which forces a hardcoded `#EBEBE4`
+  ahead of every other fill priority — a light grey on a dark page, and the one
+  colour in this app no theme could reach. The inert parts are simply left out
+  of `data` and take `defaultFill`.*
 
 Viable with almost no new dependency: `react-native-svg` 15.12.1 is already in
 `package.json` and is in Expo Go's bundled native set, so nothing degrades. The
@@ -591,6 +619,10 @@ Four things settled with it:
   go", an answer that does not change with the outline it is drawn on, and asking
   someone's sex to pick a silhouette would move Play's data-safety answer for no
   feature. If sex ever arrives for the strength card (§7E), this follows for free.
+  *It did, and it does: the figure reads `Profile.sex` where it finds it and
+  draws the male one where it does not. Nothing on this screen asks, which is
+  the half of this bullet that mattered — `docs/play-data-safety.md` is
+  unchanged.*
 
 The mockup is `design/body-heatmap-mockup.html`, rebuilt on this art.
 
