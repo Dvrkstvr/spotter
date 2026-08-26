@@ -1,0 +1,540 @@
+<title>Spotter — Insights, rebuilt on fractional sets (mockup)</title>
+<style>
+  /* ── Nocturne, verbatim from src/design/tokens.ts ─────────────────────
+     Single-theme on purpose: this mocks the app's default (blurple · dark),
+     which is byte-identical to the ported design palette. */
+  :root {
+    --bg: #161826;
+    --surface: #232532;
+    --text: #e9e9ed;
+    --accent: #9184d9;
+    --accent2: #a7a1db;
+    --a100: #f5f4ff; --a200: #e7e5fe; --a300: #d2cefd; --a400: #b5abfc;
+    --a700: #5d5294; --a800: #423a6a; --a900: #2b2741;
+    --n100: #f3f5fe; --n400: #b2b6ca; --n500: #9397ab; --n600: #75798c;
+    --n700: #595d6c; --n800: #3f424d; --n900: #292b31;
+    --scrim: #0b0c14;
+    --divider: rgba(233, 233, 237, 0.16);
+    --rule: rgba(233, 233, 237, 0.09);
+    --wash-a16: rgba(145, 132, 217, 0.16);
+    --wash-a10: rgba(145, 132, 217, 0.10);
+    --wash-a06: rgba(145, 132, 217, 0.06);
+    --sans: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--scrim); color: var(--text); font-family: var(--sans);
+    font-size: 15px; line-height: 1.55; -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 1180px; margin: 0 auto; padding: 56px 28px 96px; }
+
+  .kicker { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); font-weight: 400; }
+  h1 { font-weight: 500; font-size: 40px; line-height: 1.12; letter-spacing: -0.015em; margin: 10px 0 14px; text-wrap: balance; }
+  h2.sec { font-weight: 500; font-size: 24px; letter-spacing: -0.015em; margin: 0 0 6px; }
+  .lede { color: var(--n400); max-width: 64ch; }
+  .lede strong { color: var(--text); font-weight: 500; }
+  .lede code { font-family: var(--mono); font-size: 13px; color: var(--a300); background: var(--n900); border-radius: 4px; padding: 1px 5px; }
+
+  .flow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 30px 0 8px; }
+  .flow .step { border: 1px solid var(--divider); border-radius: 8px; padding: 5px 12px; font-size: 12.5px; color: var(--n400); background: var(--bg); white-space: nowrap; }
+  .flow .step em { font-style: normal; color: var(--text); }
+  .flow .step.gone { border-style: dashed; color: var(--n600); text-decoration: line-through; }
+  .flow .arrow { color: var(--n600); font-size: 13px; }
+
+  hr.fade { border: 0; height: 1px; margin: 52px 0; background: linear-gradient(90deg, transparent, var(--divider) 48px, var(--divider) calc(100% - 48px), transparent); }
+
+  .shot { display: grid; grid-template-columns: 348px 1fr; gap: 44px; align-items: start; }
+  .shot.pair { grid-template-columns: 348px 348px minmax(0, 1fr); gap: 30px; }
+  @media (max-width: 1120px) { .shot.pair { grid-template-columns: 348px 348px; } }
+  @media (max-width: 780px) { .shot.pair { grid-template-columns: 1fr; } }
+  .shot .notes { padding-top: 8px; max-width: 60ch; }
+  .notes ul { margin: 14px 0 0; padding-left: 18px; color: var(--n400); font-size: 14px; display: grid; gap: 9px; }
+  .notes li::marker { color: var(--n700); }
+  .notes strong { color: var(--text); font-weight: 500; }
+  .notes code, .wide code { font-family: var(--mono); font-size: 12.5px; color: var(--a300); background: var(--n900); border-radius: 4px; padding: 1px 5px; }
+  @media (max-width: 880px) { .shot { grid-template-columns: 1fr; } }
+
+  .phone { width: 348px; height: 748px; background: var(--bg); border: 1px solid var(--n800); border-radius: 30px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 16px 40px rgba(0,0,0,0.55); }
+  .status { display: flex; justify-content: space-between; align-items: center; padding: 10px 20px 4px; font-size: 11.5px; color: var(--n500); flex: none; }
+  .batt { display: inline-block; width: 18px; height: 9px; border: 1px solid var(--n600); border-radius: 2px; position: relative; }
+  .batt::after { content: ""; position: absolute; inset: 1.5px 30% 1.5px 1.5px; background: var(--n500); border-radius: 1px; }
+  .screen { flex: 1; padding: 8px 18px 0; overflow: hidden; position: relative; display: flex; flex-direction: column; }
+  .tabs { flex: none; display: flex; border-top: 1px solid var(--rule); padding: 9px 6px 14px; background: rgba(22, 24, 38, 0.92); }
+  .tabs span { flex: 1; text-align: center; font-size: 9.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--n600); position: relative; padding-top: 7px; }
+  .tabs span.on { color: var(--a200); }
+  .tabs span.on::before { content: ""; position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 16px; height: 2px; background: var(--accent); border-radius: 1px; }
+
+  .sc-h2 { font-weight: 500; font-size: 26px; letter-spacing: -0.015em; line-height: 1.12; }
+  .sc-sub { font-size: 12.5px; color: var(--n500); margin-top: 3px; }
+  .sc-h6 { font-size: 11px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--n500); }
+  .sc-h6 .aside { float: right; color: var(--n600); text-transform: none; letter-spacing: 0; font-weight: 400; }
+  .card { background: var(--surface); border: 1px solid var(--n800); border-radius: 8px; padding: 10px 14px; }
+  .btn { display: flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid var(--divider); border-radius: 8px; padding: 8px 12px; font-size: 13.5px; font-weight: 500; color: var(--text); background: transparent; }
+  .btn.primary { border-color: var(--accent); color: var(--accent); }
+  .seg { display: inline-flex; border: 1px solid var(--divider); border-radius: 8px; overflow: hidden; }
+  .seg span { padding: 5px 12px; font-size: 12px; color: var(--text); }
+  .seg span + span { border-left: 1px solid var(--divider); }
+  .seg span.on { color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  .tag { display: inline-block; border-radius: 6px; padding: 1.5px 8px; font-size: 10px; letter-spacing: 0.02em; }
+  .tag.neutral { background: var(--n800); color: var(--n100); }
+  .tag.outline { border: 1px solid var(--accent); color: var(--accent); padding: 0.5px 7px; }
+  .tag.quiet { border: 1px solid var(--n700); color: var(--n500); padding: 0.5px 7px; }
+  .rule-row { border-bottom: 1px solid var(--rule); }
+  .imp-row { display: flex; align-items: center; gap: 9px; padding: 7px 0; font-size: 13px; }
+  .imp-row .scheme { margin-left: auto; color: var(--n500); font-size: 11.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  /* ── the band row: the whole point of the screen ─────────────────────
+     Track 0–24 sets/week, fixed across every row so the bars are
+     comparable. The band (10–20) is drawn *into* the track, so a bar is
+     read against a target rather than against the other bars. */
+  .brow { display: flex; align-items: center; gap: 8px; padding: 3.5px 0; font-size: 12.5px; }
+  .brow .name { width: 74px; color: var(--text); white-space: nowrap; }
+  .brow .name.dim { color: var(--n500); }
+  .brow .name.sub { width: 66px; padding-left: 12px; font-size: 12px; color: var(--n400); }
+  .brow .bar { flex: 1; height: 9px; position: relative; }
+  .brow .bar .track { position: absolute; inset: 0; background: var(--n900); border-radius: 4px; }
+  .brow .bar .band { position: absolute; top: 0; bottom: 0; left: 41.7%; width: 41.7%; background: var(--wash-a06); border-left: 1px solid var(--n700); border-right: 1px solid var(--n700); }
+  .brow .bar .fill { position: absolute; top: 0; bottom: 0; left: 0; background: var(--accent); border-radius: 4px; }
+  .brow .bar .fill.under { background: var(--a700); }
+  .brow .bar .fill.over { background: var(--accent); }
+  .brow .bar .over-cap { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--a200); border-radius: 1px; }
+  .brow .num { width: 30px; text-align: right; color: var(--n400); font-variant-numeric: tabular-nums; font-size: 11.5px; }
+  .brow .flag { width: 42px; text-align: right; }
+  .brow.head { cursor: default; }
+  .brow .caret { color: var(--n600); font-size: 11px; width: 9px; }
+
+  /* muscle expansion */
+  .kids { border-left: 1px solid var(--rule); margin-left: 4px; padding-left: 6px; }
+
+  /* push : pull */
+  .pp { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: var(--n900); }
+  .pp i { display: block; height: 100%; }
+  .pp .push { background: var(--accent); }
+  .pp .pull { background: var(--a700); }
+
+  /* volume chart */
+  .vol { display: flex; align-items: flex-end; gap: 3px; height: 44px; margin-top: 6px; }
+  .vol i { flex: 1; background: var(--a700); border-radius: 2px 2px 0 0; display: block; }
+  .vol i.now { background: var(--accent); }
+
+  /* wide detail blocks */
+  .wide { border: 1px solid var(--n800); background: var(--bg); border-radius: 12px; padding: 26px 28px; }
+  .wide h3 { font-weight: 500; font-size: 17px; margin-bottom: 4px; }
+  .wide p { color: var(--n400); font-size: 14px; max-width: 66ch; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; }
+  @media (max-width: 880px) { .two { grid-template-columns: 1fr; } }
+  .cmp { border: 1px solid var(--n800); border-radius: 10px; padding: 16px 18px; background: var(--surface); }
+  .cmp .lbl { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--n600); margin-bottom: 10px; }
+  .cmp.after .lbl { color: var(--accent); }
+  .says { font-size: 14.5px; line-height: 1.4; margin-top: 12px; color: var(--text); }
+  .says em { font-style: normal; color: var(--n500); }
+
+  table.spec { width: 100%; border-collapse: collapse; font-size: 13.5px; margin-top: 14px; }
+  table.spec th { text-align: left; font-weight: 500; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--n600); padding: 0 12px 8px 0; }
+  table.spec td { padding: 7px 12px 7px 0; border-top: 1px solid var(--rule); color: var(--n400); vertical-align: top; }
+  table.spec td:first-child { color: var(--text); white-space: nowrap; }
+  table.spec code { font-family: var(--mono); font-size: 12px; color: var(--a300); }
+
+  figcaption, .cap { font-size: 10.5px; color: var(--n600); margin-top: 7px; }
+  svg text { font-family: var(--sans); }
+</style>
+
+<div class="page">
+
+  <header>
+    <div class="kicker">Spotter · design mockup · 26 Aug 2026</div>
+    <h1>Insights, rebuilt on fractional sets</h1>
+    <p class="lede">
+      The screen that replaces the radar. Same data source — <code>history</code>, re-read —
+      but a different unit and a different question. Today it reports each region's
+      <strong>share of mass-weighted volume load</strong>, which can only ever say
+      <em>relatively less</em>. This reports <strong>fractional hard sets per muscle per
+      week</strong> against the range the literature actually states, which can say
+      <em>not enough</em>. See <code>design/stats-research.md</code> for why, and
+      <code>design/muscle-contribution-spec.md</code> for the <code>also</code> field every
+      number on this screen depends on.
+    </p>
+    <div class="flow" aria-label="what changed">
+      <span class="step gone">kg × reps</span><span class="arrow">→</span>
+      <span class="step"><em>fractional sets</em></span>
+      <span class="arrow" style="margin-left:10px;">·</span>
+      <span class="step gone">÷ REGION_MASS</span><span class="arrow">→</span>
+      <span class="step"><em>nothing</em> — no correction needed</span>
+      <span class="arrow" style="margin-left:10px;">·</span>
+      <span class="step gone">% share</span><span class="arrow">→</span>
+      <span class="step"><em>sets / week vs 10–20</em></span>
+    </div>
+  </header>
+
+  <hr class="fade">
+
+  <!-- ════════ 01 · THE SCREEN ════════ -->
+  <section class="shot pair" id="screen">
+    <div>
+    <figure class="phone" aria-label="Insights screen, bars view">
+      <div class="status"><span>19:24</span><span class="batt"></span></div>
+      <div class="screen">
+        <div class="sc-h2">Insights</div>
+        <div class="sc-sub">8 weeks · 24 sessions · 3.0 / week</div>
+
+        <div style="display:flex; align-items:center; gap:8px; margin-top:8px;">
+          <span class="seg"><span class="on">8 weeks</span><span>6 months</span><span>12 months</span></span>
+          <span class="seg" style="margin-left:auto;"><span>Body</span><span class="on">Bars</span></span>
+        </div>
+
+        <!-- ── the headline card ── -->
+        <div class="card" style="margin-top:7px; padding:9px 12px 7px;">
+          <div class="sc-h6">Sets per week <span class="aside">band = 10–20</span></div>
+
+          <div style="margin-top:5px;">
+            <div class="brow"><span class="caret">›</span><span class="name">Chest</span>
+              <span class="bar"><span class="track"></span><span class="band"></span><span class="fill" style="width:68.8%;"></span></span>
+              <span class="num">16.5</span><span class="flag"></span></div>
+
+            <div class="brow"><span class="caret">›</span><span class="name">Back</span>
+              <span class="bar"><span class="track"></span><span class="band"></span><span class="fill" style="width:79.2%;"></span></span>
+              <span class="num">19.0</span><span class="flag"><span class="tag quiet">2 low</span></span></div>
+
+            <div class="brow"><span class="caret">›</span><span class="name">Shoulders</span>
+              <span class="bar"><span class="track"></span><span class="band"></span><span class="fill" style="width:58.3%;"></span></span>
+              <span class="num">14.0</span><span class="flag"></span></div>
+
+            <!-- one region opened, to show what the rows are made of -->
+            <div class="brow"><span class="caret" style="color:var(--accent);">⌄</span><span class="name">Arms</span>
+              <span class="bar"><span class="track"></span><span class="band"></span><span class="fill" style="width:72.9%;"></span></span>
+              <span class="num">17.5</span><span class="flag"><span class="tag quiet">1 low</span></span></div>
+            <div class="kids">
+              <div class="brow"><span class="name sub">Triceps</span>
+                <span class="bar"><span class="track"></span><span class="band"></span><span class="fill" style="width:64.6%;"></span></span>
+                <span class="num">15.5</span><span class="flag"></span></div>
+              <div class="brow"><span class="name sub">Biceps</span>
+                <span class="bar"><span class="track"></span><span class="band"></span><span class="fill" style="width:50%;"></span></span>
+                <span class="num">12.0</span><span class="flag"></span></div>
+              <div class="brow"><span class="name sub dim">Forearms</span>
+                <span class="bar"><span class="track"></span><span class="band"></span><span class="fill under" style="width:31.3%;"></span></span>
+                <span class="num">7.5</span><span class="flag"><span class="tag outline">low</span></span></div>
+            </div>
+
+            <div class="brow"><span class="caret">›</span><span class="name dim">Core</span>
+              <span class="bar"><span class="track"></span><span class="band"></span><span class="fill under" style="width:22.9%;"></span></span>
+              <span class="num">5.5</span><span class="flag"><span class="tag quiet">2 low</span></span></div>
+
+            <div class="brow"><span class="caret">›</span><span class="name">Legs</span>
+              <span class="bar"><span class="track"></span><span class="band"></span><span class="fill" style="width:50%;"></span></span>
+              <span class="num">12.0</span><span class="flag"><span class="tag quiet">3 low</span></span></div>
+          </div>
+
+          <div style="font-size:10.5px; color:var(--n600); margin-top:6px; line-height:1.4;">
+            Counted fractionally — a bench press is 1 chest set, ½ triceps, ½ front delt.
+          </div>
+        </div>
+
+        <!-- ── needs work ── -->
+        <div class="sc-h6" style="margin-top:8px;">Needs work</div>
+        <div>
+          <div class="imp-row rule-row" style="padding:4px 0;">Calves<span class="scheme">2.0 / week · 8 short</span></div>
+          <div class="imp-row rule-row" style="padding:4px 0;">Obliques<span class="scheme">3.0 / week · 7 short</span></div>
+          <div class="imp-row rule-row" style="padding:4px 0;">Adductors<span class="scheme">4.5 / week · 5.5 short</span></div>
+          <div class="imp-row" style="padding:4px 0; color:var(--n500);">5 more under the range<span class="scheme" style="color:var(--accent);">›</span></div>
+        </div>
+
+        <!-- ── push : pull ── -->
+        <div class="card" style="margin-top:8px; padding:9px 12px;">
+          <div class="sc-h6">Push : pull <span class="aside">1 : 0.81</span></div>
+          <div class="pp" style="margin-top:7px;"><i class="push" style="width:55%;"></i><i class="pull" style="width:45%;"></i></div>
+          <div style="display:flex; font-size:11px; color:var(--n500); margin-top:4px;">
+            <span>Push 26 / wk</span><span style="margin-left:auto;">Pull 21 / wk</span>
+          </div>
+        </div>
+
+        <div style="flex:1; min-height:4px;"></div>
+      </div>
+      <div class="tabs"><span>Today</span><span>Plan</span><span>Routines</span><span>Library</span><span class="on">You</span></div>
+    </figure>
+    <div class="cap" style="text-align:center;">Top of the screen</div>
+    </div>
+
+    <div>
+    <figure class="phone" aria-label="Insights screen, scrolled">
+      <div class="status"><span>19:24</span><span class="batt"></span></div>
+      <div class="screen">
+        <!-- the foot of what the first frame showed, for continuity -->
+        <div class="card" style="padding:9px 12px; opacity:0.45;">
+          <div class="sc-h6">Push : pull <span class="aside">1 : 0.81</span></div>
+          <div class="pp" style="margin-top:7px;"><i class="push" style="width:55%;"></i><i class="pull" style="width:45%;"></i></div>
+          <div style="display:flex; font-size:11px; color:var(--n500); margin-top:4px;">
+            <span>Push 26 / wk</span><span style="margin-left:auto;">Pull 21 / wk</span>
+          </div>
+        </div>
+
+        <div class="sc-h6" style="margin-top:12px;">Key lifts <span class="aside">est. 1RM</span></div>
+        <div>
+          <div class="imp-row rule-row" style="padding:5px 0;">Back Squat<span class="scheme">118 kg &nbsp;<span style="color:var(--accent);">▲ 5</span></span></div>
+          <div class="imp-row rule-row" style="padding:5px 0;">Bench Press<span class="scheme">94 kg &nbsp;<span style="color:var(--accent);">▲ 3</span></span></div>
+          <div class="imp-row rule-row" style="padding:5px 0;">Deadlift<span class="scheme">152 kg &nbsp;<span style="color:var(--n600);">— 0</span></span></div>
+          <div class="imp-row" style="padding:5px 0;">Lat Pulldown<span class="scheme">66 kg &nbsp;<span style="color:var(--accent);">▲ 2</span></span></div>
+        </div>
+
+        <div class="card" style="margin-top:12px; padding:9px 12px 8px;">
+          <div class="sc-h6">Volume per week <span class="aside">load only · kg</span></div>
+          <div class="vol" id="vol"></div>
+          <div style="display:flex; font-size:10.5px; color:var(--n600); margin-top:4px;">
+            <span>8 weeks ago</span><span style="margin-left:auto;">this week · 49,200 kg</span>
+          </div>
+        </div>
+
+        <div class="sc-h6" style="margin-top:12px;">Favourites</div>
+        <div>
+          <div class="imp-row rule-row" style="padding:5px 0;">Bench Press<span class="tag neutral" style="margin-left:6px;">exercise</span><span class="scheme">logged 21 ×</span></div>
+          <div class="imp-row" style="padding:5px 0;">Push A<span class="tag neutral" style="margin-left:6px;">routine</span><span class="scheme">9 sessions</span></div>
+        </div>
+
+        <div class="card" style="margin-top:12px; border-style:dashed; padding:7px 14px;">
+          <div class="kicker">Fun fact</div>
+          <div style="font-size:12.5px; margin-top:3px; line-height:1.45;">These 8 weeks you lifted <strong style="font-weight:500;">331,000 kg</strong> — about 220 family cars.</div>
+        </div>
+
+        <div style="font-size:10.5px; color:var(--n600); margin-top:12px; line-height:1.45;">
+          14 sets reached no muscle group — cardio and full-body work.<br>1 cardio session · 5.2 km.
+        </div>
+
+        <div style="flex:1; min-height:8px;"></div>
+        <div class="btn primary" style="margin-bottom:6px; padding:7px 12px;">Get recommendations →</div>
+      </div>
+      <div class="tabs"><span>Today</span><span>Plan</span><span>Routines</span><span>Library</span><span class="on">You</span></div>
+    </figure>
+    <div class="cap" style="text-align:center;">Scrolled — everything that survives unchanged</div>
+    </div>
+
+    <div class="notes">
+      <div class="kicker">01</div>
+      <h2 class="sec">One card carries the screen</h2>
+      <ul>
+        <li><strong>The bar is read against the band, not against the other bars.</strong> The
+          10–20 zone is drawn into a fixed 0–24 track, identical on every row, so "am I doing
+          enough of this" is answered without arithmetic and two rows are comparable by
+          eye. The old radar could only say which axis was longest.</li>
+        <li><strong>Under-range is a dimmer fill, never <code>warn</code>.</strong> A
+          neglected calf is not a refusal, and <code>warn</code>'s meaning is fixed at
+          three sites. <code>accent700</code> under the band, <code>accent400</code> in it —
+          the same one-step-down grammar the diary uses for a superset's rule.</li>
+        <li><strong>A region opens to its muscles, and that is where the band is honest.</strong>
+          Legs at 12.0/week is not "in range" — it is five muscles, three of them starving
+          under one number. So a region row carries <em>its own</em> rate plus a
+          <code>3 low</code> count, and the verdict lives one level down. This is the
+          answer to §8's open question in the research doc.</li>
+        <li><strong>Two tags, and the difference is which row is wrong.</strong> A region
+          always counts its low muscles, quietly — <code>2 low</code> — because a region
+          cannot itself be under a per-muscle band. Only a muscle row carries the accent
+          <code>low</code>. Core shows both a dim fill and <code>2 low</code>: its own rate
+          is short <em>and</em> both muscles under it are.</li>
+        <li><strong>It scrolls, and always did.</strong> The second frame is the same screen
+          further down — everything below push : pull survives this rebuild unchanged except
+          key lifts. The card at the top is what grew; nothing else had to move.</li>
+        <li><strong>Nothing is normalised.</strong> No <code>REGION_MASS</code>, no
+          <code>bodyKg</code>, no <code>HOLD_SECONDS_PER_REP</code>. Counting sets never
+          introduced the distortion those existed to undo, so the screen stops needing to
+          know anything about the person.</li>
+        <li><strong>The fractional line is a permanent statement, not a tip.</strong> It says
+          what the numbers mean and never retires — <code>finishLogsNothing</code>'s shape.
+          Without it a 16.5 on Chest looks like a set count that is simply wrong.</li>
+        <li><strong>Needs work names muscles, not regions</strong>, sorted by how far short
+          they are — an actionable list, where "Legs 9%" was a comparison with your own
+          bench press. It shows three and counts the rest: eight rows of shortfall is a
+          screen telling you that you have failed.</li>
+        <li><strong>Push : pull is the one ratio a diary can honestly compute</strong> — 1:1
+          is the common default, 1:2 pull-favoured for shoulders. It also says what the
+          six-region roll-up structurally cannot, because Arms swallows both halves.</li>
+        <li>Key lifts moved to <strong>estimated 1RM</strong> (Epley off the best set). Top
+          weight cannot tell 100×8 from 100×3, so a real session of progress reported "no
+          change".</li>
+        <li>Volume per week <strong>stays, unchanged, and stays load-only</strong>. Tonnage is
+          a bad cross-muscle comparator and a perfectly good within-diary trend line — this
+          is the one place it belongs.</li>
+      </ul>
+    </div>
+  </section>
+
+  <hr class="fade">
+
+  <!-- ════════ 02 · THE ROW ════════ -->
+  <section id="row">
+    <div class="kicker">02</div>
+    <h2 class="sec">Anatomy of the row</h2>
+    <p class="lede" style="margin-bottom:22px;">
+      Everything the screen claims is in one 9-pixel track. It has to carry a rate, a target
+      and a verdict without a legend, and it has to do it four to seventeen times down a phone.
+    </p>
+
+    <div class="wide">
+      <svg viewBox="0 0 900 210" width="100%" height="210" role="img" aria-label="annotated band row">
+        <!-- the track -->
+        <rect x="150" y="86" width="600" height="18" rx="9" fill="#292b31"/>
+        <!-- the band 10-20 of 0-24 -->
+        <rect x="400" y="86" width="250" height="18" fill="rgba(145,132,217,0.06)"/>
+        <line x1="400" y1="86" x2="400" y2="104" stroke="#595d6c" stroke-width="1"/>
+        <line x1="650" y1="86" x2="650" y2="104" stroke="#595d6c" stroke-width="1"/>
+        <!-- fill -->
+        <rect x="150" y="86" width="337" height="18" rx="9" fill="#9184d9"/>
+
+        <text x="60" y="100" fill="#e9e9ed" font-size="15">Triceps</text>
+        <text x="775" y="100" fill="#b2b6ca" font-size="14">15.5</text>
+
+        <!-- annotations -->
+        <line x1="150" y1="78" x2="150" y2="52" stroke="#3f424d"/><text x="150" y="44" fill="#75798c" font-size="11.5" text-anchor="middle">0</text>
+        <line x1="400" y1="78" x2="400" y2="52" stroke="#3f424d"/><text x="400" y="44" fill="#9397ab" font-size="11.5" text-anchor="middle">10 — enough to grow</text>
+        <line x1="650" y1="78" x2="650" y2="52" stroke="#3f424d"/><text x="650" y="44" fill="#9397ab" font-size="11.5" text-anchor="middle">20 — most can recover from</text>
+        <line x1="750" y1="78" x2="750" y2="52" stroke="#3f424d"/><text x="750" y="44" fill="#75798c" font-size="11.5" text-anchor="middle">24</text>
+
+        <line x1="487" y1="112" x2="487" y2="140" stroke="#5d5294"/>
+        <text x="487" y="156" fill="#b5abfc" font-size="12" text-anchor="middle">15.5 fractional sets a week</text>
+        <text x="487" y="174" fill="#75798c" font-size="11" text-anchor="middle">6 pushdowns + ½ × 8 bench + ½ × 6 dips + ½ × 6 pike press</text>
+
+        <text x="250" y="196" fill="#75798c" font-size="11">track: the same 0–24 on every row, so two bars are comparable</text>
+      </svg>
+    </div>
+
+    <div class="two" style="margin-top:26px;">
+      <div>
+        <h3 style="font-weight:500; font-size:17px; margin-bottom:8px;">The four states</h3>
+        <div class="cmp" style="padding:14px 16px;">
+          <div class="brow"><span class="name">In range</span>
+            <span class="bar"><span class="track"></span><span class="band"></span><span class="fill" style="width:64.6%;"></span></span>
+            <span class="num">15.5</span><span class="flag"></span></div>
+          <div class="brow"><span class="name dim">Under</span>
+            <span class="bar"><span class="track"></span><span class="band"></span><span class="fill under" style="width:16.7%;"></span></span>
+            <span class="num">4.0</span><span class="flag"><span class="tag outline">low</span></span></div>
+          <div class="brow"><span class="name">Over</span>
+            <span class="bar"><span class="track"></span><span class="band"></span><span class="fill" style="width:100%;"></span><span class="over-cap" style="left:calc(100% - 2px);"></span></span>
+            <span class="num">26</span><span class="flag"><span class="tag quiet">over</span></span></div>
+          <div class="brow"><span class="name dim">Not trained</span>
+            <span class="bar"><span class="track"></span><span class="band"></span></span>
+            <span class="num" style="color:var(--n600);">—</span><span class="flag"></span></div>
+        </div>
+        <p class="cap" style="font-size:12px; color:var(--n500); line-height:1.5; margin-top:12px;">
+          <strong style="color:var(--text); font-weight:500;">Not trained is not the same as low</strong>, and this
+          is the state the muscle-level band forces the app to invent. Nobody trains
+          <em>Neck</em>, and a screen that flags it every week alongside a genuinely
+          neglected calf is noise. A muscle with zero sets in the window shows a dash and
+          stays out of <em>Needs work</em>; it earns a verdict once it has been trained at
+          all. The same rule keeps a group somebody invented from accusing them of
+          neglecting it.
+        </p>
+      </div>
+      <div>
+        <h3 style="font-weight:500; font-size:17px; margin-bottom:8px;">Where the numbers come from</h3>
+        <table class="spec">
+          <tr><th>Row</th><th>Reads</th></tr>
+          <tr><td>a muscle's rate</td><td>Σ <code>contribOf(ex)[group]</code> over ticked sets, ÷ weeks in the window</td></tr>
+          <tr><td>a region's rate</td><td>Σ per set of <code>max</code> over that region's muscles, ÷ weeks — <em>never</em> the sum of the rows under it</td></tr>
+          <tr><td>the band</td><td>10–20, fixed. Stated per muscle, which is why the verdict lives at muscle level</td></tr>
+          <tr><td>push : pull</td><td>Chest + Shoulders + Triceps against Back + Lats + Traps + Biceps, fractional both sides</td></tr>
+          <tr><td>key lifts</td><td>Epley <code>w × (1 + r/30)</code> off each session's best <code>load</code> set</td></tr>
+          <tr><td>volume</td><td>each entry's own <code>vol</code>, untouched — the one figure not re-derived</td></tr>
+          <tr><td>loose sets</td><td>sets whose contributions reached no region at all</td></tr>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <hr class="fade">
+
+  <!-- ════════ 03 · BEFORE / AFTER ════════ -->
+  <section id="before">
+    <div class="kicker">03</div>
+    <h2 class="sec">The same eight weeks, both ways</h2>
+    <p class="lede" style="margin-bottom:22px;">
+      One diary — 24 sessions of push / pull / legs. The left column is what ships today.
+      Nothing about the training changed.
+    </p>
+
+    <div class="two">
+      <div class="cmp">
+        <div class="lbl">Today · share of mass-weighted volume load</div>
+        <div class="brow"><span class="name">Chest</span><span class="bar"><span class="track"></span><span class="fill" style="width:21%;"></span></span><span class="num">21%</span></div>
+        <div class="brow"><span class="name">Arms</span><span class="bar"><span class="track"></span><span class="fill under" style="width:9%;"></span></span><span class="num">9%</span></div>
+        <div class="brow"><span class="name">Shoulders</span><span class="bar"><span class="track"></span><span class="fill" style="width:14%;"></span></span><span class="num">14%</span></div>
+        <div class="brow"><span class="name">Core</span><span class="bar"><span class="track"></span><span class="fill under" style="width:6%;"></span></span><span class="num">6%</span></div>
+        <div class="brow"><span class="name">Back</span><span class="bar"><span class="track"></span><span class="fill" style="width:31%;"></span></span><span class="num">31%</span></div>
+        <div class="brow"><span class="name">Legs</span><span class="bar"><span class="track"></span><span class="fill" style="width:19%;"></span></span><span class="num">19%</span></div>
+        <div class="says">“Arms is pulling behind — 9% against Back's 31%.”</div>
+        <p class="cap" style="font-size:12px; color:var(--n500); line-height:1.5; margin-top:12px;">
+          Both halves of that sentence are artefacts. <strong style="color:var(--text); font-weight:500;">Arms is
+          starved because no press or row credits it a thing</strong>, and Back is enormous because the
+          deadlift files under <code>LowerBack</code> and lands there whole. The advice it
+          leads to — do more curls, do less back — is advice about the data model.
+        </p>
+      </div>
+
+      <div class="cmp after">
+        <div class="lbl">Proposed · fractional sets per week</div>
+        <div class="brow"><span class="name">Chest</span><span class="bar"><span class="track"></span><span class="band"></span><span class="fill" style="width:68.8%;"></span></span><span class="num">16.5</span></div>
+        <div class="brow"><span class="name">Arms</span><span class="bar"><span class="track"></span><span class="band"></span><span class="fill" style="width:72.9%;"></span></span><span class="num">17.5</span></div>
+        <div class="brow"><span class="name">Shoulders</span><span class="bar"><span class="track"></span><span class="band"></span><span class="fill" style="width:58.3%;"></span></span><span class="num">14.0</span></div>
+        <div class="brow"><span class="name dim">Core</span><span class="bar"><span class="track"></span><span class="band"></span><span class="fill under" style="width:22.9%;"></span></span><span class="num">5.5</span></div>
+        <div class="brow"><span class="name">Back</span><span class="bar"><span class="track"></span><span class="band"></span><span class="fill" style="width:79.2%;"></span></span><span class="num">19.0</span></div>
+        <div class="brow"><span class="name">Legs</span><span class="bar"><span class="track"></span><span class="band"></span><span class="fill" style="width:50%;"></span></span><span class="num">12.0</span></div>
+        <div class="says">“Calves got 2 sets a week — the range is 10 to 20.”</div>
+        <p class="cap" style="font-size:12px; color:var(--n500); line-height:1.5; margin-top:12px;">
+          Arms turns out to be fine, because thirty sets of pressing and rowing were always
+          training it. <strong style="color:var(--text); font-weight:500;">The finding that survives is a real
+          one</strong> — calves, obliques and adductors, none of which any routine here
+          touches — and it is stated against a number that exists outside this app.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <hr class="fade">
+
+  <!-- ════════ 04 · THE CARD ════════ -->
+  <section class="shot" id="card">
+    <figure class="phone" style="height:auto; min-height:0; padding-bottom:0;" aria-label="the You card headline">
+      <div class="status"><span>19:23</span><span class="batt"></span></div>
+      <div class="screen" style="padding-bottom:18px;">
+        <div class="card" style="border-color:var(--a700); background:linear-gradient(150deg, var(--a900), var(--surface) 62%); padding:12px 14px;">
+          <div class="kicker">Statistics &amp; Coach</div>
+          <div style="font-size:14.5px; font-weight:500; margin-top:6px; line-height:1.35;">Calves got 2 sets a week — the range is 10 to 20.</div>
+          <div style="margin-top:9px;">
+            <div class="brow" style="padding:2px 0;"><span class="name" style="width:60px; font-size:11.5px;">Chest</span><span class="bar" style="height:6px;"><span class="track"></span><span class="band"></span><span class="fill" style="width:68.8%;"></span></span></div>
+            <div class="brow" style="padding:2px 0;"><span class="name" style="width:60px; font-size:11.5px;">Arms</span><span class="bar" style="height:6px;"><span class="track"></span><span class="band"></span><span class="fill" style="width:72.9%;"></span></span></div>
+            <div class="brow" style="padding:2px 0;"><span class="name dim" style="width:60px; font-size:11.5px;">Core</span><span class="bar" style="height:6px;"><span class="track"></span><span class="band"></span><span class="fill under" style="width:22.9%;"></span></span></div>
+            <div class="brow" style="padding:2px 0;"><span class="name" style="width:60px; font-size:11.5px;">Legs</span><span class="bar" style="height:6px;"><span class="track"></span><span class="band"></span><span class="fill" style="width:50%;"></span></span></div>
+          </div>
+          <div style="display:flex; align-items:center; margin-top:8px; font-size:11.5px; color:var(--n500);">
+            24 sessions · 3 muscles under range
+            <span style="margin-left:auto; color:var(--accent); font-size:17px; line-height:1;">›</span>
+          </div>
+        </div>
+      </div>
+    </figure>
+
+    <div class="notes">
+      <div class="kicker">04</div>
+      <h2 class="sec">The headline follows the unit</h2>
+      <ul>
+        <li>The card keeps its shape, its gradient and its place under the profile header.
+          Only <code>headlineOf</code> changes — and it now has something to say that isn't
+          a comparison with the rest of your own training.</li>
+        <li><strong>The mini bars carry the band too.</strong> Four rows at 6px, same
+          geometry as the screen behind them, so the glance and the detail are the same
+          drawing at two sizes. Without the band they would be six bars of nothing.</li>
+        <li>The footer counts <strong>muscles under range</strong> rather than naming a
+          percentage. It is the one number that decides whether the tap is worth taking.</li>
+        <li><strong>Under <code>MIN_SESSIONS</code> nothing here changes</strong> — the card
+          still stands and still makes no claims, because it is the door to Insights and a
+          door that refuses to be opened is worse than an empty one.</li>
+      </ul>
+    </div>
+  </section>
+
+</div>
+
+<script>
+  // Volume per week — 8 buckets, the last one live. Plain kg, load only.
+  const V = [38, 41, 36, 44, 47, 39, 45, 49];
+  document.getElementById('vol').innerHTML = V
+    .map((v, i) => `<i class="${i === V.length - 1 ? 'now' : ''}" style="height:${Math.round((v / 52) * 100)}%"></i>`)
+    .join('');
+</script>
