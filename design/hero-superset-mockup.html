@@ -1,0 +1,509 @@
+<title>Spotter — A pair, at a glance (hero card mockup)</title>
+<style>
+  /* ── Nocturne, verbatim from src/design/tokens.ts ─────────────────────
+     Single-theme on purpose: this mocks the app's default (blurple · dark),
+     which is byte-identical to the ported design palette. */
+  :root {
+    --bg: #161826;
+    --surface: #232532;
+    --text: #e9e9ed;
+    --accent: #9184d9;
+    --a100: #f5f4ff; --a200: #e7e5fe; --a300: #d2cefd; --a400: #b5abfc;
+    --a500: #968ae0; --a600: #796cbf; --a700: #5d5294; --a800: #423a6a; --a900: #2b2741;
+    --n100: #f3f5fe; --n300: #cfd3e5; --n400: #b2b6ca; --n500: #9397ab; --n600: #75798c;
+    --n700: #595d6c; --n800: #3f424d; --n900: #292b31;
+    --scrim: #0b0c14;
+    --divider: rgba(233, 233, 237, 0.16);
+    --rule: rgba(233, 233, 237, 0.09);
+    --sans: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--scrim); color: var(--text); font-family: var(--sans);
+    font-size: 15px; line-height: 1.55; -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 1220px; margin: 0 auto; padding: 56px 28px 96px; }
+
+  .kicker { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); }
+  h1 { font-weight: 500; font-size: 40px; line-height: 1.12; letter-spacing: -0.015em; margin: 10px 0 14px; text-wrap: balance; }
+  h2.sec { font-weight: 500; font-size: 24px; letter-spacing: -0.015em; margin: 0 0 6px; }
+  .lede { color: var(--n400); max-width: 72ch; }
+  .lede.wide { max-width: 88ch; }
+  .lede strong { color: var(--text); font-weight: 500; }
+  .lede code, .notes code, .settled code, td code {
+    font-family: var(--mono); font-size: 12.5px; color: var(--a300);
+    background: var(--n900); border-radius: 4px; padding: 1px 5px;
+  }
+  .settled {
+    margin: 26px 0 0; border: 1px solid var(--divider); border-left: 2px solid var(--accent);
+    border-radius: 8px; padding: 13px 16px; max-width: 88ch;
+  }
+  .settled .h { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); }
+  .settled ul { margin: 9px 0 0; padding-left: 18px; color: var(--n400); font-size: 13.5px; display: grid; gap: 7px; }
+  .settled li::marker { color: var(--n700); }
+  .settled strong { color: var(--text); font-weight: 500; }
+  .settled.warn { border-left-color: var(--n600); }
+  .settled.warn .h { color: var(--n400); }
+  hr.fade { border: 0; height: 1px; margin: 52px 0; background: linear-gradient(90deg, transparent, var(--divider) 48px, var(--divider) calc(100% - 48px), transparent); }
+
+  /* ── frames ── */
+  .row { display: grid; grid-template-columns: repeat(3, 348px); gap: 28px; margin-top: 26px; align-items: start; }
+  .row.two { grid-template-columns: repeat(2, 348px); }
+  .row.one { grid-template-columns: 348px; }
+  .half .cap { font-size: 13px; font-weight: 500; margin-bottom: 3px; }
+  .half .cap.good { color: var(--accent); }
+  .half .cap.mid { color: var(--n300); }
+  .half .cap.bad { color: var(--n400); }
+  .half .sub { font-size: 12px; color: var(--n500); margin-bottom: 12px; max-width: 44ch; min-height: 92px; }
+  .half .sub b { color: var(--n300); font-weight: 500; }
+  .half .sub.short { min-height: 0; }
+  .cost { font-size: 11.5px; color: var(--n600); margin-top: 10px; max-width: 44ch; }
+  .cost b { color: var(--n400); font-weight: 500; }
+
+  /* ── the phone frame: Today, as far down as the hero ── */
+  .phone { background: var(--bg); border: 1px solid var(--n900); border-radius: 12px; padding: 14px; }
+  .titlerow { display: flex; align-items: baseline; justify-content: space-between; }
+  .titlerow h2 { font-weight: 500; font-size: 21px; letter-spacing: -0.42px; }
+  .titlerow .date { font-size: 12px; color: var(--n500); }
+
+  .hero {
+    margin-top: 14px; padding: 15px 15px 14px; border-radius: 8px;
+    border: 1px solid var(--n800);
+    background: linear-gradient(150deg, var(--a900) 0%, var(--surface) 62%);
+  }
+  .htop { display: flex; align-items: center; gap: 8px; }
+  .htop .kick { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); }
+  .htop .sp { flex: 1; }
+  .htop .last { font-size: 11px; color: var(--n500); }
+  .htop .live { display: flex; align-items: center; gap: 6px; }
+  .htop .dot { width: 7px; height: 7px; border-radius: 4px; background: var(--accent); }
+  .htop .clock { font-size: 11.5px; color: var(--a400); font-variant-numeric: tabular-nums; }
+  .hname { display: flex; align-items: flex-end; gap: 10px; margin-top: 5px; }
+  .hname h3 { font-weight: 500; font-size: 24px; letter-spacing: -0.42px; line-height: 1.15; }
+  .hname .sum { font-size: 12px; color: var(--n500); padding-bottom: 5px; }
+  .hlines { margin-top: 11px; display: grid; gap: 3px; }
+  .hline { display: flex; gap: 10px; line-height: 17px; }
+  .hline .n { flex: 1; font-size: 12.5px; color: var(--n400); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hline .s { font-size: 12.5px; color: var(--n500); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .hline .s.full { color: var(--a400); }
+  .hbtn {
+    margin-top: 14px; height: 44px; width: 100%; border: 1px solid var(--accent);
+    border-radius: 8px; background: transparent; color: var(--accent);
+    font-family: var(--sans); font-weight: 500; font-size: 15px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .also { font-size: 11px; color: var(--a400); margin-top: 8px; }
+
+  /* ── A / B / C: the diary's bracket ── */
+  .brk { display: flex; gap: 9px; }
+  .brk > .rule { width: 1px; border-radius: 1px; background: var(--a800); flex: none; }
+  .brk > .body { flex: 1; display: grid; gap: 3px; min-width: 0; }
+  /* Hung in the card's padding, the rule sits where the hero gradient is at its
+     darkest — accent900. accent800 vanishes there; accent700, the overview
+     sheet's own weight, is what survives it. See the note at the foot. */
+  .brk.hung { margin-left: -10px; }
+  .brk.hung > .rule { background: var(--a700); }
+  .ptag {
+    font-size: 9px; letter-spacing: 0.63px; text-transform: uppercase;
+    color: var(--a400); line-height: 13px; margin-bottom: 1px;
+  }
+
+  /* ── D: the editor's gutter hairline ── */
+  .gut .hline { padding-left: 11px; }
+  .joinwrap { position: relative; display: grid; gap: 3px; }
+  .joinwrap::before {
+    content: ''; position: absolute; left: 4px; top: 8px; bottom: 8px;
+    width: 1px; background: var(--a700);
+  }
+
+  .sum .ss { color: var(--a400); }
+
+  table { border-collapse: collapse; width: 100%; margin-top: 6px; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--n500); font-weight: 400; }
+  td { color: var(--n400); }
+  td.k { color: var(--text); font-weight: 500; white-space: nowrap; }
+  td .yes { color: var(--a400); }
+  td .no { color: var(--n600); }
+  .notes { margin-top: 22px; max-width: 88ch; color: var(--n400); font-size: 14px; display: grid; gap: 12px; }
+  .notes b { color: var(--text); font-weight: 500; }
+</style>
+
+<div class="page">
+
+  <div class="kicker">Today · the hero card</div>
+  <h1>A pair, at a glance</h1>
+  <p class="lede wide">
+    A routine can join two exercises — <code>with: 'next'</code> — and every surface that
+    draws a routine says so: the editor draws a hairline in the gutter and the word, the
+    overview sheet and the diary hang a rule down the side of the two blocks, the coach's
+    preview borrows the editor's mark. <strong>Today's hero card says nothing.</strong> It lists
+    <code>tr.items</code> flat, so the one thing about this afternoon's Push day you would
+    actually plan around — that two of those five are taken back to back — is invisible
+    until you have already started it.
+  </p>
+
+  <div class="settled">
+    <div class="h">What the card can spend</div>
+    <ul>
+      <li>The lines are a <strong>glance, not a list</strong>: 12.5px, 3px apart, a name flexing against a scheme in tabular figures. Five of them read in about a second.</li>
+      <li>The card is <strong>above the fold on the app's first screen</strong>, over the week strip and Recently. Vertical space here is the most expensive in the app.</li>
+      <li>Whatever is drawn has to work in the <strong>live branch too</strong> — same lines, <code>3 / 4</code> counts in place of the scheme.</li>
+      <li>A badge beside one name is already ruled out: the coach's preview turned that down, because a pair is a fact about <strong>two</strong> rows and a badge reads as a property of one.</li>
+    </ul>
+  </div>
+
+  <hr class="fade">
+
+  <h2 class="sec">Today, as it stands</h2>
+  <p class="lede">Cable Fly and Triceps Pushdown are a superset. Nothing here says so.</p>
+
+  <div class="row one">
+    <div class="half">
+      <div class="cap bad">Now — flat</div>
+      <div class="sub short">Five names, five schemes, no join.</div>
+      <div class="phone">
+        <div class="titlerow"><h2>Today</h2><div class="date">Wed 26 Aug</div></div>
+        <div class="hero">
+          <div class="htop"><div class="kick">Planned today</div><div class="sp"></div><div class="last">Last done 4 days ago</div></div>
+          <div class="hname"><h3>Push A</h3><div class="sum">5 exercises · 16 sets</div></div>
+          <div class="hlines">
+            <div class="hline"><div class="n">Bench Press</div><div class="s">4 × 8 · 60 kg</div></div>
+            <div class="hline"><div class="n">Incline Dumbbell Press</div><div class="s">3 × 10 · 22 kg</div></div>
+            <div class="hline"><div class="n">Cable Fly</div><div class="s">3 × 12 · 15 kg</div></div>
+            <div class="hline"><div class="n">Triceps Pushdown</div><div class="s">3 × 12 · 25 kg</div></div>
+            <div class="hline"><div class="n">Lateral Raise</div><div class="s">3 × 15 · 8 kg</div></div>
+          </div>
+          <button class="hbtn">Start Push A</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <hr class="fade">
+
+  <h2 class="sec">Six ways to say it</h2>
+  <p class="lede wide">
+    Each drawn on the same card, same routine, same pair. What separates them is what they
+    spend — a line of height, a column of width, or the alignment of the names that are not
+    paired at all.
+  </p>
+
+  <div class="row">
+
+    <!-- A -->
+    <div class="half">
+      <div class="cap mid">A · Bracket, inset</div>
+      <div class="sub">
+        The diary's own mark — a hairline down the side of the two lines at
+        <code>accent800</code>, one step below the live session's. <b>Costs no height at
+        all.</b> What it costs is width: the two paired names sit 10px in, so they no
+        longer start where the other three do, and the eye reads that as a sub-list
+        before it reads it as a bracket.
+      </div>
+      <div class="phone">
+        <div class="hero">
+          <div class="htop"><div class="kick">Planned today</div><div class="sp"></div><div class="last">Last done 4 days ago</div></div>
+          <div class="hname"><h3>Push A</h3><div class="sum">5 exercises · 16 sets</div></div>
+          <div class="hlines">
+            <div class="hline"><div class="n">Bench Press</div><div class="s">4 × 8 · 60 kg</div></div>
+            <div class="hline"><div class="n">Incline Dumbbell Press</div><div class="s">3 × 10 · 22 kg</div></div>
+            <div class="brk">
+              <div class="rule"></div>
+              <div class="body">
+                <div class="hline"><div class="n">Cable Fly</div><div class="s">3 × 12 · 15 kg</div></div>
+                <div class="hline"><div class="n">Triceps Pushdown</div><div class="s">3 × 12 · 25 kg</div></div>
+              </div>
+            </div>
+            <div class="hline"><div class="n">Lateral Raise</div><div class="s">3 × 15 · 8 kg</div></div>
+          </div>
+          <button class="hbtn">Start Push A</button>
+        </div>
+      </div>
+      <div class="cost"><b>Spends:</b> 10px of name width, on two rows.</div>
+    </div>
+
+    <!-- B -->
+    <div class="half">
+      <div class="cap good">B · Bracket, hung in the margin</div>
+      <div class="sub">
+        The same rule, pulled out into the card's own 15px padding
+        (<code>marginLeft: -10</code>). <b>Every name keeps its left edge</b> and the pair
+        is marked in space the card was not using. Near enough the card edge to read as a
+        bracket rather than as an indent — and one step brighter than A, because out
+        there it is sitting on the gradient's <code>accent900</code> corner.
+      </div>
+      <div class="phone">
+        <div class="hero">
+          <div class="htop"><div class="kick">Planned today</div><div class="sp"></div><div class="last">Last done 4 days ago</div></div>
+          <div class="hname"><h3>Push A</h3><div class="sum">5 exercises · 16 sets</div></div>
+          <div class="hlines">
+            <div class="hline"><div class="n">Bench Press</div><div class="s">4 × 8 · 60 kg</div></div>
+            <div class="hline"><div class="n">Incline Dumbbell Press</div><div class="s">3 × 10 · 22 kg</div></div>
+            <div class="brk hung">
+              <div class="rule"></div>
+              <div class="body">
+                <div class="hline"><div class="n">Cable Fly</div><div class="s">3 × 12 · 15 kg</div></div>
+                <div class="hline"><div class="n">Triceps Pushdown</div><div class="s">3 × 12 · 25 kg</div></div>
+              </div>
+            </div>
+            <div class="hline"><div class="n">Lateral Raise</div><div class="s">3 × 15 · 8 kg</div></div>
+          </div>
+          <button class="hbtn">Start Push A</button>
+        </div>
+      </div>
+      <div class="cost"><b>Spends:</b> nothing. Nothing moves.</div>
+    </div>
+
+    <!-- C -->
+    <div class="half">
+      <div class="cap mid">C · Bracket and the word</div>
+      <div class="sub">
+        The overview sheet and the diary drawn whole — rule, plus <code>SUPERSET</code> at
+        9px uppercase <code>accent400</code>. The only option here that <b>names</b> the
+        thing rather than marking it. It also spends 14px per pair, and a routine with two
+        pairs spends it twice.
+      </div>
+      <div class="phone">
+        <div class="hero">
+          <div class="htop"><div class="kick">Planned today</div><div class="sp"></div><div class="last">Last done 4 days ago</div></div>
+          <div class="hname"><h3>Push A</h3><div class="sum">5 exercises · 16 sets</div></div>
+          <div class="hlines">
+            <div class="hline"><div class="n">Bench Press</div><div class="s">4 × 8 · 60 kg</div></div>
+            <div class="hline"><div class="n">Incline Dumbbell Press</div><div class="s">3 × 10 · 22 kg</div></div>
+            <div class="brk hung">
+              <div class="rule"></div>
+              <div class="body">
+                <div class="ptag">Superset</div>
+                <div class="hline"><div class="n">Cable Fly</div><div class="s">3 × 12 · 15 kg</div></div>
+                <div class="hline"><div class="n">Triceps Pushdown</div><div class="s">3 × 12 · 25 kg</div></div>
+              </div>
+            </div>
+            <div class="hline"><div class="n">Lateral Raise</div><div class="s">3 × 15 · 8 kg</div></div>
+          </div>
+          <button class="hbtn">Start Push A</button>
+        </div>
+      </div>
+      <div class="cost"><b>Spends:</b> ~14px of height, per pair.</div>
+    </div>
+  </div>
+
+  <div class="row">
+
+    <!-- D -->
+    <div class="half">
+      <div class="cap mid">D · The editor's gutter hairline</div>
+      <div class="sub">
+        The routine editor's mark, ported: the join drawn <b>between</b> the two rows
+        rather than beside them. But the editor has a gutter already — its grip column —
+        and the hero has none, so every line moves 11px right to make one, including the
+        three that will never use it. The 3px gap leaves the hairline about 8px long.
+      </div>
+      <div class="phone">
+        <div class="hero">
+          <div class="htop"><div class="kick">Planned today</div><div class="sp"></div><div class="last">Last done 4 days ago</div></div>
+          <div class="hname"><h3>Push A</h3><div class="sum">5 exercises · 16 sets</div></div>
+          <div class="hlines gut">
+            <div class="hline"><div class="n">Bench Press</div><div class="s">4 × 8 · 60 kg</div></div>
+            <div class="hline"><div class="n">Incline Dumbbell Press</div><div class="s">3 × 10 · 22 kg</div></div>
+            <div class="joinwrap">
+              <div class="hline"><div class="n">Cable Fly</div><div class="s">3 × 12 · 15 kg</div></div>
+              <div class="hline"><div class="n">Triceps Pushdown</div><div class="s">3 × 12 · 25 kg</div></div>
+            </div>
+            <div class="hline"><div class="n">Lateral Raise</div><div class="s">3 × 15 · 8 kg</div></div>
+          </div>
+          <button class="hbtn">Start Push A</button>
+        </div>
+      </div>
+      <div class="cost"><b>Spends:</b> 11px of width on <em>every</em> line, for a mark 8px tall.</div>
+    </div>
+
+    <!-- E -->
+    <div class="half">
+      <div class="cap bad">E · One line, joined by a plus</div>
+      <div class="sub">
+        The pair collapses to a single line and the card gets shorter. Two problems, both
+        structural: the scheme column holds <b>one</b> figure, so a pair whose halves differ
+        (3 × 12 against 4 × 10, or a plank against a run) has nowhere to put the second —
+        and <code>+</code> is a joining grammar this app uses nowhere else. Long names
+        truncate first.
+      </div>
+      <div class="phone">
+        <div class="hero">
+          <div class="htop"><div class="kick">Planned today</div><div class="sp"></div><div class="last">Last done 4 days ago</div></div>
+          <div class="hname"><h3>Push A</h3><div class="sum">5 exercises · 16 sets</div></div>
+          <div class="hlines">
+            <div class="hline"><div class="n">Bench Press</div><div class="s">4 × 8 · 60 kg</div></div>
+            <div class="hline"><div class="n">Incline Dumbbell Press</div><div class="s">3 × 10 · 22 kg</div></div>
+            <div class="hline"><div class="n">Cable Fly + Triceps Pushdown</div><div class="s">3 × 12</div></div>
+            <div class="hline"><div class="n">Lateral Raise</div><div class="s">3 × 15 · 8 kg</div></div>
+          </div>
+          <button class="hbtn">Start Push A</button>
+        </div>
+      </div>
+      <div class="cost"><b>Spends:</b> the scheme of one half, and a name to the ellipsis.</div>
+    </div>
+
+    <!-- F -->
+    <div class="half">
+      <div class="cap bad">F · Counted in the summary</div>
+      <div class="sub">
+        Nothing on the lines at all — the pair is a third clause on the line already
+        counting exercises and sets. The cheapest thing here and the only one needing no
+        layout change, but it says <b>how many</b> and never <b>which</b>, which on a
+        five-line card the eye is already reading is the wrong half of the answer.
+      </div>
+      <div class="phone">
+        <div class="hero">
+          <div class="htop"><div class="kick">Planned today</div><div class="sp"></div><div class="last">Last done 4 days ago</div></div>
+          <div class="hname"><h3>Push A</h3><div class="sum">5 exercises · 16 sets · <span class="ss">1 superset</span></div></div>
+          <div class="hlines">
+            <div class="hline"><div class="n">Bench Press</div><div class="s">4 × 8 · 60 kg</div></div>
+            <div class="hline"><div class="n">Incline Dumbbell Press</div><div class="s">3 × 10 · 22 kg</div></div>
+            <div class="hline"><div class="n">Cable Fly</div><div class="s">3 × 12 · 15 kg</div></div>
+            <div class="hline"><div class="n">Triceps Pushdown</div><div class="s">3 × 12 · 25 kg</div></div>
+            <div class="hline"><div class="n">Lateral Raise</div><div class="s">3 × 15 · 8 kg</div></div>
+          </div>
+          <button class="hbtn">Start Push A</button>
+        </div>
+      </div>
+      <div class="cost"><b>Spends:</b> nothing — and answers a question nobody asked.</div>
+    </div>
+  </div>
+
+  <div class="row two" style="margin-top: 34px">
+    <div class="half" style="grid-column: 1 / -1">
+      <div class="cap mid">Side by side</div>
+      <table>
+        <tr><th>Option</th><th>Height</th><th>Width</th><th>Says which two</th><th>Names it</th><th>New copy</th></tr>
+        <tr><td class="k">A · inset bracket</td><td>—</td><td>10px, two rows</td><td class="yes">yes</td><td class="no">no</td><td class="no">none</td></tr>
+        <tr><td class="k">B · hung bracket</td><td>—</td><td>—</td><td class="yes">yes</td><td class="no">no</td><td class="no">none</td></tr>
+        <tr><td class="k">C · bracket + word</td><td>14px per pair</td><td>—</td><td class="yes">yes</td><td class="yes">yes</td><td class="no">reuses <code>L.superset</code></td></tr>
+        <tr><td class="k">D · gutter hairline</td><td>—</td><td>11px, every row</td><td class="yes">yes</td><td class="no">no</td><td class="no">none</td></tr>
+        <tr><td class="k">E · joined line</td><td class="yes">−17px</td><td>—</td><td class="yes">yes</td><td class="no">no</td><td class="no">none</td></tr>
+        <tr><td class="k">F · counted</td><td>—</td><td>—</td><td class="no">no</td><td class="yes">yes</td><td>one plural pair, both languages</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <hr class="fade">
+
+  <h2 class="sec">B, under load</h2>
+  <p class="lede wide">
+    The recommendation is <strong>B — the bracket hung in the margin</strong>: the mark the
+    diary and the overview sheet already use for a pair, drawn in the one part of the card
+    that was empty. Three cases it has to survive.
+  </p>
+
+  <div class="row">
+    <div class="half">
+      <div class="cap mid">Two pairs, one of them last</div>
+      <div class="sub short">Nothing accumulates — one rule per pair, no separators and no tags to stack up.</div>
+      <div class="phone">
+        <div class="hero">
+          <div class="htop"><div class="kick">Planned today</div><div class="sp"></div><div class="last">Last done 6 days ago</div></div>
+          <div class="hname"><h3>Arms</h3><div class="sum">6 exercises · 18 sets</div></div>
+          <div class="hlines">
+            <div class="hline"><div class="n">Barbell Curl</div><div class="s">3 × 10 · 30 kg</div></div>
+            <div class="brk hung">
+              <div class="rule"></div>
+              <div class="body">
+                <div class="hline"><div class="n">Hammer Curl</div><div class="s">3 × 12 · 14 kg</div></div>
+                <div class="hline"><div class="n">Skull Crusher</div><div class="s">3 × 12 · 25 kg</div></div>
+              </div>
+            </div>
+            <div class="hline"><div class="n">Preacher Curl</div><div class="s">3 × 10 · 20 kg</div></div>
+            <div class="brk hung">
+              <div class="rule"></div>
+              <div class="body">
+                <div class="hline"><div class="n">Cable Pushdown</div><div class="s">3 × 15 · 22 kg</div></div>
+                <div class="hline"><div class="n">Plank</div><div class="s">3 × 45 s</div></div>
+              </div>
+            </div>
+          </div>
+          <button class="hbtn">Start Arms</button>
+        </div>
+      </div>
+      <div class="cost">A pair of mixed measures needs nothing new: each half keeps its own units, as these lines already do.</div>
+    </div>
+
+    <div class="half">
+      <div class="cap mid">The live branch</div>
+      <div class="sub short">Same drawing, counts in place of schemes. The pair is still a pair while you are standing in it.</div>
+      <div class="phone">
+        <div class="hero">
+          <div class="htop"><div class="kick">Workout running</div><div class="sp"></div><div class="live"><div class="dot"></div><div class="clock">24:18</div></div></div>
+          <div class="hname"><h3>Push A</h3><div class="sum">9 of 16 sets</div></div>
+          <div class="hlines">
+            <div class="hline"><div class="n">Bench Press</div><div class="s full">4 / 4</div></div>
+            <div class="hline"><div class="n">Incline Dumbbell Press</div><div class="s full">3 / 3</div></div>
+            <div class="brk hung">
+              <div class="rule"></div>
+              <div class="body">
+                <div class="hline"><div class="n">Cable Fly</div><div class="s">2 / 3</div></div>
+                <div class="hline"><div class="n">Triceps Pushdown</div><div class="s">0 / 3</div></div>
+              </div>
+            </div>
+            <div class="hline"><div class="n">Lateral Raise</div><div class="s">0 / 3</div></div>
+          </div>
+          <button class="hbtn">Back to workout ›</button>
+        </div>
+      </div>
+      <div class="cost">The session carries its own <code>with</code>, and <code>stopsOf</code> already groups it — the same reading, one type over.</div>
+    </div>
+
+    <div class="half">
+      <div class="cap mid">A short routine, with a rest of the day under it</div>
+      <div class="sub short">The bracket sits above <em>Also today</em> without touching it, and a two-line routine that <em>is</em> the pair still reads as one.</div>
+      <div class="phone">
+        <div class="hero">
+          <div class="htop"><div class="kick">Planned today</div><div class="sp"></div><div class="last">Last done 2 days ago</div></div>
+          <div class="hname"><h3>Core finisher</h3><div class="sum">2 exercises · 6 sets</div></div>
+          <div class="hlines">
+            <div class="brk hung">
+              <div class="rule"></div>
+              <div class="body">
+                <div class="hline"><div class="n">Plank</div><div class="s">3 × 45 s</div></div>
+                <div class="hline"><div class="n">Hanging Leg Raise</div><div class="s">3 × 12 · BW</div></div>
+              </div>
+            </div>
+          </div>
+          <div class="also">Also today: Zone 2 Run</div>
+          <button class="hbtn">Start Core finisher</button>
+        </div>
+      </div>
+      <div class="cost">An orphan <code>with</code> on the last item draws nothing, exactly as it resolves everywhere else.</div>
+    </div>
+  </div>
+
+  <hr class="fade">
+
+  <h2 class="sec">Why B rather than C</h2>
+
+  <div class="settled">
+    <div class="h">The argument</div>
+    <ul>
+      <li><strong>The word is already carried on both surfaces you meet a pair through.</strong> You <em>made</em> it in the editor, where the gutter says <code>SUPERSET</code>; you will stand in it in the overview sheet, which says it again. The hero is neither — it is the glance in between, and it needs to mark the join rather than teach it.</li>
+      <li><strong>Height is this card's scarcest resource and the rule costs none.</strong> 14px per pair, on the card above the week strip and Recently on the app's first screen, buys a word two other screens have already said.</li>
+      <li><strong>The rule is the same object at every scale</strong> — <code>accent700</code> in the live overview, <code>accent800</code> in the diary where it is history. Hung in the margin it takes the brighter of the two, and not as a preference: out there it sits on the gradient's own <code>accent900</code> corner, where <code>accent800</code> is a 1px line against a colour four hex digits from it and simply does not draw. A drawn at <code>accent800</code> works because it is 10px further in, on ground the gradient has already lightened.</li>
+      <li><strong>Nothing moves.</strong> Hanging it in the card's own padding is the whole of what separates B from A: five names keep one left edge, and the mark reads as a bracket instead of as two rows that got indented.</li>
+    </ul>
+  </div>
+
+  <div class="settled warn">
+    <div class="h">What is not being proposed</div>
+    <ul>
+      <li><strong>Not F as well.</strong> A count in the summary <em>and</em> a bracket on the lines is two readings of one fact, and the count is the half that would go stale.</li>
+      <li><strong>Not a tap.</strong> The pairing control lives in the editor; this card is a glance, not a second place to edit a routine.</li>
+      <li><strong>No new copy.</strong> B needs no string at all. C would reuse <code>L.superset</code> / <code>Supersatz</code>, which exists — so the choice between them is a layout decision, not a translation one.</li>
+    </ul>
+  </div>
+
+  <div class="notes">
+    <p><b>What it would touch.</b> <code>todayRoutine.lines</code> and <code>liveLines</code> stop being flat arrays and become groups — the shape <code>stopsOf</code> in <code>data/superset.ts</code> already hands back, which is where the reading should come from rather than a fourth hand-rolled walk over <code>with</code>. Everything else on the card is untouched: the summary still counts exercises and sets, because a pair is still two exercises.</p>
+    <p><b>The one thing drawing it found.</b> The bracket's colour is not a free choice out in the margin. Hung at <code>-10</code> it lands on the darkest part of the hero gradient, and <code>accent800</code> — the diary's weight — disappeared there completely on the first pass; every frame above was drawn with an invisible pair until it was raised to <code>accent700</code>. Inset (A) it does not need raising, because 10px further in the gradient has already lightened under it. If B is built, that is a value the site owes a comment.</p>
+    <p><b>One detail left open.</b> Whether the rule spans only the two lines or bleeds slightly past them, as <code>logPairRule</code> does with its <code>marginTop: 14</code> to clear the diary's tag. With no tag there is nothing to clear, so it spans the pair exactly — drawn that way above.</p>
+  </div>
+
+</div>

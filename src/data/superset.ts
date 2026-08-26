@@ -28,8 +28,17 @@
 
 /** As much of a session set as any answer here depends on. */
 type Row = { done: boolean; link?: true };
+/**
+ * The pairing alone. `stopsOf` and `stopAt` read nothing else, which is what
+ * lets a **routine** through them as well as a session — `RoutineItem.sets` is
+ * a count where `SessionExercise.sets` is an array, and asking for the array
+ * would have sent Today's hero card off to walk `with` for itself. Every
+ * surface that groups a pair groups it the same way or they can disagree about
+ * which two are joined.
+ */
+type Joined = { with?: 'next' };
 /** As much of a session exercise. `SessionExercise` satisfies it. */
-type Item = { sets: Row[]; with?: 'next' };
+type Item = Joined & { sets: Row[] };
 
 /**
  * One screen stop: a lone exercise, or a superset pair, as indexes into
@@ -49,7 +58,7 @@ export type Stop = { head: number; ids: number[] };
  * resolves to no pair here rather than being swept from the data, the same way
  * a plan entry naming a deleted routine is handled where it is read.
  */
-export const stopsOf = (list: readonly Item[]): Stop[] => {
+export const stopsOf = (list: readonly Joined[]): Stop[] => {
   const out: Stop[] = [];
   for (let i = 0; i < list.length; i++) {
     const paired = list[i].with === 'next' && i + 1 < list.length;
@@ -64,7 +73,7 @@ export const stopsOf = (list: readonly Item[]): Stop[] => {
  * meaning "an exercise" for everything that writes it (the overview's jump, the
  * buddy's offer, a fresh session) while the screen reads it as "a stop".
  */
-export const stopAt = (list: readonly Item[], i: number): Stop | null =>
+export const stopAt = (list: readonly Joined[], i: number): Stop | null =>
   stopsOf(list).find((st) => st.ids.includes(i)) ?? null;
 
 /** The first set nobody has ticked, or the length when they all are. */

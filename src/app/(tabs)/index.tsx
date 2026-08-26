@@ -14,6 +14,7 @@
  */
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
+import type { ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import { CHECK_D, Icon } from '@/components/icon';
@@ -25,11 +26,48 @@ import { measureOf } from '@/data/exercises';
 import { loggedRows, plannedOn } from '@/data/plan';
 import { countN, DAYS_SHORT, fmtDayShort, fmtDayTiny, fmtLastDone } from '@/data/i18n';
 import { groupDigits } from '@/data/stats';
+import { stopsOf } from '@/data/superset';
 import { pickTip } from '@/data/tips';
 import { themed, useColors, useThemed } from '@/design/theme';
 import { color, elevation, font, radius, t, tracking, wash } from '@/design/tokens';
 import { Btn, CardKicker, H2, H3, H6, missingName } from '@/design/ui';
 import { fmtClock, schemeLine, useStore } from '@/store/workout-store';
+
+/**
+ * The hero's lines, grouped into stops — a lone exercise, or a superset pair.
+ *
+ * Through `stopsOf`, not a walk of its own: it is the app's one reading of
+ * `with`, so this card cannot come to a different conclusion about which two
+ * are joined than the screen you stand in them on does, and an orphan (last
+ * row, or a neighbour deleted since) resolves to no pair here exactly as it
+ * resolves to none everywhere else.
+ */
+const heroStops = <T,>(src: readonly { with?: 'next' }[], lines: T[]) =>
+  stopsOf(src).map((st) => ({ paired: st.ids.length > 1, lines: st.ids.map((i) => lines[i]) }));
+
+/**
+ * One stop's lines, bracketed when they are a pair.
+ *
+ * A routine that supersets two exercises says so on every surface that draws
+ * it — the editor's gutter hairline and word, the overview sheet's and the
+ * diary's rule down the side of the two blocks — and this card, the glance you
+ * read *before* deciding to train, said nothing at all. The mark is the diary's
+ * rather than the editor's because this is a read, not an edit; the word is not
+ * repeated because you made the pair in the editor and will stand in it in the
+ * overview, and 14px of height on the card above the week strip is the most
+ * expensive thing this screen has to spend. The mockup is
+ * `design/hero-superset-mockup.html`.
+ */
+function HeroStop({ paired, children }: { paired: boolean; children: ReactNode }) {
+  const styles = useThemed(sheet);
+  if (!paired) return <>{children}</>;
+  return (
+    <View style={styles.heroPair}>
+      <View style={styles.heroPairRule} />
+      <View style={styles.heroPairBody}>{children}</View>
+    </View>
+  );
+}
 
 export default function TodayScreen() {
   const styles = useThemed(sheet);
@@ -111,6 +149,8 @@ export default function TodayScreen() {
       full: e.sets.length > 0 && done === e.sets.length,
     };
   });
+  /** A pair is still a pair while you are standing in it. */
+  const liveStops = heroStops(live?.list ?? [], liveLines);
 
   /** Days since this routine was last logged, or null if it never was. */
   const lastDays = (() => {
@@ -132,6 +172,14 @@ export default function TodayScreen() {
   })();
 
   const trName = tr ? rInfo(tr) : null;
+  /* Built flat and grouped after, so `heroStops` indexes them the way `stopsOf`
+     indexes the items they came from. The summary below stays a count of
+     exercises and sets, pairs included — a superset is two exercises taken back
+     to back, not one exercise. */
+  const trLines = (tr?.items ?? []).map((i) => ({
+    ...exInfo(ex(i.ex)!),
+    scheme: schemeLine(i, measureOf(ex(i.ex)), L),
+  }));
   const todayRoutine = tr
     ? {
         name: trName!.text,
@@ -141,12 +189,9 @@ export default function TodayScreen() {
           L.setCountOne,
           L.setCount
         )}`,
-        lines: tr.items.map((i) => ({
-          ...exInfo(ex(i.ex)!),
-          scheme: schemeLine(i, measureOf(ex(i.ex)), L),
-        })),
+        stops: heroStops(tr.items, trLines),
       }
-    : { name: L.restDay, missing: false, summary: '', lines: [] };
+    : { name: L.restDay, missing: false, summary: '', stops: [] };
 
   /**
    * The week as a strip, in the Plan calendar's dot grammar: full dot
@@ -241,15 +286,22 @@ export default function TodayScreen() {
             </View>
 
             <View style={styles.heroLines}>
-              {liveLines.map((l, i) => (
-                <View key={i} style={styles.heroLine}>
-                  <Text style={[styles.heroLineName, l.missing && missingName(c)]} numberOfLines={1}>
-                    {l.text}
-                  </Text>
-                  <Text style={[styles.heroLineScheme, l.full && { color: c.accent400 }]}>
-                    {l.count}
-                  </Text>
-                </View>
+              {liveStops.map((st, i) => (
+                <HeroStop key={i} paired={st.paired}>
+                  {st.lines.map((l, j) => (
+                    <View key={j} style={styles.heroLine}>
+                      <Text
+                        style={[styles.heroLineName, l.missing && missingName(c)]}
+                        numberOfLines={1}
+                      >
+                        {l.text}
+                      </Text>
+                      <Text style={[styles.heroLineScheme, l.full && { color: c.accent400 }]}>
+                        {l.count}
+                      </Text>
+                    </View>
+                  ))}
+                </HeroStop>
               ))}
             </View>
 
@@ -303,16 +355,20 @@ export default function TodayScreen() {
             )}
 
             <View style={styles.heroLines}>
-              {todayRoutine.lines.map((l, i) => (
-                <View key={i} style={styles.heroLine}>
-                  <Text
-                    style={[styles.heroLineName, l.missing && missingName(c)]}
-                    numberOfLines={1}
-                  >
-                    {l.text}
-                  </Text>
-                  <Text style={styles.heroLineScheme}>{l.scheme}</Text>
-                </View>
+              {todayRoutine.stops.map((st, i) => (
+                <HeroStop key={i} paired={st.paired}>
+                  {st.lines.map((l, j) => (
+                    <View key={j} style={styles.heroLine}>
+                      <Text
+                        style={[styles.heroLineName, l.missing && missingName(c)]}
+                        numberOfLines={1}
+                      >
+                        {l.text}
+                      </Text>
+                      <Text style={styles.heroLineScheme}>{l.scheme}</Text>
+                    </View>
+                  ))}
+                </HeroStop>
               ))}
             </View>
 
@@ -485,6 +541,16 @@ const sheet = themed(() => ({
   alsoToday: { fontFamily: font.regular, fontSize: 11, color: color.accent400, marginTop: 8 },
   heroLines: { gap: 3, marginTop: 11 },
   heroLine: { flexDirection: 'row', gap: 10 },
+  /* A superset's bracket, hung in the card's own padding: 1 + 9 back out
+     again, so the paired names keep the left edge every other line has and the
+     mark costs no height at all — which on the card above the week strip is
+     what buys it. `accent700` rather than the diary's `accent800`, and not as
+     a preference: out here the rule sits on the gradient's own `accent900`
+     corner, where a 1px `accent800` is four hex digits from its ground and
+     simply does not draw. */
+  heroPair: { flexDirection: 'row', gap: 9, marginLeft: -10 },
+  heroPairRule: { width: 1, borderRadius: 1, backgroundColor: color.accent700 },
+  heroPairBody: { flex: 1, gap: 3 },
   heroLineName: { flex: 1, fontFamily: font.regular, fontSize: 12.5, color: color.neutral400 },
   heroLineScheme: {
     fontFamily: font.regular,

@@ -829,6 +829,37 @@ store nothing.
   when the partner actually got a set ticked, or the bracket would describe
   nothing — and `saveAsRoutine` / `saveDayAsRoutine` carry it back out under
   the same condition.
+- **Today's hero card brackets a pair too, and hangs the rule in its own
+  padding.** Every other surface that draws a routine says which two are joined
+  — the editor's gutter hairline and word, the overview sheet's and the diary's
+  rule down the side of two blocks, the coach preview's borrowed mark — and the
+  one screen you read *before* deciding to train listed `tr.items` flat.
+  `HeroStop` fixes that in both branches, planned and live. The mockup is
+  `design/hero-superset-mockup.html`, and four of its arguments are the shape
+  of what shipped:
+  - **The mark, not the word.** You made the pair in the editor, which names it,
+    and you will stand in it in the overview, which names it again; this card is
+    the glance in between. The word costs ~14px per pair on the card above the
+    week strip and Recently, which is the most expensive vertical space in the
+    app, and buys a sentence two other screens have already said.
+  - **Hung at `marginLeft: -10`, so nothing moves.** 1px of rule plus a 9px gap
+    is exactly the 10 taken back, so the paired names keep the left edge every
+    other line has and the bracket is drawn in space the card was not using.
+    Inset was the first cut and the two rows read as a sub-list before they read
+    as a pair.
+  - **`accent700`, not the diary's `accent800`, and not as a preference.** Out
+    in the padding the rule sits on the hero gradient's own `accent900` corner,
+    where a 1px `accent800` is four hex digits from its ground and does not
+    draw — every frame of the mockup was rendered with an invisible pair until
+    it was found. Inset it would not need raising, the gradient having already
+    lightened 10px further in.
+  - **Through `stopsOf`, which is why it takes `Joined` now.** That function
+    read `{ sets: Row[]; with?: 'next' }`, and a `RoutineItem`'s `sets` is a
+    count rather than an array — so a hero walking `with` for itself would have
+    been a fourth reading of adjacency and a fourth chance to disagree about
+    which two are joined. `stopsOf` / `stopAt` are typed over the pairing alone;
+    everything below them still needs the rows. The summary is untouched: a pair
+    is two exercises taken back to back, not one exercise.
 - **But everything read back *index for index* takes the working sets only.**
   The diary is a record of the day and keeps every row; the three maps that
   answer "what am I doing next" are aligned against a routine that has never
