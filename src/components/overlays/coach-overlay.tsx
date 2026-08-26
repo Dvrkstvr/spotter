@@ -144,6 +144,7 @@ export function CoachOverlay() {
     sessionCount: (n) =>
       (n === 1 ? L.statsFootSession : L.statsFootSessions).replace('{n}', String(n)),
     regionName: (r) => regionLabel(r, L),
+    muscleName: (g) => gInfo(g).text,
     exName: (e) => exInfo(e).text,
     kindName: (k) => kInfo(k).text,
     L,
@@ -218,7 +219,7 @@ export function CoachOverlay() {
 
   const weakList = stats.weak
     .slice(0, 3)
-    .map((w) => regionLabel(w.region, L))
+    .map((w) => gInfo(w.group).text)
     .join(', ');
 
   return (

@@ -100,7 +100,7 @@ export function BalanceRadar({
             textAnchor={anchor}
             fontFamily={font.regular}
             fontSize={11}
-            fill={b.weak ? c.neutral600 : c.text}
+            fill={b.low > 0 ? c.neutral600 : c.text}
           >
             {label(b.region)}
             <TSpan fontSize={9.5} fill={c.neutral600}>

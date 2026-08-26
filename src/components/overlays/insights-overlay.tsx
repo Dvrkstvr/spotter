@@ -20,13 +20,13 @@ import { FullScreen } from '@/components/sheet';
 import { Tip } from '@/components/tip';
 import type { Strings } from '@/data/i18n';
 import {
-  EVEN_SHARE,
+  BAND,
   favourites,
   funFact,
   groupDigits,
-  pct,
   periodOf,
   PERIODS,
+  rate,
   type PeriodKey,
   type Region,
   trainingStats,
@@ -60,7 +60,7 @@ const bucketLabel = (days: number, L: Strings) =>
 export function InsightsOverlay() {
   const styles = useThemed(sheet);
   const c = useColors();
-  const { s, L, patch, ex, exInfo } = useStore();
+  const { s, L, patch, ex, exInfo, gInfo } = useStore();
   const insets = useSafeAreaInsets();
   const close = () => patch({ statsOpen: false });
   useBackClose(close);
@@ -158,35 +158,53 @@ export function InsightsOverlay() {
                   <Text style={styles.caption}>{L.insightsBalanceHint}</Text>
                 </View>
 
-                {/* The honest version of the chart above: ranked, named, and
-                    with the number written out. This is what the coach prompt
-                    reads. */}
-                <H6 style={styles.head}>{L.insightsWeak}</H6>
+                {/* The honest version of the chart above, and the one thing
+                    on this screen that can say *not enough*: named muscles,
+                    furthest short first, each against the same range. The
+                    chart above is shares and can only rank; this is a rate
+                    measured against a figure from outside this app. It is also
+                    what the coach prompt reads. */}
+                <H6 style={styles.head}>
+                  {L.insightsWeak}
+                  <Text style={styles.headAside}>
+                    {'  '}
+                    {L.insightsBand
+                      .replace('{min}', String(BAND.min))
+                      .replace('{max}', String(BAND.max))}
+                  </Text>
+                </H6>
                 {st.weak.length === 0 ? (
                   <Text style={styles.note}>{L.insightsWeakNone}</Text>
                 ) : (
                   <View>
                     {st.weak.map((w, i) => (
                       <View
-                        key={w.region}
+                        key={w.group}
                         style={[styles.weakRow, i < st.weak.length - 1 && styles.ruled]}
                       >
-                        <Text style={styles.weakName}>{regionLabel(w.region, L)}</Text>
-                        {/* The track runs to twice an even split, so the marker
-                            sits at its midpoint: a bar reaching half way is a
-                            region getting its share. Nothing here exceeds that
-                            — a weak region is under it by definition. */}
+                        <Text style={styles.weakName} numberOfLines={1}>
+                          {gInfo(w.group).text}
+                        </Text>
+                        {/* The track runs to the top of the range, so the mark
+                            sits where the range opens: a bar reaching it is a
+                            muscle getting enough. Nothing here reaches it — a
+                            low muscle is under it by definition. */}
                         <View style={styles.track}>
                           <View
                             style={[
                               styles.fill,
-                              { width: `${Math.min(100, (w.share / (EVEN_SHARE * 2)) * 100)}%` },
+                              { width: `${Math.min(100, (w.perWeek / BAND.max) * 100)}%` },
                             ]}
                           />
-                          <View pointerEvents="none" style={styles.evenMark} />
+                          <View pointerEvents="none" style={styles.bandMark} />
                         </View>
-                        <Text style={styles.weakPct}>{pct(w.share)}%</Text>
-                        <Tag label={L.insightsLow} tone="outline" />
+                        <Text style={styles.weakPct}>
+                          {L.insightsPerWeek.replace('{n}', rate(w.perWeek))}
+                        </Text>
+                        <Tag
+                          label={L.insightsShort.replace('{n}', rate(BAND.min - w.perWeek))}
+                          tone="outline"
+                        />
                       </View>
                     ))}
                   </View>
@@ -336,18 +354,21 @@ const sheet = themed(() => ({
   ruled: { borderBottomWidth: 1, borderBottomColor: t.rule },
   cardioRow: { borderTopWidth: 1, borderTopColor: t.rule, marginTop: 2 },
   weakName: { width: 88, fontFamily: font.regular, fontSize: 13, color: color.text },
+  headAside: { fontFamily: font.regular, fontSize: 10.5, color: color.neutral600, letterSpacing: 0 },
   track: { flex: 1, height: 8, borderRadius: 4, backgroundColor: t.rule },
   fill: { height: '100%', borderRadius: 4, backgroundColor: color.accent, opacity: 0.5 },
-  evenMark: {
+  /* Where the range opens, on a track that runs to where it closes. A muscle
+     under the band never reaches it, which is what makes the gap legible. */
+  bandMark: {
     position: 'absolute',
-    left: '50%',
+    left: `${(10 / 20) * 100}%`,
     top: -3,
     bottom: -3,
     width: 1,
     backgroundColor: color.neutral500,
   },
   weakPct: {
-    width: 34,
+    width: 52,
     textAlign: 'right',
     fontFamily: font.regular,
     fontSize: 11.5,

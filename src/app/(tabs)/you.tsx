@@ -26,6 +26,7 @@ export default function YouScreen() {
     loggedThisMonth,
     ex,
     exInfo,
+    gInfo,
     turnMode,
     toggleTurnMode,
     adoptBuddyEx,
@@ -119,6 +120,7 @@ export default function YouScreen() {
         <StatsCard
           recent={recentStats}
           allTime={allTimeStats}
+          muscleName={(g) => gInfo(g).text}
           L={L}
           onPress={() => patch({ statsOpen: true })}
         />

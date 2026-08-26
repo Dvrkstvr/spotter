@@ -313,6 +313,15 @@ simplification as well as a correction.
 
 ### C. Report a rate against a band, and let "weak" mean something
 
+*Applied, 26 Aug 2026, with §8's open question answered the way §9.1's mockup
+argued: the range is stated **per muscle**, so `RegionStat` carries its rate
+plus a `low` count and `TrainingStats.weak` became a list of muscles. One rule
+had to be invented that the share model never needed — an untrained muscle is
+not a weak one, or `Neck` is flagged every week for ever. The coach prompt
+sends named muscles and weekly rates now instead of regions and percentages.
+§§D–F are still open, and the region-expansion UI from the mockup is not
+built: Insights lists the short muscles, but a region row does not yet open.*
+
 `sets / weeks(window)` per region, drawn against 10–20 sets/week. That target
 is stated per *muscle*, so a region rolling up two to five of them needs its
 own band — the one piece of arithmetic the six-region roll-up makes awkward,

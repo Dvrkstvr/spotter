@@ -100,6 +100,22 @@ const REGION_OF: Record<string, Region> = {
 export const regionOf = (group: string): Region | null => REGION_OF[group] ?? null;
 
 /**
+ * The muscle-group keys under each region, in `REGION_OF`'s own order.
+ *
+ * Derived rather than written out, so the two can never disagree about which
+ * muscles a region is made of — the failure would be a region whose bar and
+ * whose rows describe different bodies. It is the seeded set only: a group the
+ * user invented maps to no region and appears in neither.
+ */
+export const MUSCLES_OF = REGIONS.reduce(
+  (acc, r) => {
+    acc[r] = Object.keys(REGION_OF).filter((g) => REGION_OF[g] === r);
+    return acc;
+  },
+  {} as Record<Region, string[]>
+);
+
+/**
  * One set's muscle contributions, rolled up to the six regions.
  *
  * **The largest contribution among a region's own muscles, never their sum.**
@@ -177,12 +193,21 @@ const setKg = (s: string): number | null => {
 export const EVEN_SHARE = 1 / REGIONS.length;
 
 /**
- * How far below even a region has to sit before it is called out. Three
- * quarters, not "below even": in any real week three regions are below the
- * mean by definition, and a chart that flags half the body every time is
- * noise rather than a finding.
+ * The weekly-set range a muscle is read against.
+ *
+ * This is the number the whole rebuild was for. A *share* can only ever say
+ * "relatively less" — Chest at 17% is the same figure at four sets a week and
+ * at twenty — where a rate against a stated range can say **not enough**, and
+ * say it against a figure that exists outside this app. 10–20 hard sets per
+ * muscle per week is where the dose-response literature settles; see
+ * `design/stats-research.md`.
+ *
+ * **Per muscle, never per region.** A region rolls up two to five of these, so
+ * Legs at twelve sets a week can be three trained muscles and two starving
+ * ones under one contented number. The region carries its rate and a count of
+ * how many of its muscles are short; the verdict itself lives one level down.
  */
-const WEAK_AT = 0.75;
+export const BAND = { min: 10, max: 20 } as const;
 
 /**
  * Sessions to log before the statistics are worth showing. Balance over two
@@ -190,6 +215,35 @@ const WEAK_AT = 0.75;
  * would be confident nonsense.
  */
 export const MIN_SESSIONS = 5;
+
+/**
+ * One muscle group's week.
+ *
+ * The level the band is stated at, and therefore the level every verdict on
+ * this screen is made at.
+ */
+export type MuscleStat = {
+  /** The muscle-group key. Resolve its name through the store, never here. */
+  group: string;
+  /** Fractional sets credited in the window. */
+  sets: number;
+  /** Those sets per week, so two window lengths are comparable. */
+  perWeek: number;
+  /**
+   * Whether anything at all was logged for it.
+   *
+   * **An untrained muscle is not a weak one**, and keeping the two apart is
+   * what stops this being noise: nobody trains `Neck`, and a screen flagging
+   * it every week beside a genuinely neglected calf has stopped being read.
+   * So `low` is only ever true of a muscle you have actually trained, and one
+   * you haven't shows a dash and stays out of the list.
+   */
+  trained: boolean;
+  /** Trained, and under the band. */
+  low: boolean;
+  /** Over it — sayable for the first time, which a share never could. */
+  over: boolean;
+};
 
 export type RegionStat = {
   region: Region;
@@ -200,13 +254,23 @@ export type RegionStat = {
    * among its own muscles rather than their sum (`regionsOf`).
    *
    * Not to be confused with `TrainingStats.countedSets`, which counts logged
-   * rows and is a whole number.
+   * rows and is a whole number, nor with the sum of `muscles` below — the
+   * maximum is taken per set, so a region is nearly always fewer sets than its
+   * muscles add up to.
    */
   sets: number;
+  /** Those sets per week. What the row states, and what a bar is drawn to. */
+  perWeek: number;
   /** Fraction of the six regions' sets — 0…1, summing to 1 across them. */
   share: number;
-  /** Below three quarters of an even split, and therefore worth naming. */
-  weak: boolean;
+  /** The muscles under it, in `MUSCLES_OF` order. */
+  muscles: MuscleStat[];
+  /**
+   * How many of them are under the band. What the region row's tag counts, and
+   * the whole reason a region has no verdict of its own: it cannot be measured
+   * against a figure stated per muscle.
+   */
+  low: number;
 };
 
 export type TrainingStats = {
@@ -216,10 +280,17 @@ export type TrainingStats = {
   sessions: number;
   /** Load volume in kg. Only sessions that recorded one contribute (see below). */
   volume: number;
+  /** Whole weeks the window spans. What every `perWeek` is divided by. */
+  weeks: number;
   /** Every region, in `REGIONS` order, whether or not it was trained. */
   balance: RegionStat[];
-  /** The weak ones, worst first. Empty when the split is even enough. */
-  weak: RegionStat[];
+  /**
+   * Every **muscle** under the band, furthest short first — never a region,
+   * because the band is stated per muscle. Untrained muscles are not in it
+   * (see `MuscleStat.trained`), which is what keeps it a finding rather than a
+   * list of everything nobody does.
+   */
+  weak: MuscleStat[];
   /**
    * Logged sets that reached at least one region — **whole rows**, not the
    * fractional figure `RegionStat.sets` carries. It is what `looseSets` is
@@ -283,6 +354,7 @@ export function trainingStats(
   });
 
   const sets = Object.fromEntries(REGIONS.map((r) => [r, 0])) as Record<Region, number>;
+  const muscle: Record<string, number> = {};
   let counted = 0;
   let loose = 0;
   let volume = 0;
@@ -305,8 +377,8 @@ export function trainingStats(
       // Cardio is not a muscle to be balanced against the others, so it is
       // gated out before the contributions are read at all — which is also
       // why the seeded cardio exercises carry no `also` to read.
-      const hit = m === 'distance' || m === 'duration' ? {} : regionsOf(contribOf(e));
-      const reached = Object.entries(hit) as [Region, number][];
+      const contrib = m === 'distance' || m === 'duration' ? {} : contribOf(e);
+      const reached = Object.entries(regionsOf(contrib)) as [Region, number][];
       if (reached.length === 0) {
         // Reached no region: cardio, full body, or filed under a group the
         // user invented. Counted in rows, because that is the unit the
@@ -316,22 +388,50 @@ export function trainingStats(
       }
       counted += entry.sets.length;
       for (const [region, n] of reached) sets[region] += entry.sets.length * n;
+      // The muscle level keeps every contribution as it stands: the maximum
+      // above is the *region* view's compromise, and applying it here too
+      // would throw away the numbers the band is actually stated against.
+      for (const [group, n] of Object.entries(contrib))
+        if (regionOf(group)) muscle[group] = (muscle[group] ?? 0) + entry.sets.length * n;
     }
     if (hasCardio) cardioSessions++;
   }
 
   const total = REGIONS.reduce((a, r) => a + sets[r], 0);
 
+  // Whole weeks the window spans, so 8 weeks and 12 months are read against
+  // the same band. A bounded period divides by its own length; all-time has no
+  // length of its own and takes the diary's, from the oldest session logged.
+  // Never below one, or a three-day window would multiply every rate by two.
+  const spanDays =
+    sinceDays ??
+    (inWindow.length
+      ? Math.max(...inWindow.map((h) => daysAgo(h.date, today) + 1).filter(Number.isFinite))
+      : 7);
+  const weeks = Math.max(1, spanDays / 7);
+
   const balance: RegionStat[] = REGIONS.map((region) => {
-    const share = total === 0 ? 0 : sets[region] / total;
+    const muscles: MuscleStat[] = MUSCLES_OF[region].map((group) => {
+      const n = muscle[group] ?? 0;
+      const perWeek = n / weeks;
+      return {
+        group,
+        sets: n,
+        perWeek,
+        trained: n > 0,
+        // Untrained is not low: see `MuscleStat.trained`. Nobody trains the
+        // neck, and flagging it every week would cost the list its meaning.
+        low: n > 0 && perWeek < BAND.min,
+        over: perWeek > BAND.max,
+      };
+    });
     return {
       region,
       sets: sets[region],
-      share,
-      // Nothing is weak until something has been logged: with nothing counted
-      // every share is 0, and calling all six weak would be an opinion about
-      // an empty diary rather than a finding.
-      weak: total > 0 && share < EVEN_SHARE * WEAK_AT,
+      perWeek: sets[region] / weeks,
+      share: total === 0 ? 0 : sets[region] / total,
+      muscles,
+      low: muscles.filter((m) => m.low).length,
     };
   });
 
@@ -339,8 +439,14 @@ export function trainingStats(
     days: new Set(inWindow.map((h) => h.date)).size,
     sessions: inWindow.length,
     volume,
+    weeks,
     balance,
-    weak: balance.filter((b) => b.weak).sort((a, b) => a.share - b.share),
+    // Furthest short first, which is the order the screen lists them in and
+    // the order the coach prompt names them.
+    weak: balance
+      .flatMap((b) => b.muscles)
+      .filter((m) => m.low)
+      .sort((a, b) => a.perWeek - b.perWeek),
     countedSets: counted,
     looseSets: loose,
     cardioSessions,
@@ -360,15 +466,32 @@ export function trainingStats(
  * Null when nothing has been counted yet; the card shows its empty state.
  */
 export type Headline =
-  | { kind: 'weak'; region: Region; pct: number; top: Region }
-  | { kind: 'even'; region: Region; pct: number };
+  /** A muscle under the band. Its key — resolve the name through the store. */
+  | { kind: 'low'; group: string; perWeek: number }
+  /** Nothing short: the region carrying the most, so the card still says something. */
+  | { kind: 'even'; region: Region; perWeek: number };
 
 export const headlineOf = (st: TrainingStats): Headline | null => {
   if (st.countedSets === 0) return null;
-  const top = st.balance.reduce((a, b) => (b.share > a.share ? b : a));
+  // The muscle furthest short, else the region doing best. It names a rate
+  // rather than a share now, which is the difference between a finding and a
+  // comparison with the rest of your own training.
   const worst = st.weak[0];
-  if (worst) return { kind: 'weak', region: worst.region, pct: pct(worst.share), top: top.region };
-  return { kind: 'even', region: top.region, pct: pct(top.share) };
+  if (worst) return { kind: 'low', group: worst.group, perWeek: worst.perWeek };
+  const top = st.balance.reduce((a, b) => (b.perWeek > a.perWeek ? b : a));
+  return { kind: 'even', region: top.region, perWeek: top.perWeek };
+};
+
+/**
+ * A weekly rate as the screens print it: one decimal, and no trailing `.0`.
+ *
+ * One rounding for every surface, like `pct` — a card saying 2 and a row
+ * saying 2.4 about the same muscle is the kind of disagreement nobody can
+ * debug from a screenshot.
+ */
+export const rate = (perWeek: number): string => {
+  const n = Math.round(perWeek * 10) / 10;
+  return Number.isInteger(n) ? String(n) : n.toFixed(1);
 };
 
 /** A share as whole percent. One rounding, so no two screens disagree by 1. */

@@ -486,9 +486,28 @@ it is a *setting*, added the additive way `PERSIST` allows.
 - **`countedSets` and `looseSets` are whole rows; `RegionStat.sets` is
   fractional.** The disclosure under the chart says how many sets reached no
   muscle group, and it has to be measured in something a person counted.
-- **Weak is below three quarters of an even split, not below even.** In any real
-  week three regions are under the mean by definition, and a screen that flags
-  half the body every time is noise rather than a finding.
+- **A rate against a range, not a share against an even split** (`BAND`, 10–20
+  sets a week). This is what the whole rebuild was for: a share can only ever
+  say *relatively less* — Chest at 17% is the same figure at four sets a week
+  and at twenty — where a rate can say **not enough**, against a number that
+  exists outside this app. It also makes *over-trained* sayable for the first
+  time, which no share could express. `perWeek` divides by `weeks`, so eight
+  weeks and twelve months are read against the same range; a bounded window
+  takes its own length and all-time takes the diary's, never less than one
+  week.
+- **The range is stated per muscle, so the verdict lives there and not on a
+  region.** Legs at seventeen sets a week can be a trained quad and a starving
+  calf under one contented number, so `RegionStat` carries its rate and
+  `low` — a *count* of its muscles under the range — while
+  `TrainingStats.weak` is a list of **muscles**, furthest short first. That is
+  what the card headline names, what Insights lists, and what the coach prompt
+  sends: "Calves 2" is something a plan can be written from where "Legs behind"
+  is not.
+- **An untrained muscle is not a weak one** (`MuscleStat.trained`). Nobody
+  trains `Neck`, and a screen flagging it every week beside a genuinely
+  neglected calf has stopped being read — so nothing counts as low until it has
+  been trained at all. This is the one place the per-muscle range needed a rule
+  the per-region share never did.
 - **Under `MIN_SESSIONS` the card makes no claims.** Balance across two workouts
   is a Tuesday, not a weakness, and a coach prompt built on it would be
   confident nonsense. The card still stands, because it is the door — its

@@ -28,7 +28,9 @@ import {
   type Region,
   type TrainingStats,
   groupDigits,
+  BAND,
   headlineOf,
+  rate,
   pct,
 } from '@/data/stats';
 
@@ -54,11 +56,18 @@ export function StatsCard({
   recent,
   /** Everything ever logged — the footer's two numbers. */
   allTime,
+  /**
+   * A muscle-group key's name. Injected rather than looked up here: the group
+   * list is the user's to rename and lives in the store, and this component is
+   * given its numbers rather than fetching them.
+   */
+  muscleName,
   L,
   onPress,
 }: {
   recent: TrainingStats;
   allTime: TrainingStats;
+  muscleName: (group: string) => string;
   L: Strings;
   onPress: () => void;
 }) {
@@ -71,11 +80,20 @@ export function StatsCard({
   // makes no claims and draws no chart.
   const empty = allTime.sessions < MIN_SESSIONS || head === null;
 
+  // A rate against the band, not a share of your own training: "Calves got 2
+  // sets a week" is a finding where "Legs 9%" was a comparison with your own
+  // bench press.
   const line = empty
     ? L.statsEmpty
-    : (head.kind === 'weak' ? L.statsHeadWeak : L.statsHeadEven)
-        .replace('{region}', regionLabel(head.region, L))
-        .replace('{pct}', String(head.pct));
+    : head.kind === 'low'
+      ? L.statsHeadWeak
+          .replace('{muscle}', muscleName(head.group))
+          .replace('{n}', rate(head.perWeek))
+          .replace('{min}', String(BAND.min))
+          .replace('{max}', String(BAND.max))
+      : L.statsHeadEven
+          .replace('{region}', regionLabel(head.region, L))
+          .replace('{n}', rate(head.perWeek));
 
   // The tallest bar sets the scale, so the shape reads even in a lopsided
   // eight weeks; the even-split line is drawn against the same scale and is
@@ -119,7 +137,7 @@ export function StatsCard({
                       // A weak region is drawn quieter rather than redder: the
                       // chart's job is to show the shape, and the sentence above
                       // it has already named the one that matters.
-                      opacity: b.weak ? 0.38 : 0.95,
+                      opacity: b.low > 0 ? 0.38 : 0.95,
                     },
                   ]}
                 />
@@ -145,7 +163,7 @@ export function StatsCard({
               <Text
                 key={b.region}
                 numberOfLines={1}
-                style={[styles.barLabel, b.weak && styles.barLabelWeak]}
+                style={[styles.barLabel, b.low > 0 && styles.barLabelWeak]}
               >
                 {regionLabel(b.region, L)}
               </Text>
