@@ -549,6 +549,22 @@ it is a *setting*, added the additive way `PERSIST` allows.
   `deltaKg` is `null` for a lift seen once and `0` for one that has not moved:
   "no reading yet" and "stalled" are different facts, and a prompt that
   confused them would call a new lift a plateau.
+- **And that number is an *estimated* 1RM, not the heaviest weight** (`e1rmOf`,
+  Epley `w × (1 + r / 30)`). The top weight is not comparable across sessions:
+  100 × 8 after last week's 100 × 3 is a real week of progress that a
+  weight-only reading reports as no change at all. Four things follow:
+  - **The best set of a session is the best *estimate***, so 100 × 8 wins over
+    110 × 3 and which of the two you happened to do stops deciding the trend.
+    `latest` is that set, still in its stored `"100 × 8"` form.
+  - **A true single is returned unchanged.** Epley would otherwise add its own
+    3% to a set that already is a max.
+  - **Whole kilos, everywhere.** Both Epley and Brzycki are population
+    regressions good to roughly ±5% between two and ten reps and drifting well
+    past that above it, so this is a trend line and nothing prints it as a
+    target. A decimal would claim a precision the formula has not got.
+  - **A bodyweight set still estimates to 0**, because `setKg` reads `BW` as no
+    load — `keyLifts` has never had a figure to trend for those, and this
+    changes nothing about that.
 
 ### The coach's contract is the seam
 

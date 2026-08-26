@@ -22,8 +22,10 @@
 import { describe, expect, it } from 'vitest';
 import type { Exercise } from './exercises';
 import {
+  e1rmOf,
   EVEN_SHARE,
   headlineOf,
+  keyLifts,
   rate,
   REGIONS,
   trainingStats,
@@ -393,5 +395,59 @@ describe('rate', () => {
     expect(rate(2.04)).toBe('2');
     expect(rate(2.45)).toBe('2.5');
     expect(rate(0)).toBe('0');
+  });
+});
+
+/* ── key lifts ─────────────────────────────────────────────────────────── */
+
+describe('key lifts, by estimate rather than by weight', () => {
+  const lifts = (history: StatsSession[]) => keyLifts(history, ex, null, 6, TODAY);
+  const on = (date: string, sets: string[]): StatsSession => ({
+    date,
+    list: [{ ex: 'fly', sets }],
+    vol: 0,
+  });
+
+  it('sees progress that a top-weight reading calls no change', () => {
+    // The blind spot this closes: same bar, three more reps, and the old
+    // reading reported a plateau.
+    const l = lifts([on('2026-08-06', ['100 × 3']), on('2026-08-20', ['100 × 8'])])[0];
+    expect(l.deltaKg).toBeGreaterThan(0);
+    expect(l.latest).toBe('100 × 8');
+  });
+
+  it('picks the best set of a session by estimate, not by what was heaviest', () => {
+    // 100 × 8 estimates at 127; 110 × 3 at 121. The heavier set is not the
+    // better one, and which you happened to do is what a trend must see past.
+    const l = lifts([on('2026-08-20', ['110 × 3', '100 × 8'])])[0];
+    expect(l.latest).toBe('100 × 8');
+    expect(l.e1rm).toBe(127);
+  });
+
+  it('leaves a true single alone rather than inflating it', () => {
+    // Epley would add its own 3% to a set that already *is* a max.
+    expect(e1rmOf('120 × 1')).toBe(120);
+    expect(lifts([on('2026-08-20', ['120 × 1'])])[0].e1rm).toBe(120);
+  });
+
+  it('reports a stalled lift as 0 and a new one as null', () => {
+    // "No reading yet" and "stalled" are different facts, and a prompt that
+    // confused them would call a first session a plateau.
+    expect(lifts([on('2026-08-20', ['100 × 5'])])[0].deltaKg).toBeNull();
+    expect(
+      lifts([on('2026-08-06', ['100 × 5']), on('2026-08-20', ['100 × 5'])])[0].deltaKg
+    ).toBe(0);
+  });
+
+  it('refuses a set with nothing to estimate from', () => {
+    expect(e1rmOf('— × 8')).toBeNull(); // an unrecorded weight
+    expect(e1rmOf('100 × ')).toBeNull(); // no reps
+    expect(e1rmOf('BW × 10')).toBe(0); // bodyweight: no load to trend, as before
+  });
+
+  it('rounds to whole kilos, because the estimate is a regression', () => {
+    // ±5% between two and ten reps. A decimal on it would claim a precision
+    // the formula has not got.
+    expect(lifts([on('2026-08-20', ['102.5 × 7'])])[0].e1rm).toBe(126);
   });
 });

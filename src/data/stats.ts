@@ -180,6 +180,40 @@ const regionsOf = (contrib: Record<string, number>): Partial<Record<Region, numb
  * has the cardio line of its own that says so.
  */
 
+/** The right-hand field: reps. Absent or unparseable reads as none. */
+const setReps = (str: string): number => {
+  const n = parseFloat((String(str).split('×')[1] ?? '').trim().replace(',', '.'));
+  return isNaN(n) ? 0 : n;
+};
+
+/**
+ * A set's estimated one-rep max, in kilos — Epley: `w × (1 + r / 30)`.
+ *
+ * **A trend needs one number that means the same thing in two sessions**, and
+ * the heaviest weight is not it: 100 × 8 after last week's 100 × 3 is a real
+ * week of progress that a top-weight reading calls "no change". An estimate
+ * folds the reps in, so the two are comparable without asking anyone to test a
+ * single.
+ *
+ * Epley rather than Brzycki because it is the better fit in the 6–10 range
+ * most working sets live in. Both are population regressions accurate to about
+ * ±5% between two and ten reps and drifting well past that above it, so this
+ * is a **trend line and not a max** — which is also why nothing prints it as a
+ * target. A true single is returned unchanged rather than inflated by the
+ * formula's own 3%.
+ *
+ * Null when the set carries no usable pair: an unrecorded weight, or no reps.
+ * A bodyweight set is `0` kg and estimates to 0, exactly as its top weight did
+ * — `keyLifts` has never had a figure to trend for those.
+ */
+export const e1rmOf = (set: string): number | null => {
+  const kg = setKg(set);
+  if (kg === null) return null;
+  const reps = setReps(set);
+  if (reps < 1) return null;
+  return reps === 1 ? kg : kg * (1 + reps / 30);
+};
+
 /** The left-hand field of a stored set, in kg. BW is 0; an unrecorded dash isn't a number. */
 const setKg = (s: string): number | null => {
   const left = String(s).split('×')[0]?.trim() ?? '';
@@ -703,12 +737,18 @@ export type KeyLift = {
   id: string;
   /** Sessions in the window that contained it. */
   sessions: number;
-  /** The heaviest set of the most recent session, in the stored "70 × 8" form. */
-  latest: string;
   /**
-   * Kilos gained on the top set since the first session in the window — 0 for
-   * a lift that has not moved, null when there is only one session to go on.
-   * Null and 0 say different things: "no reading yet" and "stalled", and a
+   * The *best* set of the most recent session, in the stored "70 × 8" form —
+   * best by estimated 1RM rather than by weight, so a heavier set taken for
+   * fewer reps does not automatically win.
+   */
+  latest: string;
+  /** That set's estimated 1RM, rounded to a kilo. See `e1rmOf`. */
+  e1rm: number;
+  /**
+   * Kilos of estimated 1RM gained since the first session in the window — 0
+   * for a lift that has not moved, null when there is only one session to go
+   * on. Null and 0 say different things: "no reading yet" and "stalled", and a
    * coach prompt that confused them would call a new lift a plateau.
    */
   deltaKg: number | null;
@@ -721,7 +761,7 @@ export function keyLifts(
   limit = 6,
   today: Date = new Date()
 ): KeyLift[] {
-  type Seen = { date: string; topKg: number; topSet: string };
+  type Seen = { date: string; e1rm: number; topSet: string };
   const byEx = new Map<string, Seen[]>();
 
   for (const h of history) {
@@ -730,11 +770,14 @@ export function keyLifts(
       // Same stamp-first read: a since-deleted run must not fall back to `load`
       // and slip into the key-lift trends as if it were a barbell exercise.
       if (measureOfLogged(entry, ex) !== 'load') continue;
+      // The best set by *estimate*, not by weight: 100 × 8 beats 105 × 3, and
+      // which of the two you happened to do is the thing a trend has to see
+      // past.
       let top: Seen | null = null;
       for (const set of entry.sets) {
-        const kg = setKg(set);
-        if (kg === null) continue;
-        if (!top || kg > top.topKg) top = { date: h.date, topKg: kg, topSet: set };
+        const est = e1rmOf(set);
+        if (est === null) continue;
+        if (!top || est > top.e1rm) top = { date: h.date, e1rm: est, topSet: set };
       }
       if (!top) continue;
       const list = byEx.get(entry.ex) ?? [];
@@ -754,7 +797,10 @@ export function keyLifts(
         id,
         sessions: sorted.length,
         latest: last.topSet,
-        deltaKg: sorted.length > 1 ? Math.round((last.topKg - first.topKg) * 10) / 10 : null,
+        // Whole kilos: the estimate is a ±5% regression, and a decimal on it
+        // would claim a precision the formula does not have.
+        e1rm: Math.round(last.e1rm),
+        deltaKg: sorted.length > 1 ? Math.round(last.e1rm - first.e1rm) : null,
       };
     })
     .sort((a, b) => b.sessions - a.sessions)

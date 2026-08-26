@@ -2,10 +2,18 @@
 
 *26 Aug 2026. A research pass, not a spec. Scope: `src/data/stats.ts` — the
 balance, the volume headline, the fun facts, `keyLifts` — read against what
-the exercise-science literature and the comparable apps actually do. Nothing
-here has been applied; sections 7 and 8 are the proposals, and each one says
-what it costs. Section 9 is a second pass, answering three questions Calvin
-put to the first one.*
+the exercise-science literature and the comparable apps actually do. Sections 7
+and 8 are the proposals, and each one says what it costs. Section 9 is a second
+pass, answering three questions Calvin put to the first one.*
+
+***Status: §§7A, 7B, 7C and 7F are applied** — the `also` field and its seeded
+table, the balance counting fractional sets, the per-muscle range, and key
+lifts by estimated 1RM. Each carries a dated note at its own heading. **§7D**
+(the push:pull line) and **§7E** (the strength card, which needs the sex
+decision in §5) are open, as is the region-expansion UI the §9.1 mockup drew.
+Sections 1–6 describe the state of things **before** any of it and are left
+that way deliberately: they are the argument, and rewriting them into the past
+tense would leave the decisions with nothing to have been decided against.*
 
 The question that started it: **should the balance take body weight, height,
 muscle group, sets and volume — and age?** The short answer is that four of
@@ -355,6 +363,13 @@ It needs sex to be more than decorative, so it is gated on a decision that
 isn't mine to make (§5).
 
 ### F. Upgrade `keyLifts` to e1RM
+
+*Applied, 26 Aug 2026. `e1rmOf` is Epley, with a true single returned
+unchanged; the best set of a session is now chosen by estimate rather than by
+weight, and `KeyLift` gained `e1rm` while `deltaKg` became a delta of estimates.
+The coach prompt carries the figure beside the set it came from, labelled — a
+bare second number reads as a target. Only the prompt consumes `keyLifts`
+today; the Insights key-lift rows from the mockup are not built.*
 
 Epley off the best set of each session. Independent of everything above,
 smaller than all of it, and it closes a real blind spot: the current top-weight

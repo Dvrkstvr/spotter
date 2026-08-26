@@ -197,7 +197,10 @@ export function buildPrompt(i: PromptInput): string {
           : l.deltaKg === 0
             ? L.promptLiftFlat
             : L.promptLiftUp.replace('{kg}', (l.deltaKg > 0 ? '+' : '') + String(l.deltaKg));
-      return `${name} ${l.latest} (${trend})`;
+      // The estimate rides beside the set it came from: the set is what was
+      // actually done and the estimate is the only figure two sessions can be
+      // compared on. Labelled, because a bare second number reads as a target.
+      return `${name} ${l.latest} · ${L.promptLiftE1rm.replace('{kg}', String(l.e1rm))} (${trend})`;
     });
     out.push(`${L.promptLiftsHead}  ${lifts.join(' · ')}`, '');
   }
