@@ -21,6 +21,7 @@
  * Outside the `social` gate, like <RestAlarm>: the buddy half switching off is
  * itself one of the things worth having in the file.
  */
+import Constants from 'expo-constants';
 import { useEffect, useRef } from 'react';
 import { AppState } from 'react-native';
 
@@ -72,6 +73,15 @@ export function Diagnostics() {
       who,
       // Short: enough to tell two installs apart in a log, not the whole id.
       self: s.selfId.slice(0, 8),
+      // Which build wrote the file, in the two ways it can be asked: the number
+      // Play and the phone read, and the name this release goes by. Both are
+      // stated once in `app.json` — the header claimed the version long before
+      // it carried it, which is exactly the line you want when two phones on
+      // two builds disagree about a link.
+      version: Constants.expoConfig?.version ?? '?',
+      ...(Constants.expoConfig?.extra?.buildName
+        ? { buildName: String(Constants.expoConfig.extra.buildName) }
+        : {}),
       build: hasRadio ? (isSimRadio ? 'sim' : 'standalone') : 'expo-go',
       lang: s.lang,
       restSeconds: s.restSeconds,

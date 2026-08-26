@@ -17,7 +17,7 @@
  */
 import Constants from 'expo-constants';
 import { ReactNode, useState } from 'react';
-import { Animated, Pressable, ScrollView, Switch, Text, View } from 'react-native';
+import { Animated, Linking, Pressable, ScrollView, Switch, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { RiseIn } from '@/components/motion';
@@ -112,8 +112,34 @@ export function SettingsOverlay() {
   // most useful diagnostic across two phones and the emulator rig.
   const buildLabel = hasRadio ? (isSimRadio ? L.buildSim : L.buildStandalone) : L.buildDemo;
 
+  // The release's own name, stated once in `app.json` (`expo.extra.buildName`)
+  // and read from there by everything that says which build this is — this row,
+  // the diagnostics header, the artefact in `_builds/`. It is a name rather
+  // than copy, like `Spotter` itself, so it is not translated: two phones and a
+  // log file have to be talking about the same build in either language. A
+  // build that was never named simply skips the row.
+  const buildName = Constants.expoConfig?.extra?.buildName as string | undefined;
+
+  // Where the policy is published, stated once in `app.json`
+  // (`expo.extra.privacyUrl`) — optional exactly as `buildName` is, and for a
+  // sharper reason: until the page exists there is nothing to open, and a row
+  // that opens nothing is worse than no row at all. Fill the key in and the
+  // link appears; it is a URL rather than copy, so it is not translated.
+  const privacyUrl = Constants.expoConfig?.extra?.privacyUrl as string | undefined;
+
+  // The attribution the bundled open-source code actually requires
+  // (`expo.extra.noticesUrl`), read exactly as `privacyUrl` is. The page is
+  // written by `npm run licenses` alongside `THIRD-PARTY-NOTICES.md` — and the
+  // link is the half that makes the file mean anything: MIT, BSD, Apache and
+  // OFL all require their notice to *travel with the binary*, which a file
+  // sitting in a private repo has not done. It is a page rather than a bundled
+  // screen because it is half a megabyte of licence text over 738 packages,
+  // which is a poor thing to parse on a phone and a fine thing to link.
+  const noticesUrl = Constants.expoConfig?.extra?.noticesUrl as string | undefined;
+
   const aboutRows: [string, string][] = [
     [L.version, Constants.expoConfig?.version ?? '—'],
+    ...(buildName ? ([[L.buildName, buildName]] as [string, string][]) : []),
     [L.buildKind, buildLabel],
     [L.expoSdk, Constants.expoConfig?.sdkVersion ?? '54.0.0'],
     [L.sessionsLogged, String(s.history.length)],
@@ -481,6 +507,19 @@ export function SettingsOverlay() {
             </Text>
           </View>
         ))}
+        {!!privacyUrl && (
+          <Pressable onPress={() => void Linking.openURL(privacyUrl).catch(() => {})}>
+            <Text style={styles.privacy}>{L.privacyPolicy}</Text>
+          </Pressable>
+        )}
+        {!!noticesUrl && (
+          <Pressable onPress={() => void Linking.openURL(noticesUrl).catch(() => {})}>
+            {/* Tight under the policy link when there is one, and standing on
+                its own margin when there isn't: either key can be absent, and
+                two ghost links 16px apart read as two separate sections. */}
+            <Text style={[styles.privacy, !!privacyUrl && styles.privacyNext]}>{L.openSource}</Text>
+          </Pressable>
+        )}
         <Text style={styles.copyright}>
           {L.copyright.replace('{year}', String(new Date().getFullYear()))}
         </Text>
@@ -736,5 +775,10 @@ const sheet = themed(() => ({
   },
   aboutLabel: { flex: 1, fontFamily: font.regular, fontSize: 12.5, color: color.neutral500 },
   aboutValue: { fontFamily: font.regular, fontSize: 12.5, color: color.neutral300 },
+  // The ghost-link grammar the rest of the app uses for a way out of a screen
+  // — left-aligned, accent, its own chevron — sat above the copyright so the
+  // last thing in Settings is still the quietest.
+  privacy: { fontFamily: font.regular, fontSize: 12, color: color.accent400, marginTop: 16, paddingVertical: 4 },
+  privacyNext: { marginTop: 0 },
   copyright: { fontFamily: font.regular, fontSize: 11.5, color: color.neutral600, marginTop: 14 },
 }));

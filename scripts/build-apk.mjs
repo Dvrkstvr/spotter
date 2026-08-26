@@ -1,7 +1,7 @@
 /**
  * Release build, one command: Gradle-builds the app and drops the artefact
- * into `_builds/` with a date + git-hash name — the file you sideload onto
- * the two phones. Windows-only, like the rest of this project's tooling.
+ * into `_builds/` named for the version, the release's own name, the date and
+ * the git hash — the file you sideload onto the two phones. Windows-only, like the rest of this project's tooling.
  *
  *   npm run build:apk        the APK to sideload
  *   npm run build:aab        the App Bundle Play wants
@@ -18,7 +18,7 @@
  * says what it is rather than looking like the one you meant to upload.
  */
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, statSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
@@ -109,9 +109,24 @@ const d = new Date();
 const pad = (n) => String(n).padStart(2, '0');
 const stamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}`;
 
+// The version and the release's name, both off `app.json` — the one file that
+// states either. A date and a hash say *which* build; they do not say what it
+// is, and the errand here is two phones being handed the same one. `buildName`
+// is optional, so an unnamed release keeps exactly the old filename.
+const appCfg = JSON.parse(readFileSync(path.join(repoRoot, 'app.json'), 'utf8')).expo ?? {};
+const version = appCfg.version ? `-${appCfg.version}` : '';
+const slug = String(appCfg.extra?.buildName ?? '')
+  .toLowerCase()
+  .replace(/[^a-z0-9]+/g, '-')
+  .replace(/^-|-$/g, '');
+const name = slug ? `-${slug}` : '';
+
 const outDir = path.join(repoRoot, '_builds');
 mkdirSync(outDir, { recursive: true });
 const mark = signed ? '' : '-debugsigned';
-const out = path.join(outDir, `spotter-${stamp}-${hash}${mark}.${aab ? 'aab' : 'apk'}`);
+const out = path.join(
+  outDir,
+  `spotter${version}${name}-${stamp}-${hash}${mark}.${aab ? 'aab' : 'apk'}`,
+);
 copyFileSync(built, out);
 log(`done → ${path.relative(repoRoot, out)}`);

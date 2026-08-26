@@ -2314,6 +2314,15 @@ actually require.
 - **`app.json` states the version; `package.json` copies it.** `npm run version`
   checks, `-- --fix` syncs. A release build fails on a mismatch — the dev loop
   never runs it.
+- **A release is also named, once, in the same file.**
+  `expo.extra.buildName` — *Connection diagnostics* for 1.3.0 — and three
+  things read it rather than restating it: the About section's own row, the
+  diagnostics header (beside the version, which that header claimed long before
+  it carried it), and the artefact dropped in `_builds/`. It is a *name*, like
+  `Spotter`, so it is not translated: two phones and a log file have to be
+  talking about the same build in either language. It is optional throughout —
+  an unnamed release skips the row and keeps the old filename — which is what
+  makes naming one a decision rather than a field to fill in.
 - **Release signing goes through `plugins/with-release-signing.js`**, because
   `android/` is generated and the template's `signingConfig signingConfigs.debug`
   comes back on every prebuild. The key is *named* by `keystore.properties` (repo
@@ -2330,3 +2339,37 @@ actually require.
   It also holds the arguments for the two declarations Play will ask about,
   `USE_EXACT_ALARM` and `FOREGROUND_SERVICE_SPECIAL_USE`, and the fallback if
   either is refused.
+- **The published copies live in a second repo** (`spotter-legal`, beside this
+  one), because Play needs the policy at a public URL and GitHub Pages only
+  publishes from a public repository — which the app's source is not. The same
+  document therefore exists in four files, and they move together: a change to
+  what the app does has to land in both `docs/*.md` and both pages, and bump
+  the date on each. That repo has no third-party request on it by rule; a
+  privacy page that hotlinks a webfont hands the reader's IP to Google before
+  they have read a word.
+- **Settings links to it, and only once there is something to link to.**
+  `expo.extra.privacyUrl` in `app.json`, read the way `buildName` is and
+  optional for a sharper reason: until the page is published there is nothing
+  to open, and a row that opens nothing is worse than no row. Set the key and
+  the ghost link appears under About; it is a URL, not copy, so it is not
+  translated — only its label is (`privacyPolicy`).
+- **The notices are published too, and that is the half that discharges the
+  licence.** `THIRD-PARTY-NOTICES.md` is the attribution 738 bundled packages
+  require, and MIT, BSD, Apache and OFL all require it to *travel with the
+  binary* — a file that never leaves a private repo has accompanied nothing. So
+  `npm run licenses` now writes `notices/index.html` into the sibling
+  `spotter-legal` (or `$SPOTTER_LEGAL`) in the same pass, and
+  `expo.extra.noticesUrl` draws an **Open source licences ›** link under the
+  privacy one, on exactly the same terms — absent key, no row. Three things
+  about it:
+  - **One pass writes both**, so the page and the file cannot come to describe
+    different dependency trees. The page is therefore *generated* and a hand
+    edit is lost; the styling is the only part of it that lives in the other
+    repo.
+  - **A missing sibling is a log line, not an error.** This repo has to build on
+    a machine that never cloned the pages.
+  - **It is a link, not a screen.** Half a megabyte of licence text is a poor
+    thing to bundle and parse on a phone and a fine thing to open in a browser —
+    and the page keeps the browser's own find, which a `ScrollView` would not.
+  Nothing here is worth an in-app screen *until* Spotter is distributed to
+  anyone but Calvin; from that moment it is not optional.

@@ -2,7 +2,10 @@
   "expo": {
     "name": "Spotter",
     "slug": "spotter",
-    "version": "1.2.6",
+    "version": "1.3.0",
+    "extra": {
+      "buildName": "Connection diagnostics"
+    },
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "spotter",
@@ -13,7 +16,7 @@
     },
     "android": {
       "package": "com.calvinkohl.workoutdiary",
-      "versionCode": 6,
+      "versionCode": 7,
       "permissions": [
         "android.permission.USE_EXACT_ALARM",
         "android.permission.SCHEDULE_EXACT_ALARM"
