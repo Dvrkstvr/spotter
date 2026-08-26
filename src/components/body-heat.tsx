@@ -40,25 +40,39 @@ import { missingName, Tag } from '@/design/ui';
 
 /* ── the artwork's own geometry ────────────────────────────────────────────
  *
- * The library draws into a fixed 200 × 400 box and exposes no viewBox, so a
- * figure is sized by `scale` alone. The mockup crops to the drawn bounds, and
- * that is not portable here: the crop is only computable from the package's
- * private viewBox, and the female wrapper uses three different ones. So the
- * figure keeps its own margin and is sized to draw a *body* the width the
- * mockup drew one at, which is the part legibility depends on.
+ * **Cropped to the bodies, which is what makes them big enough to hit.** The
+ * package's wrapper draws each figure into a box a good deal larger than the
+ * drawing in it — a tenth of the width and a sixth of the height is margin —
+ * and at a fixed 200 × 400 with no viewBox of its own. Drawing the paths here
+ * put the box in this file's hands, and cropping it spends every pixel of the
+ * card on body: the same card width draws a figure about half again as wide,
+ * so every muscle's touch target grows with it. That is the mockup's own
+ * decision, arrived at for its reason and kept for one more.
+ *
+ * The boxes are **measured**, not eyeballed: the minimum and maximum of every
+ * coordinate each path visits, control points included, since those bound a
+ * bezier. That is a conservative superset, so a crop can never clip the
+ * drawing. Front and back share one box per gender — a different one each
+ * would draw the pair at two different heights — and the shared box is the
+ * union of their two, with each side keeping its own centre. If the artwork
+ * ever moves, these go stale *visibly*, which is the failure worth having.
  */
-const BOX_W = 200;
-const BOX_H = 400;
-/** Between the two figures. They are one reading, not two panels. */
-const GAP = 6;
+const CROP = {
+  male: { front: '47 90 634 1259', back: '767 90 634 1259', units: 634, ratio: 1259 / 634 },
+  female: { front: '-2 -7 644 1442', back: '821 -7 644 1442', units: 644, ratio: 1442 / 644 },
+} as const;
+
 /**
- * The mockup's own figure size, and a ceiling rather than a target: every
- * phone computes at or just under it, and anything wider gets margin instead
- * of a bigger body. A card is not a poster.
+ * Between the two figures. They are one reading rather than two panels, so it
+ * is a hair — but not less than this: cropped to the bodies, the box ends at
+ * the fingertips, and at six the two figures reach for each other.
  */
-const MAX_SCALE = 0.67;
-/** Outlines are in the artwork's units, so a width in px has to be converted. */
-const UNITS_PER_PX = 724 / BOX_W;
+const GAP = 14;
+/**
+ * A ceiling rather than a target: a phone spends the card's whole width, and
+ * anything wider gets margin instead of a bigger body. A card is not a poster.
+ */
+const MAX_FIG_W = 220;
 const HAIRLINE_PX = 0.6;
 const SELECTED_PX = 1.5;
 
@@ -134,12 +148,6 @@ const ART = {
   female: { front: bodyFemaleFront, back: bodyFemaleBack },
 } as const;
 
-/** The wrapper's own boxes, now this file's job to state. */
-const VIEW_BOX = {
-  male: { front: '0 0 724 1448', back: '724 0 724 1448' },
-  female: { front: '-50 -40 734 1538', back: '756 0 774 1448' },
-} as const;
-
 /**
  * How far a finger may wander and still have meant a tap.
  *
@@ -156,7 +164,7 @@ const Figure = memo(function Figure({
   paint,
   side,
   label,
-  scale,
+  figW,
   sex,
   selected,
   onPart,
@@ -164,7 +172,8 @@ const Figure = memo(function Figure({
   paint: BodyPaint[];
   side: 'front' | 'back';
   label: string;
-  scale: number;
+  /** What one figure gets across. Its height follows the crop's own ratio. */
+  figW: number;
   sex: Sex | undefined;
   selected: string | null;
   onPart: (slug: Slug) => void;
@@ -175,6 +184,10 @@ const Figure = memo(function Figure({
   // nothing else on it: the reading is identical on either outline.
   // Unanswered draws the male figure rather than asking.
   const g = sex === 'female' ? 'female' : 'male';
+  const box = CROP[g];
+  // A stroke is in the artwork's units, so a width in px has to be converted —
+  // and the conversion moves with the crop, not with a constant.
+  const unitsPerPx = box.units / figW;
   const ramp = heatRamp(c);
   const by = new Map(paint.map((p) => [p.slug, p]));
   const inert = new Set<string>(INERT_SLUGS);
@@ -192,7 +205,7 @@ const Figure = memo(function Figure({
 
   return (
     <View style={styles.figure}>
-      <Svg viewBox={VIEW_BOX[g][side]} width={BOX_W * scale} height={BOX_H * scale}>
+      <Svg viewBox={box[side]} width={figW} height={figW * box.ratio}>
         {ART[g][side].map((part: BodyPart) => {
           const slug = part.slug;
           const hit = slug ? by.get(slug) : undefined;
@@ -214,7 +227,7 @@ const Figure = memo(function Figure({
               d={one}
               fill={fill}
               stroke={on ? c.accent300 : c.wash.scrim(50)}
-              strokeWidth={(on ? SELECTED_PX : HAIRLINE_PX) * UNITS_PER_PX}
+              strokeWidth={(on ? SELECTED_PX : HAIRLINE_PX) * unitsPerPx}
               onStartShouldSetResponder={() => !dead}
               onResponderGrant={grant}
               onResponderMove={moved}
@@ -261,7 +274,7 @@ export function BodyHeat({
   const [sel, setSel] = useState<string | null>(null);
 
   const paint = bodyPaint(muscles);
-  const scale = Math.min(MAX_SCALE, Math.max(0.1, (width - GAP) / 2 / BOX_W));
+  const figW = Math.min(MAX_FIG_W, Math.max(40, (width - GAP) / 2));
 
   const bySlug = new Map<Slug, BodyPaint>(paint.map((p) => [p.slug, p]));
   const tap = (slug: Slug) => {
@@ -281,7 +294,7 @@ export function BodyHeat({
           paint={paint}
           side="front"
           label={L.bodyFront}
-          scale={scale}
+          figW={figW}
           sex={sex}
           selected={sel}
           onPart={tap}
@@ -290,7 +303,7 @@ export function BodyHeat({
           paint={paint}
           side="back"
           label={L.bodyBack}
-          scale={scale}
+          figW={figW}
           sex={sex}
           selected={sel}
           onPart={tap}
@@ -385,10 +398,10 @@ const sheet = themed(() => ({
     letterSpacing: 0.8,
     textTransform: 'uppercase',
     color: color.neutral600,
-    // Up into the figure's own bottom margin. The artwork's box is taller than
-    // the body drawn in it (see the note at the top), so a caption sitting at
-    // the box's foot reads as belonging to the card rather than to the figure.
-    marginTop: -10,
+    // Plain, now that the box *is* the body: this used to pull up into the
+    // artwork's own bottom margin, and against a cropped figure that same
+    // negative margin printed the label across the feet.
+    marginTop: 3,
   },
 
   legend: { flexDirection: 'row', marginTop: 6 },

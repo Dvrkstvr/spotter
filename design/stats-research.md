@@ -549,10 +549,12 @@ decided on the way, and two of its own recommendations were overtaken:*
   `disabledParts` forces `#EBEBE4` ahead of everything. The head and the hair
   are drawn at the inert fill rather than hidden — hiding them left a figure
   with no head on it.*
-- ***The mockup's crop still did not survive**, though it became possible: the
-  viewBox is this file's now. The four boxes differ per gender and side and
-  only the male pair has a measured crop, so the figure keeps its margin and is
-  sized to draw a body the width the mockup drew one at.*
+- ***The mockup's crop shipped after all**, and for a second reason it did not
+  have: taking over the rendering put the viewBox in the app's hands, and
+  cropping to the drawn bounds draws a figure about half again as wide in the
+  same card — which is the whole of what made tapping a muscle stop being
+  fiddly. The four boxes are measured off the path data rather than picked by
+  eye, front and back sharing one per gender.*
 
 Viable with almost no new dependency: `react-native-svg` 15.12.1 is already in
 `package.json` and is in Expo Go's bundled native set, so nothing degrades. The

@@ -658,13 +658,19 @@ it is a *setting*, added the additive way `PERSIST` allows.
     field where it finds it rather than putting a question on the screen.
     Nothing about what the app stores or sends moved, so
     `docs/play-data-safety.md` is unchanged.
-  - **The figure is drawn uncropped, which the mockup is not.** The mockup
-    crops to the artwork's drawn bounds and gains about 16% of height for it.
-    `VIEW_BOX` is this file's now, so the crop became possible when the
-    rendering moved here — and it stays undone, because the four boxes differ
-    per gender and side and only the male pair has a measured crop. The figure
-    keeps its margin, `MAX_SCALE` sizes the *body* to the width the mockup drew
-    one at, and the side caption is pulled up into the margin that is left.
+  - **The figure is cropped to the body, and that is what makes it tappable.**
+    The wrapper drew each one into a box a tenth wider and a sixth taller than
+    the drawing in it; `CROP` is this file's box now, so the same card width
+    draws a figure about half again as wide and every muscle's touch target
+    grows with it. Tapping was *clunky* before this and a calf is a fair test
+    of it now. The boxes are **measured** — the extremes of every coordinate
+    each path visits, control points included, since those bound a bezier, so
+    the box is a conservative superset that cannot clip. Front and back share
+    one box per gender, or the pair would draw at two different heights. Two
+    things follow the crop and both were tuned against the margin it removed:
+    the side caption no longer pulls up into it, and `GAP` had to grow, because
+    a box that ends at the fingertips puts the two figures within reach of each
+    other.
   - **The ramp climbs to `accent200`, not to `accent`.** A first cut ran
     `wash.accent` 26/46/70 into the flat accent, which put three of the five
     steps within a few percent of the card: on a real diary the figure read as
