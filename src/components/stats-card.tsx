@@ -84,7 +84,10 @@ export function StatsCard({
   const line = empty
     ? L.statsEmpty
     : head.kind === 'low'
-      ? L.statsHeadWeak
+      ? // Picked off the *printed* figure rather than the raw one, so the
+        // sentence agrees with the number beside it: `rate` rounds, and 1.02
+        // sets a week prints as 1.
+        (rate(head.perWeek) === '1' ? L.statsHeadWeakOne : L.statsHeadWeak)
           .replace('{muscle}', muscleName(head.group))
           .replace('{n}', rate(head.perWeek))
           .replace('{min}', String(BAND.min))

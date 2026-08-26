@@ -199,6 +199,11 @@ export const DICT = {
     regionChest: 'Chest', regionBack: 'Back', regionShoulders: 'Shoulders',
     regionArms: 'Arms', regionCore: 'Core', regionLegs: 'Legs',
     statsHeadWeak: '{muscle} got {n} sets a week — the range is {min} to {max}.',
+    // One set is one set in both languages, and English needed the singular
+    // as badly as German did — "Calves got 1 sets a week" shipped for a while.
+    // Only the low headline can print it: the even one fires when every
+    // trained muscle is at the floor or above, so its leader is never 1.
+    statsHeadWeakOne: '{muscle} got 1 set a week — the range is {min} to {max}.',
     statsHeadEven: 'Every muscle in range. {region} leads at {n} sets a week.',
     statsFootSessions: '{n} sessions', statsFootSession: '1 session',
     statsFootVolume: '{kg} kg lifted',
@@ -713,6 +718,7 @@ export const DICT = {
     regionChest: 'Brust', regionBack: 'Rücken', regionShoulders: 'Schultern',
     regionArms: 'Arme', regionCore: 'Rumpf', regionLegs: 'Beine',
     statsHeadWeak: '{muscle}: {n} Sätze pro Woche — nötig sind {min} bis {max}.',
+    statsHeadWeakOne: '{muscle}: 1 Satz pro Woche — nötig sind {min} bis {max}.',
     statsHeadEven: 'Alles im Bereich. {region} führt mit {n} Sätzen pro Woche.',
     statsFootSessions: '{n} Einheiten', statsFootSession: '1 Einheit',
     statsFootVolume: '{kg} kg bewegt',
