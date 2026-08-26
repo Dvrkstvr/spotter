@@ -102,6 +102,31 @@ export type Exercise = {
   names?: LangMap;
   /** Key into the user's muscle-group list. */
   group: string;
+  /**
+   * Muscles a set of this *also* works, and what fraction of a set each gets.
+   * The filing `group` is always worth 1 and is never named here.
+   *
+   * Absent means the exercise works exactly what it is filed under, which is
+   * what every exercise meant before this existed and what every custom one
+   * still means — so this is additive inside `custom` and `exEdits`, and
+   * `STORAGE_VERSION` does not move.
+   *
+   * **The values are independent and a set legitimately totals past 1.** A
+   * bench press is not chest 50% + triceps 25% + delts 25%; it is a *whole*
+   * chest set and *half* a triceps set, because "how many sets did my triceps
+   * get this week" is a per-muscle question rather than a share of a pie. Every
+   * figure it is read against — 10–20 a week, and the dose-response literature
+   * behind it — is calibrated on a direct set counting as one, so a map
+   * normalised to sum to 1 would report the whole body as half-trained. 0.5 is
+   * the evidence's own weight for an indirect set; see
+   * `design/muscle-contribution-spec.md`.
+   *
+   * Only the secondaries, never the primary: `group` is also the library's
+   * filing key, what the filter row is built from and what search matches on,
+   * and stating it twice would give the two copies somewhere to drift on a
+   * refile. Read it through `contribOf`, never directly.
+   */
+  also?: Record<string, number>;
   /** Key into the user's equipment list. */
   kind: string;
   /** What a set of this is made of. Absent means `load` — see `Measure`. */
@@ -113,6 +138,31 @@ export type Exercise = {
 
 /** Absent means `load`, so nothing that predates `Measure` has to be touched. */
 export const measureOf = (e: Exercise | undefined): Measure => e?.measure ?? 'load';
+
+/**
+ * Every muscle a set of this works, filing group included at 1.
+ *
+ * The one reading of `also`, so nothing downstream re-decides what the primary
+ * is worth or whether a stored figure is plausible. An exercise deleted since
+ * works nothing and its sets fall where they already fall — the same shape of
+ * fallback `measureOf` makes for a deleted run's measure.
+ *
+ * The clamp is here rather than only in the buddy sanitiser because a map can
+ * arrive from a backup, a migration or a hand-edited blob as well as from a
+ * peer, and this is the one place all four are read through.
+ */
+export const contribOf = (e: Exercise | undefined): Record<string, number> => {
+  if (!e) return {};
+  const out: Record<string, number> = { [e.group]: 1 };
+  for (const [g, n] of Object.entries(e.also ?? {})) {
+    // The primary is 1 and says so once. A stored self-reference is a stale
+    // map left over from a refile, and must not be able to weight it down.
+    if (g === e.group) continue;
+    if (typeof n !== 'number' || !isFinite(n) || n <= 0) continue;
+    out[g] = Math.min(1, n);
+  }
+  return out;
+};
 
 /* ── workout style ─────────────────────────────────────────────────────────
  *
@@ -343,9 +393,93 @@ const DE_NAMES: Record<string, string> = {
   jumprope: 'Seilspringen',
 };
 
-export const EX: Exercise[] = SEEDS.map((e) =>
-  DE_NAMES[e.id] ? { ...e, names: { en: e.name, de: DE_NAMES[e.id] } } : e
-);
+/**
+ * What each seeded exercise works *besides* the group it is filed under.
+ *
+ * A muscle is named at **0.5** if a hard set of this would meaningfully fatigue
+ * it — enough that a week of nothing but this exercise would still train it —
+ * and at **1** if it is a prime mover in its own right rather than a helper.
+ * Isolation movements name nothing, which is what makes them isolation.
+ *
+ * Only those two weights, deliberately. The editor offers a third (0.25, for a
+ * stabiliser), because a user's own exercises are theirs to be wrong about;
+ * these figures are the app making a claim, and it should only claim what the
+ * evidence has a number for. They are coarse in the same way `REGION_MASS` is
+ * coarse, and in the same spirit: arguable in the tenths, and only the
+ * structure is load-bearing. The failure being fixed is *a bench press credits
+ * the triceps nothing*, and every plausible table fixes it.
+ *
+ * **The cardio nine name nothing and must keep naming nothing.** They are
+ * excluded by measure before this is ever read, so a figure here would be dead
+ * — and a dead figure is how a later refactor quietly files a Run under Quads.
+ */
+const ALSO: Record<string, Record<string, number>> = {
+  /* chest */
+  bench: { Triceps: 0.5, Shoulders: 0.5 },
+  incline: { Shoulders: 0.5, Triceps: 0.5 },
+  chestpress: { Triceps: 0.5, Shoulders: 0.5 },
+  pushup: { Triceps: 0.5, Shoulders: 0.5 },
+  // pec, fly — isolation.
+
+  /* back. `pullup` is filed under Back and names Lats at 1: the lat is the
+     prime mover of a pull-up, and both roll into the same region anyway, so
+     the figure is only ever read by a muscle-level view. It costs nothing and
+     it is true. */
+  lat: { Biceps: 0.5 },
+  row: { Lats: 0.5, Biceps: 0.5 },
+  bbrow: { Lats: 0.5, Biceps: 0.5, LowerBack: 0.5, Forearms: 0.5 },
+  pullup: { Lats: 1, Biceps: 0.5, Forearms: 0.5 },
+  invrow: { Lats: 0.5, Biceps: 0.5, Forearms: 0.5 },
+  // sapd — isolation.
+
+  /* shoulders */
+  rear: { Traps: 0.5, Back: 0.5 },
+  lateral: { Traps: 0.5 },
+  pikepush: { Triceps: 0.5, Chest: 0.5 },
+  handstand: { Core: 0.5, Triceps: 0.5 },
+
+  /* arms. `dip` and `diamond` are filed under Triceps and name Chest at 1 — a
+     dip is a compound chest press, and this is the clearest case in the table
+     of a filing decision and a training fact being two different things, which
+     is the whole reason the field exists. */
+  curl: { Forearms: 0.5 },
+  dip: { Chest: 1, Shoulders: 0.5 },
+  diamond: { Chest: 1, Shoulders: 0.5 },
+  chinup: { Lats: 1, Forearms: 0.5 },
+  deadhang: { Lats: 0.5 },
+  // tri — isolation.
+
+  /* legs. `deadlift` is the row this whole field is for: filed under
+     `LowerBack`, so today the heaviest lift in most diaries credits the back in
+     full and the posterior chain nothing. Three prime movers is not generosity,
+     it is what a deadlift is. */
+  squat: { Glutes: 1, Hamstrings: 0.5, LowerBack: 0.5, Adductors: 0.5 },
+  frontsquat: { Glutes: 0.5, Core: 0.5, LowerBack: 0.5 },
+  deadlift: { Glutes: 1, Hamstrings: 1, Traps: 0.5, Forearms: 0.5, Quads: 0.5 },
+  rdl: { Glutes: 1, LowerBack: 0.5, Forearms: 0.5 },
+  hipthrust: { Hamstrings: 0.5 },
+  legpress: { Glutes: 0.5, Adductors: 0.5 },
+  lunge: { Glutes: 1, Hamstrings: 0.5, Adductors: 0.5 },
+  airsquat: { Glutes: 0.5 },
+  splitsq: { Glutes: 1, Adductors: 0.5, Hamstrings: 0.5 },
+  nordic: { Glutes: 0.5, Calves: 0.5 },
+  bridge: { Hamstrings: 0.5 },
+  // legext, legcurl, hipadd, calfmach, calfbw, wallsit — isolation.
+
+  /* core */
+  kneeraise: { Obliques: 0.5, Forearms: 0.5, Lats: 0.5 },
+  plank: { Obliques: 0.5, Shoulders: 0.5 },
+  sideplank: { Core: 0.5, Shoulders: 0.5 },
+  hollow: { Obliques: 0.5 },
+  lsit: { Obliques: 0.5, Triceps: 0.5, Shoulders: 0.5 },
+
+  /* cardio — nothing, on purpose. See the note above. */
+};
+
+export const EX: Exercise[] = SEEDS.map((e) => {
+  const named = DE_NAMES[e.id] ? { ...e, names: { en: e.name, de: DE_NAMES[e.id] } } : e;
+  return ALSO[e.id] ? { ...named, also: ALSO[e.id] } : named;
+});
 
 /** A machine setting: [what to set, what to set it to]. */
 export type SetupPair = [string, string];

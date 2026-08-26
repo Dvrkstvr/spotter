@@ -373,7 +373,13 @@ export const closureFor = (s: SyncSide, exIds: string[]): ExClosure => {
   const custom = s.custom.filter((e) => exIds.includes(e.id));
   return {
     custom,
-    groups: s.groups.filter((g) => custom.some((e) => e.group === g.key)),
+    // An exercise depends on more groups than the one it is filed under: every
+    // key in `also` is a group too, and one this phone has never heard of files
+    // nowhere — silently, and only in the statistics, which is the worst place
+    // to find out.
+    groups: s.groups.filter((g) =>
+      custom.some((e) => e.group === g.key || e.also?.[g.key] !== undefined)
+    ),
     kinds: s.kinds.filter((k) => custom.some((e) => e.kind === k.key)),
   };
 };
@@ -675,6 +681,22 @@ const cleanExercise = (v: unknown): Exercise | null => {
   const names = cleanLangMap(v.names);
   if (Object.keys(names).length) ex.names = names;
   if (isMeasure(v.measure)) ex.measure = v.measure;
+  // `also` has to be named explicitly, like `with` on a routine item: this
+  // rebuilds field by field and drops what it doesn't know. A protocol
+  // addition rather than a change — an older build sends no map, which arrives
+  // meaning exactly what it has always meant. Clamped here as well as in
+  // `contribOf`, because a hostile peer is the one source that gets to pick
+  // the numbers.
+  if (isObj(v.also)) {
+    const also: Record<string, number> = {};
+    for (const [g, n] of Object.entries(v.also)) {
+      if (Object.keys(also).length >= CAP.items) break;
+      if (typeof n !== 'number' || !isFinite(n) || n <= 0) continue;
+      const key = capStr(g);
+      if (key) also[key] = Math.min(1, n);
+    }
+    if (Object.keys(also).length) ex.also = also;
+  }
   return ex;
 };
 

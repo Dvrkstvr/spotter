@@ -292,7 +292,10 @@ export type State = {
    * the seed back. Exercises the user created are edited in `custom` itself
    * instead, so the buddy keeps receiving them the way they were made.
    */
-  exEdits: Record<string, { names?: LangMap; group?: string; kind?: string }>;
+  exEdits: Record<
+    string,
+    { names?: LangMap; group?: string; kind?: string; also?: Record<string, number> }
+  >;
   /** Rewritten cues by exercise id — same override model as `setups`. */
   cueEdits: Record<string, string[]>;
   creating: Draft | null;
@@ -1332,7 +1335,15 @@ function useWorkoutState() {
    * with it; a seeded one gets an entry in `exEdits` instead — `EX` is a
    * constant, and an override is also what makes "reset" meaningful.
    */
-  const editEx = (id: string, d: { names?: LangMap; group?: string; kind?: string }) => {
+  // `also` replaces wholesale where `names` merges, and that is the right way
+  // round for each: a contribution map is edited as a whole, because removing a
+  // muscle has to be expressible, where a `LangMap` is filled one language at a
+  // time. The `...d` spread below already does this — stated here because the
+  // two fields sit side by side and look alike.
+  const editEx = (
+    id: string,
+    d: { names?: LangMap; group?: string; kind?: string; also?: Record<string, number> }
+  ) => {
     const merged = <T extends { names?: LangMap }>(cur: T): T => ({
       ...cur,
       ...d,

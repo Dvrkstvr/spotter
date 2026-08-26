@@ -6,9 +6,24 @@ optional field on `Exercise`, one read helper, one roll-up rule, and the seeded
 table. Nothing here changes what a set is, what `vol` counts, or how the
 library files anything.*
 
-**Status: not applied.** §7 is the plan; this is the first step of it, and it
-is deliberately shippable alone — with the seed table in place and nothing else
-changed, the balance is already less wrong.
+**Status: applied, 26 Aug 2026** — §§1, 2, 4, 5 and 6. The field, `contribOf`,
+the seeded table, both buddy seams and `exEdits` are in, with tests.
+
+**Three things are deliberately *not* in, and the first corrects this document.**
+An earlier draft of this line called the field "shippable alone — the balance is
+already less wrong". That was wrong: `trainingStats` reads `regionOf(e.group)`
+and nothing else, so until §7B of the research doc lands **nothing reads `also`**
+and no screen changes. What shipping it alone actually buys is that the data is
+seeded and verified *before* the arithmetic depending on it moves — worth
+having, and not the same claim.
+
+The second is §3's `regionsOf`, the max-within-a-set roll-up. It belongs with
+its consumer rather than ahead of it: it is part of the balance rewrite, and an
+exported helper with no caller is a rule nobody is applying yet.
+
+The third is the **editor UI**, per §8's third open question — the seeds alone
+fix the headline error for every phone, and this way the figures get read
+against a real diary before anyone can argue with them.
 
 ---
 
