@@ -224,7 +224,7 @@ const setKg = (s: string): number | null => {
 };
 
 /**
- * The weekly-set range a muscle is read against.
+ * The weekly-set thresholds a muscle is read against.
  *
  * This is the number the whole rebuild was for. A *share* can only ever say
  * "relatively less" — Chest at 17% is the same figure at four sets a week and
@@ -233,12 +233,61 @@ const setKg = (s: string): number | null => {
  * muscle per week is where the dose-response literature settles; see
  * `design/stats-research.md`.
  *
+ * **Under the range is two findings and not one**, and `keep` is where they
+ * part. Ten is the bottom of the bin that grew *most* in the dose-response
+ * work — it was never a line under which training stops working, and the
+ * volume landmarks put maintenance well below it (MV ≈ 6, and strength asks
+ * less again than size). So a muscle at eight sets a week is holding what it
+ * has and one at two is not, and calling both of them *low* is the mistake
+ * `'none'` already refuses one step further down: a list of everything is a
+ * list of nothing.
+ *
+ * **`keep` is not a new number.** `heatStep` has drawn its first step at
+ * `BAND.min / 2` since the body view shipped, so the figure has been showing
+ * this split all along and only the verdict was still reading two states where
+ * the ramp read three. The ramp reads the field now, which is what keeps the
+ * two views from coming to disagree about where *enough* begins.
+ *
  * **Per muscle, never per region.** A region rolls up two to five of these, so
  * Legs at twelve sets a week can be three trained muscles and two starving
  * ones under one contented number. The region carries its rate and a count of
  * how many of its muscles are short; the verdict itself lives one level down.
  */
-export const BAND = { min: 10, max: 20 } as const;
+export const BAND = { keep: 5, min: 10, max: 20 } as const;
+
+/**
+ * Where one muscle's week falls against `BAND`.
+ *
+ * The one verdict, read everywhere — a surface recomputing `perWeek <
+ * BAND.min` for itself is how a bar and the tag beside it come to say two
+ * different things about one row.
+ *
+ * - `none` — nothing logged at all. **Not a weak muscle:** nobody trains the
+ *   neck, and a screen flagging it every week beside a genuinely neglected
+ *   calf has stopped being read. It draws a dash and stays out of every list.
+ * - `low` — trained, and under `keep`. The finding, and the only level that
+ *   reaches the card's headline, the *Needs work* list and the coach's
+ *   `Behind:` line.
+ * - `keep` — enough to hold what is there, not enough to build on. Stated in a
+ *   word, never scolded, and never drawn a bar of its own.
+ * - `in` — inside the range.
+ * - `over` — past it. Sayable for the first time, which a share never could.
+ */
+export type MuscleLevel = 'none' | 'low' | 'keep' | 'in' | 'over';
+
+/**
+ * A weekly rate as its verdict. Pure, and the only reading of `BAND` there is.
+ *
+ * Zero is `none` rather than `low`, and that costs nothing: `weeks` is never
+ * below one, so any credited set puts the rate above zero and a rate of zero
+ * can only mean nothing was logged.
+ */
+export const levelOf = (perWeek: number): MuscleLevel => {
+  if (!(perWeek > 0)) return 'none';
+  if (perWeek < BAND.keep) return 'low';
+  if (perWeek < BAND.min) return 'keep';
+  return perWeek > BAND.max ? 'over' : 'in';
+};
 
 /* ── push and pull ─────────────────────────────────────────────────────────
  *
@@ -328,19 +377,14 @@ export type MuscleStat = {
   /** Those sets per week, so two window lengths are comparable. */
   perWeek: number;
   /**
-   * Whether anything at all was logged for it.
+   * The verdict — `levelOf(perWeek)`, and the only one anything draws.
    *
-   * **An untrained muscle is not a weak one**, and keeping the two apart is
-   * what stops this being noise: nobody trains `Neck`, and a screen flagging
-   * it every week beside a genuinely neglected calf has stopped being read.
-   * So `low` is only ever true of a muscle you have actually trained, and one
-   * you haven't shows a dash and stays out of the list.
+   * It replaced a `trained` / `low` / `over` trio, which between them could
+   * express states that do not exist (untrained *and* low) and could not
+   * express the one that does: a muscle being held rather than built. One
+   * field, five levels, and the impossible combinations stop being writable.
    */
-  trained: boolean;
-  /** Trained, and under the band. */
-  low: boolean;
-  /** Over it — sayable for the first time, which a share never could. */
-  over: boolean;
+  level: MuscleLevel;
   /**
    * Which exercises got it there, largest first — the whole of `sets` broken
    * back out. Empty for an untrained muscle, and never truncated here: how
@@ -368,11 +412,18 @@ export type RegionStat = {
   /** The muscles under it, in `MUSCLES_OF` order. */
   muscles: MuscleStat[];
   /**
-   * How many of them are under the band. What the region row's tag counts, and
-   * the whole reason a region has no verdict of its own: it cannot be measured
-   * against a figure stated per muscle.
+   * How many of them are under `BAND.keep`, and how many are between it and
+   * the range. What the region row's tag counts, and the whole reason a region
+   * has no verdict of its own: it cannot be measured against a figure stated
+   * per muscle.
+   *
+   * Two counts rather than one for the same reason the muscle carries five
+   * levels rather than three: a region whose muscles are all ticking over is a
+   * different fact from one with a starving calf in it, and a single number
+   * said neither. The row prints the sharper of the two.
    */
   low: number;
+  keep: number;
 };
 
 export type TrainingStats = {
@@ -389,12 +440,22 @@ export type TrainingStats = {
   /** Upper-body pushing against pulling. See `PUSH_GROUPS`. */
   pushPull: PushPull;
   /**
-   * Every **muscle** under the band, furthest short first — never a region,
-   * because the band is stated per muscle. Untrained muscles are not in it
-   * (see `MuscleStat.trained`), which is what keeps it a finding rather than a
-   * list of everything nobody does.
+   * Every **muscle** under `BAND.keep`, furthest short first — never a region,
+   * because the band is stated per muscle. Untrained muscles are not in it,
+   * and neither are the ones merely holding (see `holding`), which is what
+   * keeps it a finding rather than a list of everything nobody does.
    */
   weak: MuscleStat[];
+  /**
+   * Every muscle between `BAND.keep` and the range, furthest short first.
+   *
+   * Split out of `weak` rather than left inside it: these are ticking over,
+   * and a screen filing them under *Needs work* beside a calf at two sets a
+   * week makes the same claim about both. They are named in a line and never
+   * given a bar — the point of separating them is that they are not the
+   * finding.
+   */
+  holding: MuscleStat[];
   /**
    * Logged sets that reached at least one region — **whole rows**, not the
    * fractional figure `RegionStat.sets` carries. It is what `looseSets` is
@@ -533,11 +594,10 @@ export function trainingStats(
         sources: Object.entries(from[group] ?? {})
           .map(([id, v]) => ({ id, sets: v.sets, perWeek: v.sets / weeks, share: v.share }))
           .sort((a, b) => b.sets - a.sets),
-        trained: n > 0,
-        // Untrained is not low: see `MuscleStat.trained`. Nobody trains the
-        // neck, and flagging it every week would cost the list its meaning.
-        low: n > 0 && perWeek < BAND.min,
-        over: perWeek > BAND.max,
+        // The one reading of the band, here and nowhere else. Untrained is
+        // its own level rather than a low one: nobody trains the neck, and
+        // flagging it every week would cost the list its meaning.
+        level: levelOf(perWeek),
       };
     });
     return {
@@ -545,7 +605,8 @@ export function trainingStats(
       sets: sets[region],
       perWeek: sets[region] / weeks,
       muscles,
-      low: muscles.filter((m) => m.low).length,
+      low: muscles.filter((m) => m.level === 'low').length,
+      keep: muscles.filter((m) => m.level === 'keep').length,
     };
   });
 
@@ -555,6 +616,15 @@ export function trainingStats(
   const half = (groups: string[]) => groups.reduce((a, g) => a + (muscle[g] ?? 0), 0);
   const push = half(PUSH_GROUPS);
   const pull = half(PULL_GROUPS);
+
+  // Furthest short first, which is the order the screens list them in and the
+  // order the coach prompt names them. One walk of the muscle map per level,
+  // so the two lists cannot come to sort differently.
+  const at = (level: MuscleLevel) =>
+    balance
+      .flatMap((b) => b.muscles)
+      .filter((m) => m.level === level)
+      .sort((a, b) => a.perWeek - b.perWeek);
 
   return {
     days: new Set(inWindow.map((h) => h.date)).size,
@@ -569,12 +639,8 @@ export function trainingStats(
       pullPerWeek: pull / weeks,
       ratio: push === 0 ? null : pull / push,
     },
-    // Furthest short first, which is the order the screen lists them in and
-    // the order the coach prompt names them.
-    weak: balance
-      .flatMap((b) => b.muscles)
-      .filter((m) => m.low)
-      .sort((a, b) => a.perWeek - b.perWeek),
+    weak: at('low'),
+    holding: at('keep'),
     countedSets: counted,
     looseSets: loose,
     cardioSessions,
@@ -594,18 +660,26 @@ export function trainingStats(
  * Null when nothing has been counted yet; the card shows its empty state.
  */
 export type Headline =
-  /** A muscle under the band. Its key — resolve the name through the store. */
+  /** A muscle under `BAND.keep`. Its key — resolve the name through the store. */
   | { kind: 'low'; group: string; perWeek: number }
+  /** Nothing starving, but something only holding. The quieter finding. */
+  | { kind: 'keep'; group: string; perWeek: number }
   /** Nothing short: the region carrying the most, so the card still says something. */
   | { kind: 'even'; region: Region; perWeek: number };
 
 export const headlineOf = (st: TrainingStats): Headline | null => {
   if (st.countedSets === 0) return null;
-  // The muscle furthest short, else the region doing best. It names a rate
-  // rather than a share now, which is the difference between a finding and a
-  // comparison with the rest of your own training.
+  // The muscle furthest short, then the one only being held, else the region
+  // doing best. Each names a rate rather than a share, which is the difference
+  // between a finding and a comparison with the rest of your own training.
+  //
+  // The middle rung is what stopped the card saying *every muscle in range*
+  // over six muscles ticking over at seven sets a week: true of the range as
+  // the card drew it, and not true of the sentence a reader takes from it.
   const worst = st.weak[0];
   if (worst) return { kind: 'low', group: worst.group, perWeek: worst.perWeek };
+  const held = st.holding[0];
+  if (held) return { kind: 'keep', group: held.group, perWeek: held.perWeek };
   const top = st.balance.reduce((a, b) => (b.perWeek > a.perWeek ? b : a));
   return { kind: 'even', region: top.region, perWeek: top.perWeek };
 };

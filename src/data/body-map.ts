@@ -88,15 +88,21 @@ export const HEAT_STEPS = 6;
 /**
  * A weekly rate as one of six steps: 0 is nothing logged, 1–5 climb.
  *
- * The four thresholds are the range's own quarters rather than four numbers of
- * their own — half the floor, the floor, the middle, the ceiling — so a ramp
- * and a bar can never come to disagree about where "enough" starts. Step 5 is
- * over the range and exists for the same reason the bars' track runs past it:
- * *at the range* and *twice it* must not draw identically.
+ * The four thresholds are `BAND`'s own rather than four numbers of their own —
+ * the maintenance floor, the range's floor, its middle, its ceiling — so a
+ * ramp and a bar can never come to disagree about where "enough" starts. Step
+ * 5 is over the range and exists for the same reason the bars' track runs past
+ * it: *at the range* and *twice it* must not draw identically.
+ *
+ * The first two steps were `BAND.min / 2` and `BAND.min` before `keep` was a
+ * field, which is to say this ramp was already drawing the split the verdict
+ * has now caught up with — the numbers have not moved, only stopped being
+ * arithmetic this file did for itself. Steps 1 and 2 are `MuscleLevel`'s `low`
+ * and `keep` exactly.
  */
 export const heatStep = (perWeek: number): number => {
   if (!(perWeek > 0)) return 0;
-  if (perWeek < BAND.min / 2) return 1;
+  if (perWeek < BAND.keep) return 1;
   if (perWeek < BAND.min) return 2;
   if (perWeek < (BAND.min + BAND.max) / 2) return 3;
   if (perWeek <= BAND.max) return 4;

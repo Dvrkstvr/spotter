@@ -14,8 +14,10 @@ those notes correct this document rather than only recording it. The §9.1
 mockup's region-expansion UI is built as well — `BandBars`, which retired the
 radar — and **§9.2's body heatmap shipped beside it**, on the licensed art and
 under a `Body · Bars` seg; that section carries its own note of what was
-decided on the way. Sections 1–6 describe the state of things **before** any of
-it and are left that way deliberately: they are the argument, and rewriting
+decided on the way. §7C has since been **revised** — the band gained a
+maintenance floor, so *under the range* is two findings and not one; its note
+carries the argument. Sections 1–6 describe the state of things **before** any
+of it and are left that way deliberately: they are the argument, and rewriting
 them into the past tense would leave the decisions with nothing to have been
 decided against.*
 
@@ -357,6 +359,47 @@ the first is a comparison with your own bench press.
 
 It also makes an *over*-trained region sayable for the first time, which the
 share form structurally cannot express.
+
+> **Revised, 26 Aug 2026: the band gained a floor.** Calvin asked whether
+> 10–20 was not a bit much, and half of the answer was that it is per muscle
+> per week and reads as a workout total at a glance. The other half was that he
+> was right about the bottom edge, for a reason this section had glossed:
+>
+> **Ten is the bottom of the bin that grew *most*, not a line under which
+> training stops working.** Schoenfeld's dose-response bins are <5 / 5–9 / 10+
+> — 10+ is where the effect is largest, and 5–9 is not nothing. The volume
+> landmarks in §3 say the same from the other side: MV ≈ 6 and MEV ≈ 6–8, both
+> well under the range this screen was reading everything against, and strength
+> asks less again than size. So *under the range* was carrying two findings
+> under one word, and calling a muscle at eight sets a week **low** beside a
+> calf at two is the same mistake the untrained rule above already refuses: a
+> list of everything is a list of nothing.
+>
+> **`BAND.keep` = 5, and it is not a new number.** `heatStep` had drawn its
+> first step at `BAND.min / 2` since the body view shipped, so the figure was
+> already painting this split and only the verdict was still reading two states
+> where the ramp read three. Re-using the threshold the app was already drawing
+> costs nothing and keeps the body and the bars identical by construction; 6,
+> from MV, would have put the ramp and the verdict a set apart for no gain the
+> evidence supports — MV is quoted as a range and varies by muscle anyway. The
+> ramp now reads the field, and a test asserts steps 1 and 2 *are* `low` and
+> `keep`.
+>
+> **What shipped.** `MuscleStat.level` — `none` / `low` / `keep` / `in` /
+> `over` — replaced the `trained` / `low` / `over` trio, which could express
+> states that do not exist and could not express the one that does.
+> `TrainingStats.weak` narrowed to the muscles under `keep` and `holding` is
+> its other half; `RegionStat` carries two counts; `headlineOf` gained the
+> matching middle rung, which is what stopped the card claiming *every muscle
+> in range* over a diary of muscles ticking over at seven sets a week. The
+> prompt sends `Behind:` and `Only holding:` as two lines, because they are two
+> different asks — what is behind needs sets added, what is holding needs them
+> kept — and `promptBalanceUnit` carries the floor beside the range so the far
+> end does not have to guess where one stops and the other starts.
+>
+> Nothing here is persisted, so this is a reading change over existing diaries
+> and needed no `STORAGE_VERSION` bump: the same history is judged less
+> harshly, which was the point.
 
 ### D. Keep the six regions, and put a push:pull line under them
 

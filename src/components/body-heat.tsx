@@ -345,19 +345,26 @@ export function BodyHeat({
               {muscleName(stat.group)}
             </Text>
             <Text style={styles.panelRate}>
-              {stat.trained ? L.insightsPerWeek.replace('{n}', rate(stat.perWeek)) : ''}
+              {stat.level === 'none' ? '' : L.insightsPerWeek.replace('{n}', rate(stat.perWeek))}
             </Text>
+            {/* The same five words the bars use, off the same field — the two
+                views are one reading drawn twice, and a tap that disagreed
+                with the row behind it would be the one thing this card cannot
+                afford. Outlined for the two levels that are findings; holding
+                is stated quietly, which is the whole of the distinction. */}
             <Tag
               label={
-                !stat.trained
+                stat.level === 'none'
                   ? L.bodyNone
-                  : stat.low
+                  : stat.level === 'low'
                     ? L.insightsLow
-                    : stat.over
-                      ? L.insightsOver
-                      : L.bodyInRange
+                    : stat.level === 'keep'
+                      ? L.insightsKeep
+                      : stat.level === 'over'
+                        ? L.insightsOver
+                        : L.bodyInRange
               }
-              tone={stat.low || stat.over ? 'outline' : 'quiet'}
+              tone={stat.level === 'low' || stat.level === 'over' ? 'outline' : 'quiet'}
             />
           </View>
 

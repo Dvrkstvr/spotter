@@ -243,18 +243,28 @@ export function InsightsOverlay() {
                     furthest short first, each against the same range. The
                     chart above is shares and can only rank; this is a rate
                     measured against a figure from outside this app. It is also
-                    what the coach prompt reads. */}
+                    what the coach prompt reads.
+
+                    Only the muscles under `BAND.keep` get a row here. The ones
+                    merely holding are a line underneath — they are ticking
+                    over, and a bar for each under a heading reading *Needs
+                    work* would make the same claim about a calf at two sets a
+                    week and a neck at eight. The aside says which of the two
+                    thresholds got a muscle into the list; each row's tag is
+                    still measured to the range, which is where the mark in its
+                    track sits. */}
                 <H6 style={styles.head}>
                   {L.insightsWeak}
                   <Text style={styles.headAside}>
                     {'  '}
-                    {L.insightsBand
-                      .replace('{min}', String(BAND.min))
-                      .replace('{max}', String(BAND.max))}
+                    {L.insightsBand.replace('{keep}', String(BAND.keep))}
                   </Text>
                 </H6>
                 {st.weak.length === 0 ? (
-                  <Text style={styles.note}>{L.insightsWeakNone}</Text>
+                  // Silent when something is only holding: the line below is
+                  // the statement, and "every muscle is inside the range"
+                  // above it would contradict it outright.
+                  st.holding.length === 0 && <Text style={styles.note}>{L.insightsWeakNone}</Text>
                 ) : (
                   <View>
                     {st.weak.map((w, i) => (
@@ -288,6 +298,17 @@ export function InsightsOverlay() {
                       </View>
                     ))}
                   </View>
+                )}
+                {/* Named in one line and never given bars — the point of
+                    splitting them off `weak` is that they are not the finding.
+                    A comma list, so neither language needs a plural form. */}
+                {st.holding.length > 0 && (
+                  <Text style={[styles.note, styles.holding]}>
+                    {L.insightsHolding.replace(
+                      '{list}',
+                      st.holding.map((m) => gInfo(m.group).text).join(', ')
+                    )}
+                  </Text>
                 )}
               </>
             )}
@@ -539,6 +560,9 @@ const sheet = themed(() => ({
 
   head: { marginTop: 20, marginBottom: 6, color: color.neutral500 },
   note: { fontFamily: font.regular, fontSize: 13, color: color.neutral500 },
+  // Quieter than the rows above it, and set off from the last of them: this is
+  // an aside about the list, not another entry in it.
+  holding: { fontSize: 12, color: color.neutral600, marginTop: 8 },
 
   weakRow: { flexDirection: 'row', alignItems: 'center', gap: 9, paddingVertical: 6 },
   ruled: { borderBottomWidth: 1, borderBottomColor: t.rule },

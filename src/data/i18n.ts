@@ -204,6 +204,10 @@ export const DICT = {
     // Only the low headline can print it: the even one fires when every
     // trained muscle is at the floor or above, so its leader is never 1.
     statsHeadWeakOne: '{muscle} got 1 set a week — the range is {min} to {max}.',
+    /* The middle rung. It can never print a singular — a muscle only reaches
+       this headline at `BAND.keep` a week or more — so unlike the low one it
+       needs no `…One` twin. */
+    statsHeadKeep: '{muscle} got {n} sets a week — enough to hold, not to build.',
     statsHeadEven: 'Every muscle in range. {region} leads at {n} sets a week.',
     statsFootSessions: '{n} sessions', statsFootSession: '1 session',
     statsFootVolume: '{kg} kg lifted',
@@ -230,7 +234,15 @@ export const DICT = {
     bodyPrimary: 'primary', bodyInRange: 'in range', bodyNone: 'nothing logged',
     bodyMore: '+{n} more',
     insightsWeak: 'Needs work', insightsWeakNone: 'Every muscle is inside the range. Keep it there.',
+    /* Named in a line rather than listed in bars: these are ticking over, and
+       the whole point of splitting them off `weak` is that they are not the
+       finding. `{list}` is joined by the screen — a comma list of muscle names
+       needs no plural form in either language. */
+    insightsHolding: 'Holding: {list}. Enough to keep, not enough to build on.',
     insightsLowCount: '{n} low', insightsOver: 'over',
+    /* Invariant in both languages on purpose — a count tag that agreed with
+       its number would need two German forms for a 42px slot. */
+    insightsKeep: 'holding', insightsKeepCount: '{n} holding',
     insightsStrength: 'Strength', insightsStrengthHint: 'for your weight, sex and age',
     insightsE1rm: 'est. {kg} kg', insightsUnranked: 'building',
     insightsNeedWeight: 'Add your weight on the profile and your lifts get a level here.',
@@ -239,7 +251,10 @@ export const DICT = {
     levelAdvanced: 'Advanced', levelElite: 'Elite',
     insightsPushPull: 'Push : pull', insightsPush: 'Push', insightsPull: 'Pull',
     insightsRatio: '1 : {n}',
-    insightsPerWeek: '{n} / week', insightsShort: '{n} short', insightsBand: 'range {min}–{max} a week',
+    /* `insightsShort` is measured against the *range*, which is what the mark
+       in each row's track sits at; `insightsBand` says what got a muscle into
+       the list. Two thresholds, and each is stated where it is read. */
+    insightsPerWeek: '{n} / week', insightsShort: '{n} short', insightsBand: 'under {keep} a week',
     insightsLow: 'low',
     insightsVolume: 'Volume', insightsVolumeHint: 'load only',
     bucketWeek: 'per week', bucket2Week: 'per 2 weeks', bucket4Week: 'per 4 weeks',
@@ -296,8 +311,9 @@ export const DICT = {
     promptAnyGear: 'whatever I have',
     promptBalanceHead: 'MUSCLE BALANCE',
     promptBalanceUnit:
-      'sets per week, counting a secondary muscle as half; {min}–{max} per muscle is the usual range',
+      'sets per week, counting a secondary muscle as half; {min}–{max} per muscle is the usual range, and under {keep} is too little to hold what is there',
     promptWeakHead: 'Behind:',
+    promptHoldingHead: 'Only holding:',
     promptPushPull:
       'Push : pull  1 : {ratio} — {push} pushing sets a week against {pull} pulling, upper body only; 1 : 1 or more is the usual aim.',
     promptCardioHead: 'Cardio:', promptCardioNone: 'no sessions at all.',
@@ -719,6 +735,7 @@ export const DICT = {
     regionArms: 'Arme', regionCore: 'Rumpf', regionLegs: 'Beine',
     statsHeadWeak: '{muscle}: {n} Sätze pro Woche — nötig sind {min} bis {max}.',
     statsHeadWeakOne: '{muscle}: 1 Satz pro Woche — nötig sind {min} bis {max}.',
+    statsHeadKeep: '{muscle}: {n} Sätze pro Woche — hält, baut aber nicht auf.',
     statsHeadEven: 'Alles im Bereich. {region} führt mit {n} Sätzen pro Woche.',
     statsFootSessions: '{n} Einheiten', statsFootSession: '1 Einheit',
     statsFootVolume: '{kg} kg bewegt',
@@ -739,7 +756,9 @@ export const DICT = {
     bodyPrimary: 'primär', bodyInRange: 'im Bereich', bodyNone: 'nichts aufgezeichnet',
     bodyMore: '+{n} weitere',
     insightsWeak: 'Zu wenig', insightsWeakNone: 'Jeder Muskel liegt im Bereich. Bleib dran.',
+    insightsHolding: 'Nur Erhalt: {list}. Genug zum Halten, nicht zum Aufbau.',
     insightsLowCount: '{n} zu wenig', insightsOver: 'darüber',
+    insightsKeep: 'Erhalt', insightsKeepCount: '{n} Erhalt',
     insightsStrength: 'Kraft', insightsStrengthHint: 'für Gewicht, Geschlecht und Alter',
     insightsE1rm: 'gesch. {kg} kg', insightsUnranked: 'im Aufbau',
     insightsNeedWeight: 'Trag dein Gewicht im Profil ein, dann bekommen deine Übungen hier ein Niveau.',
@@ -748,7 +767,7 @@ export const DICT = {
     levelAdvanced: 'Erfahren', levelElite: 'Elite',
     insightsPushPull: 'Drücken : Ziehen', insightsPush: 'Drücken', insightsPull: 'Ziehen',
     insightsRatio: '1 : {n}',
-    insightsPerWeek: '{n} / Woche', insightsShort: '{n} zu wenig', insightsBand: 'Bereich {min}–{max} pro Woche',
+    insightsPerWeek: '{n} / Woche', insightsShort: '{n} zu wenig', insightsBand: 'unter {keep} pro Woche',
     insightsLow: 'wenig',
     insightsVolume: 'Volumen', insightsVolumeHint: 'nur Gewicht',
     bucketWeek: 'pro Woche', bucket2Week: 'pro 2 Wochen', bucket4Week: 'pro 4 Wochen',
@@ -795,8 +814,9 @@ export const DICT = {
     promptAnyGear: 'was ich habe',
     promptBalanceHead: 'MUSKELBALANCE',
     promptBalanceUnit:
-      'Sätze pro Woche, ein sekundärer Muskel zählt halb; {min}–{max} pro Muskel wäre der Bereich',
+      'Sätze pro Woche, ein sekundärer Muskel zählt halb; {min}–{max} pro Muskel wäre der Bereich, unter {keep} zu wenig, um zu halten',
     promptWeakHead: 'Im Rückstand:',
+    promptHoldingHead: 'Nur Erhalt:',
     promptPushPull:
       'Drücken : Ziehen  1 : {ratio} — {push} Sätze Drücken pro Woche gegen {pull} Ziehen, nur Oberkörper; 1 : 1 oder mehr ist üblich.',
     promptCardioHead: 'Cardio:', promptCardioNone: 'gar keine Einheiten.',

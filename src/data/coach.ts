@@ -167,9 +167,15 @@ export function buildPrompt(i: PromptInput): string {
   // beside every number. Prose, and therefore in the user's language — unlike
   // the identifiers in the fenced block, which are this app's data and never
   // translated.
+  //
+  // The floor rides along with the range for the same reason the push:pull
+  // line carries its own aim: a model handed a list of rates and one range has
+  // to guess where *neglected* stops and *ticking over* starts, and it will
+  // guess a different place than the screen drew.
   const unit = L.promptBalanceUnit
     .replace('{min}', String(BAND.min))
-    .replace('{max}', String(BAND.max));
+    .replace('{max}', String(BAND.max))
+    .replace('{keep}', String(BAND.keep));
   const rates = stats.balance
     .map((b) => `${i.regionName(b.region)} ${rate(b.perWeek)}`)
     .join(' · ');
@@ -177,10 +183,20 @@ export function buildPrompt(i: PromptInput): string {
   // The muscle is the level a plan can actually be written at, and the level
   // the range is stated at — "Calves 2" is something to act on where "Legs
   // behind" is not. The range is not repeated: it is on the line above.
+  //
+  // Two lines rather than one, and they are two different asks: what is behind
+  // needs sets added, what is only holding needs them kept. Sent under the
+  // headings the screen uses, so a plan written from this reads back against
+  // the same three levels the diary will judge it by afterwards.
   if (stats.weak.length)
     out.push(
       `${L.promptWeakHead} ` +
         stats.weak.map((w) => `${i.muscleName(w.group)} ${rate(w.perWeek)}`).join(', ')
+    );
+  if (stats.holding.length)
+    out.push(
+      `${L.promptHoldingHead} ` +
+        stats.holding.map((w) => `${i.muscleName(w.group)} ${rate(w.perWeek)}`).join(', ')
     );
   // Push against pull, which is the one finding on this screen the six regions
   // cannot state: Arms merges biceps and triceps, so a diary that presses

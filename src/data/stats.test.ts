@@ -22,9 +22,11 @@
 import { describe, expect, it } from 'vitest';
 import type { Exercise } from './exercises';
 import {
+  BAND,
   e1rmOf,
   headlineOf,
   keyLifts,
+  levelOf,
   rate,
   REGIONS,
   trainingStats,
@@ -262,7 +264,8 @@ describe('loose sets', () => {
   it('claims nothing at all about an empty window', () => {
     const st = stats([]);
     expect(st.weak).toEqual([]);
-    expect(st.balance.every((b) => b.sets === 0 && b.low === 0)).toBe(true);
+    expect(st.balance.every((b) => b.sets === 0 && b.low === 0 && b.keep === 0)).toBe(true);
+    expect(st.holding).toEqual([]);
   });
 });
 
@@ -294,21 +297,27 @@ describe('sets per week, against the range', () => {
     expect(muscle(st, 'Chest').perWeek).toBe(7);
   });
 
-  it('calls a muscle low under the range and over above it', () => {
-    const low = muscle(over(14, [day([reps('fly', 6)])]), 'Chest');
-    expect(low.perWeek).toBe(3);
-    expect(low.low).toBe(true);
-    expect(low.over).toBe(false);
+  it('reads a rate as one of five levels', () => {
+    const at = (sets: number) => muscle(over(14, [day([reps('fly', sets)])]), 'Chest').level;
+    expect(at(6)).toBe('low'); // 3 a week
+    expect(at(14)).toBe('keep'); // 7 a week — holding, not starving
+    expect(at(30)).toBe('in'); // 15 a week
+    expect(at(50)).toBe('over'); // 25 a week; sayable for the first time
+    expect(muscle(over(14, [day([reps('fly', 30)])]), 'Neck').level).toBe('none');
+  });
 
-    const ok = muscle(over(14, [day([reps('fly', 30)])]), 'Chest');
-    expect(ok.low).toBe(false);
-    expect(ok.over).toBe(false);
-
-    const over_ = muscle(over(14, [day([reps('fly', 50)])]), 'Chest');
-    expect(over_.perWeek).toBe(25);
-    expect(over_.over).toBe(true);
-    // Sayable for the first time: a share could only ever rank.
-    expect(over_.low).toBe(false);
+  it('parts low from holding at the maintenance floor, not at the range', () => {
+    // The whole of the split, and the boundaries are the ones `heatStep` has
+    // been drawing all along. Ten is the bottom of the bin that grew *most* —
+    // it was never a line under which training stops working — so a muscle
+    // just under it is holding what it has and is not a finding.
+    expect(levelOf(0)).toBe('none');
+    expect(levelOf(BAND.keep - 0.01)).toBe('low');
+    expect(levelOf(BAND.keep)).toBe('keep');
+    expect(levelOf(BAND.min - 0.01)).toBe('keep');
+    expect(levelOf(BAND.min)).toBe('in');
+    expect(levelOf(BAND.max)).toBe('in');
+    expect(levelOf(BAND.max + 0.01)).toBe('over');
   });
 
   it('does not call an untrained muscle a weak one', () => {
@@ -316,10 +325,9 @@ describe('sets per week, against the range', () => {
     // genuinely neglected calf has stopped being read, so nothing counts as
     // low until it has been trained at all.
     const st = over(14, [day([reps('fly', 30)])]);
-    const neck = muscle(st, 'Neck');
-    expect(neck.trained).toBe(false);
-    expect(neck.low).toBe(false);
+    expect(muscle(st, 'Neck').level).toBe('none');
     expect(st.weak.map((w) => w.group)).not.toContain('Neck');
+    expect(st.holding.map((w) => w.group)).not.toContain('Neck');
   });
 });
 
@@ -377,7 +385,7 @@ describe("a muscle's sets, broken back out into the exercises that made them", (
     // that the explanation is missing.
     const st = stats([day([reps('curl', 3)])]);
     expect(muscle(st, 'Calves').sources).toEqual([]);
-    expect(muscle(st, 'Calves').trained).toBe(false);
+    expect(muscle(st, 'Calves').level).toBe('none');
   });
 
   it('leaves an exercise deleted since out of every row', () => {
@@ -396,9 +404,24 @@ describe('what needs work', () => {
     const st = over(14, [
       day([reps('fly', 30), reps('legext', 30), reps('calf', 4), reps('curl', 12)]),
     ]);
-    // Calves 2/week, Biceps 6/week — both short, worst first.
-    expect(st.weak.map((w) => w.group)).toEqual(['Calves', 'Biceps']);
+    // Calves 2/week and Biceps 6/week are both under the range, and they are
+    // the two sides of the split: one is starving, the other is ticking over.
+    // Putting both under *Needs work* made the same claim about both.
+    expect(st.weak.map((w) => w.group)).toEqual(['Calves']);
     expect(st.weak[0].perWeek).toBe(2);
+    expect(st.holding.map((w) => w.group)).toEqual(['Biceps']);
+    expect(st.holding[0].perWeek).toBe(6);
+  });
+
+  it('sorts each list furthest short first, and shares no muscle between them', () => {
+    const st = over(14, [
+      day([reps('fly', 30), reps('calf', 4), reps('curl', 12), reps('crunch', 16)]),
+    ]);
+    // Calves 2 · Biceps 6 · Core 8 — one finding and two holding, each list in
+    // its own ascending order and neither muscle in both.
+    expect(st.weak.map((w) => w.group)).toEqual(['Calves']);
+    expect(st.holding.map((w) => w.group)).toEqual(['Biceps', 'Core']);
+    expect(st.weak.filter((w) => st.holding.some((h) => h.group === w.group))).toEqual([]);
   });
 
   it('gives a region a count of low muscles and no verdict of its own', () => {
@@ -413,10 +436,23 @@ describe('what needs work', () => {
     expect(st.weak.map((w) => w.group)).toEqual(['Calves']);
   });
 
+  it('counts holding muscles separately from starving ones', () => {
+    // Two counts rather than one, for the same reason the muscle carries five
+    // levels rather than three: a region ticking over and a region with a
+    // starving calf in it are different facts, and one number said neither.
+    const st = over(14, [day([reps('legext', 30), reps('calf', 4), reps('legcurl', 14)])]);
+    const legs = st.balance.find((b) => b.region === 'Legs')!;
+    expect(legs.low).toBe(1); // Calves, 2 a week
+    expect(legs.keep).toBe(1); // Hamstrings, 7 a week
+  });
+
   it('leaves a region whose muscles are all in range alone', () => {
     const st = over(14, [day([reps('legext', 30), reps('legcurl', 30), reps('calf', 30)])]);
-    expect(st.balance.find((b) => b.region === 'Legs')!.low).toBe(0);
+    const legs = st.balance.find((b) => b.region === 'Legs')!;
+    expect(legs.low).toBe(0);
+    expect(legs.keep).toBe(0);
     expect(st.weak).toEqual([]);
+    expect(st.holding).toEqual([]);
   });
 
   it('keeps a region fewer sets than its muscles add up to', () => {
@@ -439,6 +475,18 @@ describe('the card headline', () => {
   it('names the muscle furthest short, with its rate', () => {
     const st = over(14, [day([reps('fly', 30), reps('calf', 4)])]);
     expect(headlineOf(st)).toEqual({ kind: 'low', group: 'Calves', perWeek: 2 });
+  });
+
+  it('names a muscle only holding before it calls the week even', () => {
+    // The rung that stopped the card saying *every muscle in range* over a
+    // diary of muscles ticking over at seven sets a week: true of the range as
+    // the card drew it, and not true of the sentence a reader takes from it.
+    const st = over(14, [
+      day([reps('fly', 30), reps('legext', 30), reps('legcurl', 30), reps('calf', 30),
+           reps('curl', 14), reps('lateral', 30), reps('crunch', 30), reps('row', 30)]),
+    ]);
+    expect(st.weak).toEqual([]);
+    expect(headlineOf(st)).toEqual({ kind: 'keep', group: 'Biceps', perWeek: 7 });
   });
 
   it('falls back to the region doing best when nothing is short', () => {
@@ -530,6 +578,7 @@ describe('push against pull', () => {
     const st = over(14, [day([reps('bench', 40), reps('curl', 24)])]);
     const arms = st.balance.find((b) => b.region === 'Arms')!;
     expect(arms.low).toBe(0);
+    expect(arms.keep).toBe(0);
     // And eighty sets of pushing against twenty-four of pulling, which no
     // region on the screen is in a position to mention.
     expect(st.pushPull.ratio).toBeLessThan(0.5);

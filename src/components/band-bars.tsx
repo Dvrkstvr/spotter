@@ -9,13 +9,18 @@
  *
  * A region opens to its muscles, because that is the level the range is stated
  * at: Legs at seventeen sets a week can be a trained quad and a starving calf
- * under one contented number. The region row carries its rate and a count; the
- * verdict lives one level down. See `design/stats-revamp-mockup.html`.
+ * under one contented number. The region row carries its rate and its two
+ * counts; the verdict lives one level down. See
+ * `design/stats-revamp-mockup.html`.
+ *
+ * Under the range is two findings and not one, so the track has three fills
+ * and a hairline at `BAND.keep` where they part — a muscle merely holding is
+ * told from a starving one by the bar and not only by the tag beside it.
  */
 import { memo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import type { Strings } from '@/data/i18n';
-import { BAND, rate, type Region, type RegionStat } from '@/data/stats';
+import { BAND, rate, type MuscleLevel, type Region, type RegionStat } from '@/data/stats';
 import { themed, useThemed } from '@/design/theme';
 import { color, font, t, wash } from '@/design/tokens';
 
@@ -30,19 +35,31 @@ const TRACK = BAND.max * 1.2;
 
 const pctOf = (perWeek: number): `${number}%` => `${Math.min(100, (perWeek / TRACK) * 100)}%`;
 
-/** One row's bar. The same geometry at both levels, so the eye reads them together. */
-const Bar = memo(function Bar({ perWeek, trained = true }: { perWeek: number; trained?: boolean }) {
+/**
+ * One row's bar. The same geometry at both levels, so the eye reads them
+ * together — and the same three fills, so *starving* and *ticking over* are
+ * told apart at a glance and not only in the tag beside them.
+ *
+ * A region takes the sharper of its two counts rather than a level of its own:
+ * the band is stated per muscle, and a region cannot be measured against it.
+ */
+const Bar = memo(function Bar({ perWeek, level }: { perWeek: number; level: MuscleLevel }) {
   const styles = useThemed(sheet);
   return (
     <View style={styles.track}>
       {/* The range, drawn *into* the track rather than beside it: a bar is read
           against a target, not against the other bars. */}
       <View pointerEvents="none" style={styles.band} />
-      {trained && (
+      {/* Where holding ends and starving begins. A hairline rather than a
+          second washed block: the range is the thing being aimed at, and a
+          track with two filled zones in it reads as two targets. */}
+      <View pointerEvents="none" style={styles.keepMark} />
+      {level !== 'none' && (
         <View
           style={[
             styles.fill,
-            perWeek < BAND.min && styles.fillLow,
+            level === 'keep' && styles.fillKeep,
+            level === 'low' && styles.fillLow,
             { width: pctOf(perWeek) },
           ]}
         />
@@ -88,12 +105,19 @@ export function BandBars({
               <Text style={[styles.name, b.low > 0 && styles.nameLow]} numberOfLines={1}>
                 {regionName(b.region)}
               </Text>
-              <Bar perWeek={b.perWeek} />
+              <Bar perWeek={b.perWeek} level={b.low > 0 ? 'low' : b.keep > 0 ? 'keep' : 'in'} />
               <Text style={styles.num}>{rate(b.perWeek)}</Text>
               {/* Always a *count*, never a verdict: a region cannot be measured
-                  against a figure stated per muscle. */}
+                  against a figure stated per muscle. The sharper of the two
+                  wins, which is `headlineOf`'s fixed order one scope down —
+                  a starving calf is the thing to say about Legs whatever else
+                  is merely ticking over beside it. */}
               <Text style={styles.flag}>
-                {b.low > 0 ? L.insightsLowCount.replace('{n}', String(b.low)) : ''}
+                {b.low > 0
+                  ? L.insightsLowCount.replace('{n}', String(b.low))
+                  : b.keep > 0
+                    ? L.insightsKeepCount.replace('{n}', String(b.keep))
+                    : ''}
               </Text>
             </Pressable>
 
@@ -102,17 +126,29 @@ export function BandBars({
                 {b.muscles.map((m) => (
                   <View key={m.group} style={styles.row}>
                     <Text style={styles.caret} />
-                    <Text style={[styles.name, styles.nameSub, m.low && styles.nameLow]} numberOfLines={1}>
+                    {/* Dimmed for `low` alone. A muscle being held is not a
+                        weak one, and quietening its name would be the scolding
+                        the split exists to stop. */}
+                    <Text
+                      style={[styles.name, styles.nameSub, m.level === 'low' && styles.nameLow]}
+                      numberOfLines={1}
+                    >
                       {muscleName(m.group)}
                     </Text>
-                    <Bar perWeek={m.perWeek} trained={m.trained} />
+                    <Bar perWeek={m.perWeek} level={m.level} />
                     {/* A dash, not a zero: untrained and barely trained are
                         different facts, and this is the level that says so. */}
-                    <Text style={[styles.num, !m.trained && styles.numOff]}>
-                      {m.trained ? rate(m.perWeek) : '—'}
+                    <Text style={[styles.num, m.level === 'none' && styles.numOff]}>
+                      {m.level === 'none' ? '—' : rate(m.perWeek)}
                     </Text>
-                    <Text style={[styles.flag, styles.flagLow]}>
-                      {m.low ? L.insightsLow : m.over ? L.insightsOver : ''}
+                    <Text style={[styles.flag, m.level === 'low' && styles.flagLow]}>
+                      {m.level === 'low'
+                        ? L.insightsLow
+                        : m.level === 'keep'
+                          ? L.insightsKeep
+                          : m.level === 'over'
+                            ? L.insightsOver
+                            : ''}
                     </Text>
                   </View>
                 ))}
@@ -146,10 +182,22 @@ const sheet = themed(() => ({
     borderRightWidth: 1,
     borderColor: color.neutral700,
   },
+  keepMark: {
+    position: 'absolute',
+    left: `${(BAND.keep / TRACK) * 100}%`,
+    top: 0,
+    bottom: 0,
+    width: 1,
+    backgroundColor: color.neutral800,
+  },
   fill: { position: 'absolute', left: 0, top: 0, bottom: 0, borderRadius: 4, backgroundColor: color.accent },
   // Under the range is a quieter fill, never `warn`: a neglected calf is not a
   // refusal, and `warn` means *the app would not do that* at three other sites.
-  fillLow: { backgroundColor: color.accent700 },
+  // Two steps down rather than one, so the ramp spends the same distance the
+  // body view's does — holding is nearer the accent than starving is, which is
+  // the whole claim the split makes.
+  fillKeep: { backgroundColor: color.accent600 },
+  fillLow: { backgroundColor: color.accent800 },
   overCap: { position: 'absolute', right: 0, top: 0, bottom: 0, width: 2, backgroundColor: color.accent200 },
 
   num: {
