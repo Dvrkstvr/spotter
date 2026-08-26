@@ -573,10 +573,42 @@ it is a *setting*, added the additive way `PERSIST` allows.
   where it starts. A "prefer not to say" chip would make the question louder
   than it is. The balance does not read it (that reading needs nothing about
   the person at all); today it reaches the coach prompt behind `shareProfile`,
-  with the age, weight and height it belongs beside, and it is what §7E's
-  strength card will need. It never crosses to a buddy — `profile` is not in a
+  with the age, weight and height it belongs beside, and it is what the
+  strength card reads. It never crosses to a buddy — `profile` is not in a
   snapshot at all — and adding it moved four privacy files and the data-safety
   note, which is the rule for anything that changes what the app stores.
+- **Strength is the one reading that compares you to anybody else**, and
+  therefore the only one that needs the three profile fields the balance
+  refused (`data/strength.ts`, pure like `stats.ts`). It is the honest answer
+  to whether weight and age are of any use: yes here, no there. Five things
+  hold it together:
+  - **A missing figure means no reading, never a default.** The balance could
+    survive a guessed bodyweight because it only shifted a share; a standard
+    cannot — 75 kg assumed for a 60 kg lifter is a whole band of error stated
+    as a fact about a person. `canRead` gates it, and the card says which of
+    weight or sex is missing rather than guessing.
+  - **Published multiples are read as an anchor, not as a ratio.** Standards
+    are quoted as multiples of bodyweight, which is linear, and strength is
+    not: muscle area grows as the square where mass grows as the cube. So the
+    multiple is taken at `REF_KG` and scaled from there by `EXPONENT` (⅔) —
+    a heavier lifter's threshold lands below their bodyweight multiple and a
+    lighter one's above, which is the direction Wilks, DOTS and IPF GL all
+    agree on. It is also why the card does **not** print the bodyweight
+    multiple: that figure is not what the verdict was computed from, and
+    showing it invites "1.2 × bodyweight, why only Novice?".
+  - **Four lifts, because four have published tables.** A standard for a
+    machine press would be a number about that machine's leverage, and a
+    bodyweight movement estimates to no load at all. A lift with no entry
+    simply has no standing.
+  - **Age relaxes the thresholds, at half a percent a year past forty**, and
+    knowingly under-corrects: real decline past seventy outruns a straight
+    line, so the bar stays harder than it should rather than softer. Erring
+    that way round is right for a figure that pays somebody a compliment. An
+    unstated age moves nothing — it is not an assumed one.
+  - **A band, never a percentile.** Three approximations stack up — the lift
+    is an estimate, the tables are coarse and disagree with each other at the
+    edges, and the two adjustments are single-number models. So the output is
+    a named level and the kilos to the next one, and nothing finer.
 - **Under `MIN_SESSIONS` the card makes no claims.** Balance across two workouts
   is a Tuesday, not a weakness, and a coach prompt built on it would be
   confident nonsense. The card still stands, because it is the door — its

@@ -6,15 +6,16 @@ the exercise-science literature and the comparable apps actually do. Sections 7
 and 8 are the proposals, and each one says what it costs. Section 9 is a second
 pass, answering three questions Calvin put to the first one.*
 
-***Status: §§7A, 7B, 7C, 7D and 7F are applied** — the `also` field and its seeded
-table, the balance counting fractional sets, the per-muscle range, key lifts by
-estimated 1RM, and the push:pull line. Each carries a dated note at its own
-heading. **§7E** (the strength card, which needs the sex decision in
-§5) is the last one open. The §9.1 mockup's region-expansion UI is built —
-`BandBars`, which retired the radar.
-Sections 1–6 describe the state of things **before** any of it and are left
-that way deliberately: they are the argument, and rewriting them into the past
-tense would leave the decisions with nothing to have been decided against.*
+***Status: §7 is applied in full, 26 Aug 2026** — the `also` field and its
+seeded table, the balance counting fractional sets, the per-muscle range, the
+push:pull line, key lifts by estimated 1RM, and the strength card once
+`Profile.sex` existed. Each carries a dated note at its own heading, and two of
+those notes correct this document rather than only recording it. The §9.1
+mockup's region-expansion UI is built as well — `BandBars`, which retired the
+radar. Sections 1–6 describe the state of things **before** any of it and are
+left that way deliberately: they are the argument, and rewriting them into the
+past tense would leave the decisions with nothing to have been decided
+against.*
 
 The question that started it: **should the balance take body weight, height,
 muscle group, sets and volume — and age?** The short answer is that four of
@@ -373,6 +374,15 @@ push:pull set ratio under the bars costs one line and says something the radar
 cannot.
 
 ### E. Move body weight, height and age where they belong
+
+*Applied, 26 Aug 2026, once `Profile.sex` existed. `data/strength.ts` and a
+card on Insights. Two corrections to what is written below: the ⅔ exponent
+cannot be applied **against** published standards, because those are quoted as
+bodyweight multiples, which are linear — so the multiple is read as an anchor
+at a reference weight and scaled from there, which is the same idea arrived at
+from the other end. And **height still has no use**, here or anywhere: the
+heading of this section promised it a home it does not get. Weight, sex and age
+do the work; height remains what §5 said it was.*
 
 Not into the balance — into a **strength** read the app doesn't have: e1RM per
 key lift, scaled by bodyweight^0.67, against age-adjusted standards. That is

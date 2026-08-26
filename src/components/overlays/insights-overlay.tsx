@@ -24,6 +24,7 @@ import {
   favourites,
   funFact,
   groupDigits,
+  keyLifts,
   periodOf,
   PERIODS,
   rate,
@@ -32,6 +33,7 @@ import {
   trainingStats,
   volumeSeries,
 } from '@/data/stats';
+import { bodyOf, canRead, hasStandard, standings, type Level } from '@/data/strength';
 import { pickTip } from '@/data/tips';
 import { useBackClose } from '@/hooks/use-back-close';
 import { themed, useColors, useThemed } from '@/design/theme';
@@ -40,6 +42,16 @@ import { Btn, H2, H6, missingName, Seg, Tag } from '@/design/ui';
 import { useStore } from '@/store/workout-store';
 
 /** A region's name. Takes `L` so it cannot be hoisted — see `ui.tsx`. */
+/** A band's name. Takes `L` so it cannot be hoisted to whichever language loaded first. */
+const levelLabel = (l: Level, L: Strings): string =>
+  ({
+    beginner: L.levelBeginner,
+    novice: L.levelNovice,
+    intermediate: L.levelIntermediate,
+    advanced: L.levelAdvanced,
+    elite: L.levelElite,
+  })[l];
+
 const regionLabel = (r: Region, L: Strings): string =>
   ({
     Chest: L.regionChest,
@@ -73,6 +85,23 @@ export function InsightsOverlay() {
   // Width the charts get: the screen, less the body padding on both sides.
 
   const st = trainingStats(s.history, ex, p.days);
+  // The strength read is the one thing here that compares you to anybody else,
+  // so it needs the three profile fields the balance deliberately refused. It
+  // is drawn from the same window as everything else on the screen.
+  const body = bodyOf(s.profile);
+  const stand = standings(keyLifts(s.history, ex, p.days), body);
+  // Whether there is anything to say *if the profile were filled in* — which
+  // is what separates "add your weight" from a card that would be empty anyway.
+  const liftsWithStandard = keyLifts(s.history, ex, p.days).some(
+    (l) => hasStandard(l.id) && l.e1rm > 0
+  );
+  // `standings` deals in ids, like everything in `data/`. A lift deleted since
+  // keeps its id as its label rather than vanishing — the diary still records
+  // that it was trained.
+  const liftName = (id: string) => {
+    const e = ex(id);
+    return e ? exInfo(e).text : id;
+  };
   const fav = favourites(s.history, p.days);
   const series = volumeSeries(s.history, p.days, p.bucketDays);
   const fact = funFact(st.volume, st.distanceKm);
@@ -283,6 +312,48 @@ export function InsightsOverlay() {
               </View>
             )}
 
+            {/* Strength, against something outside this app — the only reading
+                here that does. It appears only when there is a barbell lift
+                with a published standard *and* enough profile to read it
+                against, and says which of the two is missing rather than
+                guessing: a standard off an assumed bodyweight is a whole band
+                of error stated as a fact about a person. */}
+            {liftsWithStandard && (
+              <View style={styles.card}>
+                <View style={styles.cardHead}>
+                  <H6 style={styles.cardTitle}>{L.insightsStrength}</H6>
+                  <Text style={styles.cardHint}>{L.insightsStrengthHint}</Text>
+                </View>
+                {canRead(body) ? (
+                  <View style={styles.strengthRows}>
+                    {stand.map((st2, i) => (
+                      <View
+                        key={st2.id}
+                        style={[styles.weakRow, i < stand.length - 1 && styles.ruled]}
+                      >
+                        <Text style={styles.strengthName} numberOfLines={1}>
+                          {liftName(st2.id)}
+                        </Text>
+                        <Text style={styles.strengthKg}>
+                          {L.insightsE1rm.replace('{kg}', String(st2.e1rm))}
+                        </Text>
+                        <Tag
+                          label={st2.level ? levelLabel(st2.level, L) : L.insightsUnranked}
+                          tone={st2.level ? 'outline' : 'neutral'}
+                        />
+                      </View>
+                    ))}
+                  </View>
+                ) : (
+                  // The door, not a wall: it says what it would do with the
+                  // answer rather than only asking for it.
+                  <Text style={styles.caption}>
+                    {body.bodyKg === null ? L.insightsNeedWeight : L.insightsNeedSex}
+                  </Text>
+                )}
+              </View>
+            )}
+
             <View style={styles.card}>
               <View style={styles.cardHead}>
                 <H6 style={styles.cardTitle}>
@@ -400,6 +471,15 @@ const sheet = themed(() => ({
   cardHead: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
   cardTitle: { color: color.neutral500 },
   bandBars: { marginTop: 4 },
+  strengthRows: { marginTop: 2 },
+  strengthName: { flex: 1, fontFamily: font.regular, fontSize: 13, color: color.text },
+  strengthKg: {
+    fontFamily: font.regular,
+    fontSize: 12,
+    color: color.neutral400,
+    fontVariant: ['tabular-nums'] as const,
+  },
+
   caption: { fontFamily: font.regular, fontSize: 10, color: color.neutral600, marginTop: 2 },
   cardHint: { flex: 1, textAlign: 'right', fontFamily: font.regular, fontSize: 10, color: color.neutral600 },
 

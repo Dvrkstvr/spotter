@@ -76,6 +76,7 @@ import {
   SetupPair,
   StyleKey,
 } from '@/data/exercises';
+import type { Sex } from '@/data/strength';
 import { DEFAULT_COACH, type CoachOptions, type ResolvedPlan } from '@/data/coach';
 import { setCounts, stopsOf } from '@/data/superset';
 import type { TipId, Tips } from '@/data/tips';
@@ -178,7 +179,10 @@ export type CoDraft = {
  * reaches the coach only behind `shareProfile`, with the age, weight and
  * height it belongs beside.
  */
-export type Sex = 'male' | 'female';
+// Defined in `data/strength.ts`, which is the module that actually depends on
+// the distinction, and re-exported here because this is where `Profile` lives.
+// The dependency points store → data like every other type in this file.
+export type { Sex };
 
 export type Profile = {
   name: string;
