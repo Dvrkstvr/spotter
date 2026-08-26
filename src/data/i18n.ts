@@ -199,6 +199,11 @@ export const DICT = {
     regionChest: 'Chest', regionBack: 'Back', regionShoulders: 'Shoulders',
     regionArms: 'Arms', regionCore: 'Core', regionLegs: 'Legs',
     statsHeadWeak: '{muscle} got {n} sets a week — the range is {min} to {max}.',
+    // One set is one set in both languages, and English needed the singular
+    // as badly as German did — "Calves got 1 sets a week" shipped for a while.
+    // Only the low headline can print it: the even one fires when every
+    // trained muscle is at the floor or above, so its leader is never 1.
+    statsHeadWeakOne: '{muscle} got 1 set a week — the range is {min} to {max}.',
     statsHeadEven: 'Every muscle in range. {region} leads at {n} sets a week.',
     statsFootSessions: '{n} sessions', statsFootSession: '1 session',
     statsFootVolume: '{kg} kg lifted',
@@ -214,6 +219,16 @@ export const DICT = {
     period8w: '8 weeks', period6m: '6 months', period12m: '12 months',
     insightsBalance: 'Sets per week',
     insightsBalanceHint: 'Counted fractionally — a bench press is 1 chest set, ½ triceps, ½ front delt.',
+    /* — the balance card's two views. `bodyBack` is the *side of a figure*, so
+       it is its own key rather than `regionBack`: German calls the muscle
+       Rücken and the side hinten. — */
+    bodyView: 'Body', barsView: 'Bars',
+    bodyFront: 'Front', bodyBack: 'Back',
+    bodyScaleNone: 'none', bodyScaleMax: '{n}+ sets / week',
+    bodyGrey: 'Grey means nothing logged, not too little.',
+    bodyTap: 'Tap a muscle for where its sets came from.',
+    bodyPrimary: 'primary', bodyInRange: 'in range', bodyNone: 'nothing logged',
+    bodyMore: '+{n} more',
     insightsWeak: 'Needs work', insightsWeakNone: 'Every muscle is inside the range. Keep it there.',
     insightsLowCount: '{n} low', insightsOver: 'over',
     insightsStrength: 'Strength', insightsStrengthHint: 'for your weight, sex and age',
@@ -703,6 +718,7 @@ export const DICT = {
     regionChest: 'Brust', regionBack: 'Rücken', regionShoulders: 'Schultern',
     regionArms: 'Arme', regionCore: 'Rumpf', regionLegs: 'Beine',
     statsHeadWeak: '{muscle}: {n} Sätze pro Woche — nötig sind {min} bis {max}.',
+    statsHeadWeakOne: '{muscle}: 1 Satz pro Woche — nötig sind {min} bis {max}.',
     statsHeadEven: 'Alles im Bereich. {region} führt mit {n} Sätzen pro Woche.',
     statsFootSessions: '{n} Einheiten', statsFootSession: '1 Einheit',
     statsFootVolume: '{kg} kg bewegt',
@@ -715,6 +731,13 @@ export const DICT = {
     period8w: '8 Wochen', period6m: '6 Monate', period12m: '12 Monate',
     insightsBalance: 'Sätze pro Woche',
     insightsBalanceHint: 'Anteilig gezählt — Bankdrücken ist 1 Satz Brust, ½ Trizeps, ½ vordere Schulter.',
+    bodyView: 'Körper', barsView: 'Balken',
+    bodyFront: 'Vorne', bodyBack: 'Hinten',
+    bodyScaleNone: 'nichts', bodyScaleMax: '{n}+ Sätze / Woche',
+    bodyGrey: 'Grau heißt nichts aufgezeichnet — nicht zu wenig.',
+    bodyTap: 'Tipp einen Muskel an, dann siehst du, woher seine Sätze kommen.',
+    bodyPrimary: 'primär', bodyInRange: 'im Bereich', bodyNone: 'nichts aufgezeichnet',
+    bodyMore: '+{n} weitere',
     insightsWeak: 'Zu wenig', insightsWeakNone: 'Jeder Muskel liegt im Bereich. Bleib dran.',
     insightsLowCount: '{n} zu wenig', insightsOver: 'darüber',
     insightsStrength: 'Kraft', insightsStrengthHint: 'für Gewicht, Geschlecht und Alter',

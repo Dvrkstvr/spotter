@@ -292,6 +292,29 @@ export type PushPull = {
 export const MIN_SESSIONS = 5;
 
 /**
+ * One exercise's part in one muscle's week.
+ *
+ * **The only place fractional counting is ever explained.** Half a set from a
+ * bench press is the least intuitive figure in the app, and no sentence
+ * explains it as well as the four rows it is made of — which is also the
+ * fastest way to spot an `also` weighted wrong.
+ *
+ * `share` is what *one* set of the exercise is worth to this muscle
+ * (`contribOf`), so it is fixed per exercise and never varies within the
+ * window: an exercise deleted since credits nothing at all and is not in here.
+ */
+export type MuscleSource = {
+  /** The exercise id. Resolve its name through the store, never here. */
+  id: string;
+  /** Fractional sets it credited this muscle in the window. */
+  sets: number;
+  /** Those sets per week, so the rows add up to the muscle's own rate. */
+  perWeek: number;
+  /** What one set of it is worth here — 1 for the filing group, else its `also`. */
+  share: number;
+};
+
+/**
  * One muscle group's week.
  *
  * The level the band is stated at, and therefore the level every verdict on
@@ -318,6 +341,12 @@ export type MuscleStat = {
   low: boolean;
   /** Over it — sayable for the first time, which a share never could. */
   over: boolean;
+  /**
+   * Which exercises got it there, largest first — the whole of `sets` broken
+   * back out. Empty for an untrained muscle, and never truncated here: how
+   * many rows are worth drawing is a decision for the surface drawing them.
+   */
+  sources: MuscleSource[];
 };
 
 export type RegionStat = {
@@ -430,6 +459,10 @@ export function trainingStats(
 
   const sets = Object.fromEntries(REGIONS.map((r) => [r, 0])) as Record<Region, number>;
   const muscle: Record<string, number> = {};
+  // Where each muscle's sets came from, keyed muscle → exercise id. Built in
+  // the same pass as `muscle` above and off the same figure, so the rows can
+  // never add up to something other than the total they explain.
+  const from: Record<string, Record<string, { sets: number; share: number }>> = {};
   let counted = 0;
   let loose = 0;
   let volume = 0;
@@ -467,7 +500,13 @@ export function trainingStats(
       // above is the *region* view's compromise, and applying it here too
       // would throw away the numbers the band is actually stated against.
       for (const [group, n] of Object.entries(contrib))
-        if (regionOf(group)) muscle[group] = (muscle[group] ?? 0) + entry.sets.length * n;
+        if (regionOf(group)) {
+          muscle[group] = (muscle[group] ?? 0) + entry.sets.length * n;
+          const by = (from[group] ??= {});
+          // `share` is a property of the exercise, so the last writer and the
+          // first agree; only the sets accumulate.
+          by[entry.ex] = { sets: (by[entry.ex]?.sets ?? 0) + entry.sets.length * n, share: n };
+        }
     }
     if (hasCardio) cardioSessions++;
   }
@@ -491,6 +530,9 @@ export function trainingStats(
         group,
         sets: n,
         perWeek,
+        sources: Object.entries(from[group] ?? {})
+          .map(([id, v]) => ({ id, sets: v.sets, perWeek: v.sets / weeks, share: v.share }))
+          .sort((a, b) => b.sets - a.sets),
         trained: n > 0,
         // Untrained is not low: see `MuscleStat.trained`. Nobody trains the
         // neck, and flagging it every week would cost the list its meaning.

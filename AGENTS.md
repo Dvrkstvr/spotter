@@ -558,6 +558,126 @@ it is a *setting*, added the additive way `PERSIST` allows.
   - **Under the range is a quieter fill (`accent700`), never `warn`** — the
     same one-step-down grammar the diary uses for a superset's rule, and for
     the same reason a tip borrows no dashed outline.
+- **The balance card has two views, and they answer two different questions.**
+  A `Body · Bars` seg in the card head, `BodyHeat` beside `BandBars`, and the
+  body is what the card opens on — it is the better glance, and the verdict it
+  cannot draw is stated in words directly under it. Which one you left it on is
+  local state, like the settings `Fold`; nothing here is persisted and nothing
+  here re-reads the diary, both views being the same `balance` drawn twice. The
+  mockup is `design/body-heatmap-mockup.html`, and `design/stats-research.md`
+  §9.2 is the argument.
+  - **The body answers *where did my work go*; the bars answer *was it
+    enough*.** Which is the whole reason the ramp is sequential and single-hue
+    — five steps of accent up from the untrained ground, and **never `warn`**,
+    whose meaning is fixed as *the app would not do that* at three other sites.
+    An under-trained calf is not a refusal, and a red body is a diagnosis this
+    app is not qualified to make. The range lives in the bars, and the range's
+    own quarters are where `heatStep`'s four thresholds come from, so the two
+    views cannot come to disagree about where *enough* begins.
+  - **The body is licensed art, and the first cut proved why.** That one drew
+    the figure from rounded rects and ellipses, reasoning from
+    `make-icons.mjs` — the brand assets are generated from coordinates, so a
+    body could be too. **It looked like a Lego man.** The constraint that makes
+    a good brand mark makes a bad human: a muscle map reads as a body or it
+    reads as nothing, and reading as a body takes bezier work nobody types from
+    a table. So `react-native-body-highlighter` (MIT, © 2022 ELABBASSI Hicham)
+    over `react-native-svg`, which Expo Go already bundles — no prebuild, no
+    optional bridge, nothing that degrades. **Taken as a dependency rather than
+    vendored**, though the licence permits the copy, because `npm run licenses`
+    regenerates the attribution from the dependency tree: a vendored copy is a
+    hand-written notice that goes stale the first time nobody remembers it.
+  - **The package's artwork is used; its component is not, and the phone is
+    what decided that.** `<Body>` drew these same paths until it turned out
+    **its taps do not survive a finger**: a synthetic tap with no movement
+    selects a muscle, while a tap with three pixels of travel — or one held for
+    400 ms — selects nothing, and an ordinary `Pressable` in the same
+    ScrollView answers both. It builds each `<Path>` with a fixed prop list, so
+    there is no way in from outside, and a muscle map nobody can tap is the
+    feature gone. `react-native-svg`'s `Path` takes the full responder API and
+    `<Body>` simply never forwards it, so `Figure` imports the asset arrays
+    (plain typed data, no `exports` map forbidding it) and draws them here.
+    Still a dependency, so the attribution still maintains itself.
+  - **A press is held through the wobble and yielded to the scroll**
+    (`TAP_SLOP`). Refusing termination outright is what makes a tap survive,
+    and it would also keep the touch for ever and cost the card its scroll on a
+    view that is mostly figure — so the refusal lasts exactly as long as the
+    finger stays inside the slop. Same trade `num-drag` makes one screen over,
+    decided the same way.
+  - **Two of the library's own mechanisms had to go with it, and both were
+    traps.** Every asset part carries a *baked* `color` — `#3f3f3f`, and
+    `#bebebe` for the head — which `getColorToFill` returns **before** it ever
+    falls back, so `defaultFill` never runs and any part left unstated paints
+    in two hardcoded greys no theme can reach. And `disabledParts`, the
+    library's own way to say *not a muscle*, forces a hardcoded `#EBEBE4`
+    ahead of *every* other priority. Drawing the paths here retires both:
+    `INERT_SLUGS` states its own fill and is what the tap handler ignores.
+  - **The head and the hair are drawn, not hidden.** They were `hiddenParts`
+    and `defaultFill` at first, which between them left a figure the colour of
+    the card with no head on it — decapitated rather than neutral. They take
+    the inert fill (`neutral800`) like the hands and the feet: a grey plainly
+    off the accent ramp says *not a muscle* without saying *not there*. What
+    was lost with `<Body>` is its own silhouette outline, which lives in its
+    wrapper rather than in the asset data; the parts carry the figure on their
+    own strokes.
+  - **`Lats` is the one muscle with no part of its own.** It and `Back` both
+    paint `upper-back`, at the larger of the two — `regionsOf`'s *maximum
+    within a region* rule, one scope down — and the row records **which** of
+    them it took, so the panel a tap opens explains the figure you are looking
+    at rather than its quieter twin. The Bars view still separates them, so
+    nothing is lost, only unlocated.
+  - **One value, painted on both sides.** No row carries a `side`: the diary
+    does not know which arm lifted, and a darker left arm would be inventing
+    data. The same `data` array paints the front figure and the back one, which
+    is also why a selection lights a muscle on both.
+  - **Front and back are shown together, never behind a flip.** A back you have
+    to ask for is a back nobody looks at, and that is exactly where the
+    neglected muscles live. A flip would also be a control invented for one
+    screen, which is what the week board's tap-to-cycle was.
+  - **Grey is *nothing logged*, and a permanent caption says so.** The bottom of
+    a sequential scale is ambiguous by nature and here the ambiguity is the
+    finding — `MuscleStat.trained` is a different fact from `low`. It is
+    `finishLogsNothing`'s shape rather than a tip: a statement of what
+    something means, not a hint that retires. The same line is why a tapped
+    muscle is offered in words too, that being the only thing on the card which
+    says the figure is tappable at all.
+  - **The tapped muscle shows its provenance, and that is the feature.**
+    `MuscleStat.sources` — one row per exercise, largest first, carrying what
+    *one* set of it was worth (`Bench Press ½ · 4.0`). Half a set off a bench
+    press is the least intuitive figure in the app and this is the only place
+    it is ever explained, by the data rather than by a line of copy; it is also
+    the fastest way to spot an `also` weighted wrong. Built in the same pass as
+    the total it explains and off the same figure, or the rows and the headline
+    on one card could add up differently. Capped at five rows, and what is left
+    over is **said** — a short list has to read as narrowed rather than as all
+    there was. Additive on a type nothing persists, so no `STORAGE_VERSION`
+    bump and no migration; the coach reads named fields and never saw it.
+  - **The figure follows `Profile.sex` and never asks for it.** Unanswered
+    draws the male one. §9.2 recommended shipping one figure outright, on the
+    grounds that the answer to *where did my work go* does not change with the
+    outline it is drawn on — which is still true, and is why this reads the
+    field where it finds it rather than putting a question on the screen.
+    Nothing about what the app stores or sends moved, so
+    `docs/play-data-safety.md` is unchanged.
+  - **The figure is cropped to the body, and that is what makes it tappable.**
+    The wrapper drew each one into a box a tenth wider and a sixth taller than
+    the drawing in it; `CROP` is this file's box now, so the same card width
+    draws a figure about half again as wide and every muscle's touch target
+    grows with it. Tapping was *clunky* before this and a calf is a fair test
+    of it now. The boxes are **measured** — the extremes of every coordinate
+    each path visits, control points included, since those bound a bezier, so
+    the box is a conservative superset that cannot clip. Front and back share
+    one box per gender, or the pair would draw at two different heights. Two
+    things follow the crop and both were tuned against the margin it removed:
+    the side caption no longer pulls up into it, and `GAP` had to grow, because
+    a box that ends at the fingertips puts the two figures within reach of each
+    other.
+  - **The ramp climbs to `accent200`, not to `accent`.** A first cut ran
+    `wash.accent` 26/46/70 into the flat accent, which put three of the five
+    steps within a few percent of the card: on a real diary the figure read as
+    one flat mid-purple and the two brightest steps were reached by almost
+    nothing. 38/60/82 then `accent400`, `accent200` spends the whole ramp.
+    Checked monotonic — in perceived distance from the page, which is what
+    reverses in light mode — across both modes and a rotated hue.
 - **The You card reads on the same scale as the screen it opens.** Its six mini
   bars are sets a week with the line at the *bottom of the range* rather than
   at an even split, and the scale is floored at the top of the range — so a
