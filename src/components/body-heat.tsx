@@ -17,11 +17,20 @@
  * here needs a rebuild. The arithmetic is `data/body-map.ts`; this file owns
  * the drawing and the colours. See `design/body-heatmap-mockup.html`.
  */
-import { memo, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
-import Body, { type ExtendedBodyPart, type Slug } from 'react-native-body-highlighter';
+import { memo, useRef, useState } from 'react';
+import { Pressable, Text, View, type GestureResponderEvent } from 'react-native';
+import type { BodyPart, Slug } from 'react-native-body-highlighter';
+// The artwork, not the component — see `Figure`. Deep imports into the
+// package's own `dist`, which is plain typed data with no `exports` map to
+// forbid it, so this is still a dependency rather than a vendored copy and
+// `npm run licenses` still carries the attribution.
+import { bodyBack } from 'react-native-body-highlighter/dist/assets/bodyBack';
+import { bodyFemaleBack } from 'react-native-body-highlighter/dist/assets/bodyFemaleBack';
+import { bodyFemaleFront } from 'react-native-body-highlighter/dist/assets/bodyFemaleFront';
+import { bodyFront } from 'react-native-body-highlighter/dist/assets/bodyFront';
+import Svg, { Path } from 'react-native-svg';
 
-import { bodyPaint, HEAT_STEPS, HIDDEN_SLUGS, INERT_SLUGS, type BodyPaint } from '@/data/body-map';
+import { bodyPaint, HEAT_STEPS, INERT_SLUGS, type BodyPaint } from '@/data/body-map';
 import type { Strings } from '@/data/i18n';
 import { BAND, rate, type MuscleStat } from '@/data/stats';
 import type { Sex } from '@/data/strength';
@@ -39,6 +48,7 @@ import { missingName, Tag } from '@/design/ui';
  * mockup drew one at, which is the part legibility depends on.
  */
 const BOX_W = 200;
+const BOX_H = 400;
 /** Between the two figures. They are one reading, not two panels. */
 const GAP = 6;
 /**
@@ -73,11 +83,17 @@ const heatRamp = (c: Palette): string[] => [
   // Nothing logged. The same grey an empty bar track is drawn on, so the two
   // views agree about what the bottom of the scale looks like.
   c.neutral900,
-  c.wash.accent(26),
-  c.wash.accent(46),
-  c.wash.accent(70),
-  c.accent,
+  // The washes start well clear of the card and climb in even strides. A
+  // first cut ran 26/46/70 into `accent`, which put three of the five steps
+  // within a few percent of the page: the figure read as one flat mid-purple,
+  // and the two brightest steps were reached by almost nothing, so a real
+  // diary never lit them. Rising to `accent200` spends the whole ramp instead
+  // of its bottom third.
+  c.wash.accent(38),
+  c.wash.accent(60),
+  c.wash.accent(82),
   c.accent400,
+  c.accent200,
 ];
 
 /** What one set of an exercise is worth to this muscle, as a pill reads it. */
@@ -92,45 +108,127 @@ const shareLabel = (share: number, L: Strings): string =>
           ? '¾'
           : `×${Math.round(share * 100) / 100}`;
 
+/* ── the artwork, drawn here rather than by its component ──────────────────
+ *
+ * The package ships a `<Body>` that draws these same paths, and it was used
+ * until the phone said otherwise: **its taps do not survive a finger.** A
+ * synthetic tap with no movement selects a muscle; a tap with three pixels of
+ * travel, or one held for 400 ms, selects nothing — while an ordinary
+ * `Pressable` in the same ScrollView answers both. `<Body>` builds each
+ * `<Path>` with a fixed prop list, so there is no way in from outside to fix
+ * it, and a muscle map nobody can tap is the whole feature gone.
+ *
+ * `react-native-svg`'s `Path` takes the full responder API; `<Body>` simply
+ * never passes it through. So the paths are imported and drawn here, which
+ * also retires two workarounds it needed: every asset part carries a baked
+ * `color` that outranked `defaultFill`, and `disabledParts` forces a
+ * hardcoded near-white. Nothing here is vendored — the paths still arrive
+ * from the package.
+ *
+ * What is lost is the package's own silhouette outline, which lives inside
+ * its wrapper rather than in the asset data. The parts carry the figure on
+ * their own strokes instead.
+ */
+const ART = {
+  male: { front: bodyFront, back: bodyBack },
+  female: { front: bodyFemaleFront, back: bodyFemaleBack },
+} as const;
+
+/** The wrapper's own boxes, now this file's job to state. */
+const VIEW_BOX = {
+  male: { front: '0 0 724 1448', back: '724 0 724 1448' },
+  female: { front: '-50 -40 734 1538', back: '756 0 774 1448' },
+} as const;
+
+/**
+ * How far a finger may wander and still have meant a tap.
+ *
+ * The other half of the fix: refusing termination outright would keep the
+ * touch for ever and cost the card its scroll, on a view that is mostly
+ * figure. So a press is held while the finger is inside this, and handed to
+ * the scroller the moment it leaves — which is the same trade `num-drag`
+ * makes one screen over, decided the same way.
+ */
+const TAP_SLOP = 8;
+
 /** One figure, with its side named under it. */
 const Figure = memo(function Figure({
-  data,
+  paint,
   side,
   label,
   scale,
   sex,
+  selected,
   onPart,
 }: {
-  data: ExtendedBodyPart[];
+  paint: BodyPaint[];
   side: 'front' | 'back';
   label: string;
   scale: number;
   sex: Sex | undefined;
-  onPart: (slug: Slug | undefined) => void;
+  selected: string | null;
+  onPart: (slug: Slug) => void;
 }) {
   const styles = useThemed(sheet);
   const c = useColors();
+  // The one place the profile's sex reaches this screen, and it reaches
+  // nothing else on it: the reading is identical on either outline.
+  // Unanswered draws the male figure rather than asking.
+  const g = sex === 'female' ? 'female' : 'male';
+  const ramp = heatRamp(c);
+  const by = new Map(paint.map((p) => [p.slug, p]));
+  const inert = new Set<string>(INERT_SLUGS);
+
+  // Written in a handler, never during render — the compiler's rule.
+  const from = useRef({ x: 0, y: 0, far: false });
+  const grant = (e: GestureResponderEvent) => {
+    from.current = { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY, far: false };
+  };
+  const moved = (e: GestureResponderEvent) => {
+    const { pageX, pageY } = e.nativeEvent;
+    if (Math.abs(pageX - from.current.x) > TAP_SLOP || Math.abs(pageY - from.current.y) > TAP_SLOP)
+      from.current.far = true;
+  };
+
   return (
     <View style={styles.figure}>
-      <Body
-        data={data}
-        side={side}
-        scale={scale}
-        // The one place the profile's sex reaches this screen, and it reaches
-        // nothing else on it: the reading is identical on either outline.
-        // Unanswered draws the male figure rather than asking.
-        gender={sex === 'female' ? 'female' : 'male'}
-        colors={heatRamp(c)}
-        // Everything not listed in `data`: the head, the hands, the feet.
-        // `disabledParts` is the library's own way to say this and is unusable
-        // — it forces a hardcoded near-white fill that no theme can reach.
-        defaultFill={c.surface}
-        defaultStroke={c.wash.scrim(50)}
-        defaultStrokeWidth={HAIRLINE_PX * UNITS_PER_PX}
-        border={c.neutral800}
-        hiddenParts={[...HIDDEN_SLUGS]}
-        onBodyPartPress={(p) => onPart(p.slug)}
-      />
+      <Svg viewBox={VIEW_BOX[g][side]} width={BOX_W * scale} height={BOX_H * scale}>
+        {ART[g][side].map((part: BodyPart) => {
+          const slug = part.slug;
+          const hit = slug ? by.get(slug) : undefined;
+          const dead = !slug || inert.has(slug);
+          // `neutral800` rather than the card's own colour: the head, hands
+          // and feet have to *read* as body. At `surface` the head disappears
+          // into the card and the figure looks decapitated — a grey plainly
+          // off the accent ramp says "not a muscle" without saying "not
+          // there".
+          const fill = hit ? ramp[hit.step] : c.neutral800;
+          // A selection is a *stroke*, never a fill — the fill is carrying a
+          // value, and lighting it would overwrite the one thing the figure
+          // is drawn to say.
+          const on = !!hit && hit.group === selected;
+          const d = [...(part.path?.common ?? []), ...(part.path?.left ?? []), ...(part.path?.right ?? [])];
+          return d.map((one) => (
+            <Path
+              key={one}
+              d={one}
+              fill={fill}
+              stroke={on ? c.accent300 : c.wash.scrim(50)}
+              strokeWidth={(on ? SELECTED_PX : HAIRLINE_PX) * UNITS_PER_PX}
+              onStartShouldSetResponder={() => !dead}
+              onResponderGrant={grant}
+              onResponderMove={moved}
+              // False while it still reads as a tap, so the press survives the
+              // wobble every real finger has; true once it is a scroll, so the
+              // card can still be scrolled through the figure.
+              onResponderTerminationRequest={() => from.current.far}
+              onResponderRelease={() => {
+                if (!from.current.far && slug) onPart(slug);
+              }}
+            />
+          ));
+        })}
+      </Svg>
       <Text style={styles.figureLabel}>{label}</Text>
     </View>
   );
@@ -165,21 +263,8 @@ export function BodyHeat({
   const paint = bodyPaint(muscles);
   const scale = Math.min(MAX_SCALE, Math.max(0.1, (width - GAP) / 2 / BOX_W));
 
-  // A selection is a *stroke*, never a fill — the fill is carrying a value,
-  // and lighting it would overwrite the one thing the figure is drawn to say.
-  const data: ExtendedBodyPart[] = paint.map((p) => ({
-    slug: p.slug,
-    // 1-based, and the ground is step 0, so every muscle carries an intensity
-    // and `defaultFill` is left to mean *not a muscle* and nothing else.
-    intensity: p.step + 1,
-    ...(p.group === sel
-      ? { styles: { stroke: c.accent300, strokeWidth: SELECTED_PX * UNITS_PER_PX } }
-      : null),
-  }));
-
   const bySlug = new Map<Slug, BodyPaint>(paint.map((p) => [p.slug, p]));
-  const tap = (slug: Slug | undefined) => {
-    if (!slug || INERT_SLUGS.includes(slug)) return;
+  const tap = (slug: Slug) => {
     const group = bySlug.get(slug)?.group;
     if (!group) return;
     setSel((cur) => (cur === group ? null : group));
@@ -192,8 +277,24 @@ export function BodyHeat({
   return (
     <View>
       <View style={styles.bodies}>
-        <Figure data={data} side="front" label={L.bodyFront} scale={scale} sex={sex} onPart={tap} />
-        <Figure data={data} side="back" label={L.bodyBack} scale={scale} sex={sex} onPart={tap} />
+        <Figure
+          paint={paint}
+          side="front"
+          label={L.bodyFront}
+          scale={scale}
+          sex={sex}
+          selected={sel}
+          onPart={tap}
+        />
+        <Figure
+          paint={paint}
+          side="back"
+          label={L.bodyBack}
+          scale={scale}
+          sex={sex}
+          selected={sel}
+          onPart={tap}
+        />
       </View>
 
       {/* The ramp itself, so the figure is readable without a tap. Six cells,

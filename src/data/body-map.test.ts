@@ -13,7 +13,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { bodyPaint, HEAT_STEPS, heatStep, HIDDEN_SLUGS, INERT_SLUGS, SLUG_OF } from './body-map';
+import { bodyPaint, HEAT_STEPS, heatStep, INERT_SLUGS, SLUG_OF } from './body-map';
 import { BAND, MUSCLES_OF, REGIONS, type MuscleStat } from './stats';
 
 /** One muscle's week, with only the fields this module reads filled in. */
@@ -49,9 +49,9 @@ describe('every muscle the balance reads has somewhere to be drawn', () => {
     expect(shared.map(([g]) => g).sort()).toEqual(['Back', 'Lats']);
   });
 
-  it('never paints a part it also calls inert or hides', () => {
+  it('never paints a part it also calls inert', () => {
     const painted = new Set(Object.values(SLUG_OF));
-    for (const s of [...INERT_SLUGS, ...HIDDEN_SLUGS]) expect(painted.has(s)).toBe(false);
+    for (const s of INERT_SLUGS) expect(painted.has(s)).toBe(false);
   });
 });
 

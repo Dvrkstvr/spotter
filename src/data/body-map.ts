@@ -57,16 +57,24 @@ export const SLUG_OF: Readonly<Record<string, Slug>> = {
  *
  * Drawn at the inert fill and ignored on tap. They are what make the drawing
  * read as a body rather than as a diagram of meat — which is the whole reason
- * the artwork is licensed rather than generated.
+ * the artwork is licensed rather than generated, and the reason the head and
+ * the hair are **drawn** rather than hidden. Hiding them, or painting them the
+ * colour of the card they sit on, reads as decapitated rather than as neutral:
+ * a figure needs a head before it needs an opinion about hairstyles.
  *
  * Deliberately *not* the library's own `disabledParts`: that prop forces a
  * hardcoded `#EBEBE4` fill, which is a light grey on a dark page and the one
  * colour in the app no theme could reach.
  */
-export const INERT_SLUGS: readonly Slug[] = ['head', 'hands', 'feet', 'knees', 'tibialis', 'ankles'];
-
-/** Drawn at all: hair says nothing about training and reads as a hat. */
-export const HIDDEN_SLUGS: readonly Slug[] = ['hair'];
+export const INERT_SLUGS: readonly Slug[] = [
+  'head',
+  'hair',
+  'hands',
+  'feet',
+  'knees',
+  'tibialis',
+  'ankles',
+];
 
 /**
  * How many steps the ramp has, the untrained ground included.

@@ -586,13 +586,39 @@ it is a *setting*, added the additive way `PERSIST` allows.
     vendored**, though the licence permits the copy, because `npm run licenses`
     regenerates the attribution from the dependency tree: a vendored copy is a
     hand-written notice that goes stale the first time nobody remembers it.
-  - **`disabledParts` is the library's own way to say *not a muscle* and is
-    unusable.** It forces a hardcoded `#EBEBE4` fill ahead of every other
-    priority — a light grey on a dark page, and the one colour in the app no
-    theme could reach. The head, hands, feet, knees, tibialis and ankles are
-    simply absent from `data` and take `defaultFill` instead; `INERT_SLUGS` is
-    what the tap handler ignores. `hiddenParts` still carries `hair`, which has
-    no colour side effect.
+  - **The package's artwork is used; its component is not, and the phone is
+    what decided that.** `<Body>` drew these same paths until it turned out
+    **its taps do not survive a finger**: a synthetic tap with no movement
+    selects a muscle, while a tap with three pixels of travel — or one held for
+    400 ms — selects nothing, and an ordinary `Pressable` in the same
+    ScrollView answers both. It builds each `<Path>` with a fixed prop list, so
+    there is no way in from outside, and a muscle map nobody can tap is the
+    feature gone. `react-native-svg`'s `Path` takes the full responder API and
+    `<Body>` simply never forwards it, so `Figure` imports the asset arrays
+    (plain typed data, no `exports` map forbidding it) and draws them here.
+    Still a dependency, so the attribution still maintains itself.
+  - **A press is held through the wobble and yielded to the scroll**
+    (`TAP_SLOP`). Refusing termination outright is what makes a tap survive,
+    and it would also keep the touch for ever and cost the card its scroll on a
+    view that is mostly figure — so the refusal lasts exactly as long as the
+    finger stays inside the slop. Same trade `num-drag` makes one screen over,
+    decided the same way.
+  - **Two of the library's own mechanisms had to go with it, and both were
+    traps.** Every asset part carries a *baked* `color` — `#3f3f3f`, and
+    `#bebebe` for the head — which `getColorToFill` returns **before** it ever
+    falls back, so `defaultFill` never runs and any part left unstated paints
+    in two hardcoded greys no theme can reach. And `disabledParts`, the
+    library's own way to say *not a muscle*, forces a hardcoded `#EBEBE4`
+    ahead of *every* other priority. Drawing the paths here retires both:
+    `INERT_SLUGS` states its own fill and is what the tap handler ignores.
+  - **The head and the hair are drawn, not hidden.** They were `hiddenParts`
+    and `defaultFill` at first, which between them left a figure the colour of
+    the card with no head on it — decapitated rather than neutral. They take
+    the inert fill (`neutral800`) like the hands and the feet: a grey plainly
+    off the accent ramp says *not a muscle* without saying *not there*. What
+    was lost with `<Body>` is its own silhouette outline, which lives in its
+    wrapper rather than in the asset data; the parts carry the figure on their
+    own strokes.
   - **`Lats` is the one muscle with no part of its own.** It and `Back` both
     paint `upper-back`, at the larger of the two — `regionsOf`'s *maximum
     within a region* rule, one scope down — and the row records **which** of
@@ -633,12 +659,19 @@ it is a *setting*, added the additive way `PERSIST` allows.
     Nothing about what the app stores or sends moved, so
     `docs/play-data-safety.md` is unchanged.
   - **The figure is drawn uncropped, which the mockup is not.** The mockup
-    crops to the artwork's drawn bounds and gains about 16% of height for it;
-    that is not portable, because the crop is computable only from the
-    package's private viewBox and the female wrapper uses three different ones.
-    So the figure keeps its margin, `MAX_SCALE` sizes the *body* to the width
-    the mockup drew one at, and the side caption is pulled up into the margin
-    that is left.
+    crops to the artwork's drawn bounds and gains about 16% of height for it.
+    `VIEW_BOX` is this file's now, so the crop became possible when the
+    rendering moved here — and it stays undone, because the four boxes differ
+    per gender and side and only the male pair has a measured crop. The figure
+    keeps its margin, `MAX_SCALE` sizes the *body* to the width the mockup drew
+    one at, and the side caption is pulled up into the margin that is left.
+  - **The ramp climbs to `accent200`, not to `accent`.** A first cut ran
+    `wash.accent` 26/46/70 into the flat accent, which put three of the five
+    steps within a few percent of the card: on a real diary the figure read as
+    one flat mid-purple and the two brightest steps were reached by almost
+    nothing. 38/60/82 then `accent400`, `accent200` spends the whole ramp.
+    Checked monotonic — in perceived distance from the page, which is what
+    reverses in light mode — across both modes and a rotated hue.
 - **The You card reads on the same scale as the screen it opens.** Its six mini
   bars are sets a week with the line at the *bottom of the range* rather than
   at an even split, and the scale is floored at the top of the range — so a

@@ -535,13 +535,24 @@ decided on the way, and two of its own recommendations were overtaken:*
 - ***The figure follows `Profile.sex`, which arrived for the strength card
   (§7E) as this section predicted.* Unanswered draws the male one — the
   recommendation below is still the reason nothing on this screen asks.*
-- ***The mockup's crop did not survive.* It is computable only from the
-  package's private viewBox, and the female wrapper uses three different ones;
-  the figure keeps its margin and is sized to draw a body the width the mockup
-  drew one at. Nor did `disabledParts`, which forces a hardcoded `#EBEBE4`
-  ahead of every other fill priority — a light grey on a dark page, and the one
-  colour in this app no theme could reach. The inert parts are simply left out
-  of `data` and take `defaultFill`.*
+- ***The artwork is used; the component is not.** Verified on the phone, which
+  is where this was caught: `<Body>`'s taps do not survive a finger — three
+  pixels of travel, or a 400 ms hold, select nothing, while an ordinary
+  `Pressable` in the same ScrollView answers both. It builds each `<Path>` with
+  a fixed prop list, so there is no way in from outside; `react-native-svg`'s
+  `Path` takes the full responder API and `<Body>` never forwards it. The asset
+  arrays are imported and drawn directly, which keeps the dependency — and so
+  the self-maintaining attribution this section argued for — while fixing the
+  tap. Two of its mechanisms went with it and both were traps: every asset part
+  carries a **baked `color`** that outranks `defaultFill`, so an unstated part
+  paints `#3f3f3f` (or `#bebebe` for the head) whatever the theme; and
+  `disabledParts` forces `#EBEBE4` ahead of everything. The head and the hair
+  are drawn at the inert fill rather than hidden — hiding them left a figure
+  with no head on it.*
+- ***The mockup's crop still did not survive**, though it became possible: the
+  viewBox is this file's now. The four boxes differ per gender and side and
+  only the male pair has a measured crop, so the figure keeps its margin and is
+  sized to draw a body the width the mockup drew one at.*
 
 Viable with almost no new dependency: `react-native-svg` 15.12.1 is already in
 `package.json` and is in Expo Go's bundled native set, so nothing degrades. The
