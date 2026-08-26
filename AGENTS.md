@@ -534,6 +534,12 @@ it is a *setting*, added the additive way `PERSIST` allows.
     where a pull of zero against real pressing is `0`, which is a finding. The
     card hides itself when neither half was trained, a legs-only window having
     no ratio and a bar of two zeroes being furniture.
+  - **It is in the coach prompt too, and it carries its own aim.** A bare ratio
+    is a number a model has to guess the good direction of, the same trap
+    `promptBandNote` answers one line above — so the string says *1 : 1 or more
+    is the usual aim* and *upper body only*, in prose and in the user's
+    language. It rides with the balance rather than behind `shareProfile`:
+    nothing here is a fact about the person.
 - **Under `MIN_SESSIONS` the card makes no claims.** Balance across two workouts
   is a Tuesday, not a weakness, and a coach prompt built on it would be
   confident nonsense. The card still stands, because it is the door — its

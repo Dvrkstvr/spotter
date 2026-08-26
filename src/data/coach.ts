@@ -175,6 +175,18 @@ export function buildPrompt(i: PromptInput): string {
           .join(', ') +
         ` (${L.promptBandNote.replace('{min}', String(BAND.min)).replace('{max}', String(BAND.max))})`
     );
+  // Push against pull, which is the one finding on this screen the six regions
+  // cannot state: Arms merges biceps and triceps, so a diary that presses
+  // constantly and never rows shows a healthy Arms and an unhealthy ratio.
+  // The aim rides along for the same reason the range does on the line above —
+  // a bare ratio is a number a model has to guess the good direction of.
+  if (stats.pushPull.ratio !== null)
+    out.push(
+      L.promptPushPull
+        .replace('{ratio}', rate(stats.pushPull.ratio))
+        .replace('{push}', rate(stats.pushPull.pushPerWeek))
+        .replace('{pull}', rate(stats.pushPull.pullPerWeek))
+    );
   out.push(
     `${L.promptCardioHead} ` +
       (stats.cardioSessions === 0

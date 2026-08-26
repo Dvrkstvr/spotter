@@ -271,6 +271,8 @@ export const DICT = {
     promptAnyGear: 'whatever I have',
     promptBalanceHead: 'MUSCLE BALANCE', promptBalanceUnit: '% of sets, counting a secondary muscle as half',
     promptWeakHead: 'Behind:', promptBandNote: 'sets per week; {min}–{max} is the range',
+    promptPushPull:
+      'Push : pull  1 : {ratio} — {push} pushing sets a week against {pull} pulling, upper body only; 1 : 1 or more is the usual aim.',
     promptCardioHead: 'Cardio:', promptCardioNone: 'no sessions at all.',
     promptCardioSome: '{n}, {km} km.',
     promptLiftsHead: 'KEY LIFTS', promptLiftNew: 'first time', promptLiftFlat: 'no change',
@@ -748,6 +750,8 @@ export const DICT = {
     promptAnyGear: 'was ich habe',
     promptBalanceHead: 'MUSKELBALANCE', promptBalanceUnit: '% der Sätze, ein sekundärer Muskel zählt halb',
     promptWeakHead: 'Im Rückstand:', promptBandNote: 'Sätze pro Woche; {min}–{max} wäre der Bereich',
+    promptPushPull:
+      'Drücken : Ziehen  1 : {ratio} — {push} Sätze Drücken pro Woche gegen {pull} Ziehen, nur Oberkörper; 1 : 1 oder mehr ist üblich.',
     promptCardioHead: 'Cardio:', promptCardioNone: 'gar keine Einheiten.',
     promptCardioSome: '{n}, {km} km.',
     promptLiftsHead: 'WICHTIGE ÜBUNGEN', promptLiftNew: 'zum ersten Mal', promptLiftFlat: 'unverändert',

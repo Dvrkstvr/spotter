@@ -351,8 +351,9 @@ cardio line on Insights. Two things the writing here did not anticipate: rear
 delts pull and file under `Shoulders`, which is a known inaccuracy now stated
 in `stats.ts` rather than quietly carried; and the ratio needed a null — there
 is no ratio to a zero push, where a zero **pull** is `0` and is the finding
-itself. It is deliberately not in the coach prompt: §7D argued it onto the
-screen, and adding it to the contract is a separate decision.*
+itself. It went into the coach prompt as a
+separate decision afterwards, carrying its own aim — a bare ratio is a number a
+model has to guess the good direction of.*
 
 Six is right for a glance and the argument in `stats.ts` for it still holds.
 But the roll-up hides one honest thing: **Arms** merges biceps and triceps,
