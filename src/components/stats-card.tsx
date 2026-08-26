@@ -92,9 +92,17 @@ export function StatsCard({
           .replace('{n}', rate(head.perWeek))
           .replace('{min}', String(BAND.min))
           .replace('{max}', String(BAND.max))
-      : L.statsHeadEven
-          .replace('{region}', regionLabel(head.region, L))
-          .replace('{n}', rate(head.perWeek));
+      : // The middle rung, and the reason the card no longer says *every
+        // muscle in range* over six muscles ticking over at seven sets a week.
+        // It needs no singular twin: a muscle only reaches it at `BAND.keep` a
+        // week or more.
+        head.kind === 'keep'
+        ? L.statsHeadKeep
+            .replace('{muscle}', muscleName(head.group))
+            .replace('{n}', rate(head.perWeek))
+        : L.statsHeadEven
+            .replace('{region}', regionLabel(head.region, L))
+            .replace('{n}', rate(head.perWeek));
 
   // Sets a week, on the same reading as the screen this opens: the line is the
   // *bottom of the range* rather than an even split, so a card of six short
@@ -139,8 +147,10 @@ export function StatsCard({
                       height: Math.max(3, (b.perWeek / peak) * BAR_H),
                       // A weak region is drawn quieter rather than redder: the
                       // chart's job is to show the shape, and the sentence above
-                      // it has already named the one that matters.
-                      opacity: b.low > 0 ? 0.38 : 0.95,
+                      // it has already named the one that matters. Three
+                      // weights, because two would either scold a region that
+                      // is only ticking over or hide one that is starving.
+                      opacity: b.low > 0 ? 0.38 : b.keep > 0 ? 0.66 : 0.95,
                     },
                   ]}
                 />
@@ -160,7 +170,9 @@ export function StatsCard({
           </View>
           {/* Named, because the sentence above picks one of these out — a
               six-bar shape with no labels is decoration, and you would have no
-              way to find the region it just told you about. */}
+              way to find the region it just told you about. Dimmed for `low`
+              alone: the bar above already says which regions are merely
+              holding, and a quiet label there would say it a second time. */}
           <View style={styles.barLabels}>
             {recent.balance.map((b) => (
               <Text

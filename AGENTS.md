@@ -495,15 +495,45 @@ it is a *setting*, added the additive way `PERSIST` allows.
   weeks and twelve months are read against the same range; a bounded window
   takes its own length and all-time takes the diary's, never less than one
   week.
+- **Under the range is two findings and not one** (`BAND.keep`, 5). Ten is the
+  bottom of the bin that grew *most* in the dose-response work — it was never a
+  line under which training stops working, and the volume landmarks put
+  maintenance well below it. So a muscle at eight sets a week is holding what
+  it has and one at two is not, and calling both of them *low* is the same
+  mistake as flagging the neck: a list of everything is a list of nothing.
+  Three things hold it together:
+  - **`keep` is not a new number.** `heatStep` had drawn its first step at
+    `BAND.min / 2` since the body view shipped, so the figure was already
+    showing this split and only the verdict was reading two states where the
+    ramp read three. The ramp reads the field now — steps 1 and 2 *are* `low`
+    and `keep` — which is what keeps the body and the bars from coming to
+    disagree about where *enough* begins. There is a test named for it.
+  - **One field, five levels** (`MuscleStat.level`, `levelOf`). It replaced a
+    `trained` / `low` / `over` trio that could express states which do not
+    exist — untrained *and* low — and could not express the one that does. It
+    is also the only reading of `BAND` there is: a surface recomputing
+    `perWeek < BAND.min` for itself is how a bar and the tag beside it come to
+    say two different things about one row.
+  - **Holding is stated, never scolded.** `TrainingStats.weak` narrowed to the
+    muscles under `keep` — it is what the card headline names, what the
+    *Needs work* list draws bars for, and what the coach's `Behind:` sends —
+    while `holding` is its other half: one line of names on Insights, one
+    `Only holding:` line in the prompt, a quieter fill on the bars and no row
+    of its own. Two lines to the AI rather than one, because they are two
+    different asks — what is behind needs sets added, what is holding needs
+    them kept. `headlineOf` gained the matching middle rung, which is what
+    stopped the card saying *every muscle in range* over six muscles ticking
+    over at seven sets a week.
 - **The range is stated per muscle, so the verdict lives there and not on a
   region.** Legs at seventeen sets a week can be a trained quad and a starving
-  calf under one contented number, so `RegionStat` carries its rate and
-  `low` — a *count* of its muscles under the range — while
-  `TrainingStats.weak` is a list of **muscles**, furthest short first. That is
-  what the card headline names, what Insights lists, and what the coach prompt
-  sends: "Calves 2" is something a plan can be written from where "Legs behind"
-  is not.
-- **An untrained muscle is not a weak one** (`MuscleStat.trained`). Nobody
+  calf under one contented number, so `RegionStat` carries its rate and *counts*
+  of its muscles — `low` and `keep`, two rather than one for the same reason
+  the muscle carries five levels rather than three, with the row printing the
+  sharper of them — while `TrainingStats.weak` is a list of **muscles**,
+  furthest short first. That is what the card headline names, what Insights
+  lists, and what the coach prompt sends: "Calves 2" is something a plan can be
+  written from where "Legs behind" is not.
+- **An untrained muscle is not a weak one** (`MuscleLevel`'s `none`). Nobody
   trains `Neck`, and a screen flagging it every week beside a genuinely
   neglected calf has stopped being read — so nothing counts as low until it has
   been trained at all. This is the one place the per-muscle range needed a rule
@@ -553,11 +583,16 @@ it is a *setting*, added the additive way `PERSIST` allows.
     somewhere to go. A track ending at the top of the range would draw *at the
     range* and *twice it* identically, which is the one thing this chart exists
     not to do.
-  - **An untrained muscle draws a dash and no fill**, never a zero: `trained`
-    is a different fact from `low`, and this is the level that shows it.
-  - **Under the range is a quieter fill (`accent700`), never `warn`** — the
-    same one-step-down grammar the diary uses for a superset's rule, and for
-    the same reason a tip borrows no dashed outline.
+  - **An untrained muscle draws a dash and no fill**, never a zero: `none` is a
+    different level from `low`, and this is where the difference shows.
+  - **Under the range is a quieter fill, never `warn`** — the same one-step-down
+    grammar the diary uses for a superset's rule, and for the same reason a tip
+    borrows no dashed outline. Two quieter fills rather than one, since `keep`
+    arrived: `accent600` for a muscle holding and `accent800` for one starving,
+    so the two are told apart by the bar and not only by the tag beside it. A
+    hairline at `BAND.keep` marks where they part — a hairline rather than a
+    second washed block, because the range is the thing being aimed at and a
+    track with two filled zones in it reads as two targets.
 - **The balance card has two views, and they answer two different questions.**
   A `Body · Bars` seg in the card head, `BodyHeat` beside `BandBars`, and the
   body is what the card opens on — it is the better glance, and the verdict it
@@ -571,9 +606,11 @@ it is a *setting*, added the additive way `PERSIST` allows.
     — five steps of accent up from the untrained ground, and **never `warn`**,
     whose meaning is fixed as *the app would not do that* at three other sites.
     An under-trained calf is not a refusal, and a red body is a diagnosis this
-    app is not qualified to make. The range lives in the bars, and the range's
-    own quarters are where `heatStep`'s four thresholds come from, so the two
-    views cannot come to disagree about where *enough* begins.
+    app is not qualified to make. The range lives in the bars, and `BAND`'s own
+    thresholds are where `heatStep`'s four come from, so the two views cannot
+    come to disagree about where *enough* begins — the first two steps are
+    `low` and `keep` exactly, which is where `keep` came from in the first
+    place.
   - **The body is licensed art, and the first cut proved why.** That one drew
     the figure from rounded rects and ellipses, reasoning from
     `make-icons.mjs` — the brand assets are generated from coordinates, so a
@@ -635,7 +672,7 @@ it is a *setting*, added the additive way `PERSIST` allows.
     screen, which is what the week board's tap-to-cycle was.
   - **Grey is *nothing logged*, and a permanent caption says so.** The bottom of
     a sequential scale is ambiguous by nature and here the ambiguity is the
-    finding — `MuscleStat.trained` is a different fact from `low`. It is
+    finding — `MuscleLevel`'s `none` is a different level from `low`. It is
     `finishLogsNothing`'s shape rather than a tip: a statement of what
     something means, not a hint that retires. The same line is why a tapped
     muscle is offered in words too, that being the only thing on the card which
@@ -802,9 +839,13 @@ untouched.
   sent rates — one reading in two units a line apart, which a model has to
   guess its way out of. A wrong guess about the unit is a confident
   recommendation about the wrong muscle, so this string moves whenever the
-  arithmetic does. Stated once rather than beside every number: the weak line
-  repeats neither. Prose, so it is in the user's language — unlike the
-  identifiers in the fenced block.
+  arithmetic does. Stated once rather than beside every number: neither the
+  weak line nor the holding one repeats it. It carries `BAND.keep` as well as
+  the range, for the reason the push:pull line carries its own aim — a model
+  handed a list of rates and one range guesses where *neglected* stops and
+  *ticking over* starts, and it guesses a different place than the screen drew.
+  Prose, so it is in the user's language — unlike the identifiers in the fenced
+  block.
 - **`RegionStat` carries no share, and `stats.ts` has no `pct`.** Both went
   when the prompt stopped sending percentages — the last reader of either.
   Nothing on a screen or in the prompt is a proportion of your own training any

@@ -14,16 +14,14 @@
 import { describe, expect, it } from 'vitest';
 
 import { bodyPaint, HEAT_STEPS, heatStep, INERT_SLUGS, SLUG_OF } from './body-map';
-import { BAND, MUSCLES_OF, REGIONS, type MuscleStat } from './stats';
+import { BAND, levelOf, MUSCLES_OF, REGIONS, type MuscleStat } from './stats';
 
 /** One muscle's week, with only the fields this module reads filled in. */
 const m = (group: string, perWeek: number): MuscleStat => ({
   group,
   sets: perWeek,
   perWeek,
-  trained: perWeek > 0,
-  low: perWeek > 0 && perWeek < BAND.min,
-  over: perWeek > BAND.max,
+  level: levelOf(perWeek),
   sources: [],
 });
 
@@ -66,16 +64,28 @@ describe('a weekly rate as one of six steps', () => {
     expect(heatStep(0.1)).toBe(1);
   });
 
-  it('takes its four thresholds from the range rather than from four numbers', () => {
-    // Half the floor, the floor, the middle, the ceiling. If these ever stop
-    // being read off `BAND`, a bar and a fill start disagreeing about where
-    // "enough" begins.
-    expect(heatStep(BAND.min / 2 - 0.01)).toBe(1);
-    expect(heatStep(BAND.min / 2)).toBe(2);
+  it('takes its four thresholds from the band rather than from four numbers', () => {
+    // The maintenance floor, the range's floor, the middle, the ceiling. If
+    // these ever stop being read off `BAND`, a bar and a fill start
+    // disagreeing about where "enough" begins.
+    expect(heatStep(BAND.keep - 0.01)).toBe(1);
+    expect(heatStep(BAND.keep)).toBe(2);
     expect(heatStep(BAND.min - 0.01)).toBe(2);
     expect(heatStep(BAND.min)).toBe(3);
     expect(heatStep((BAND.min + BAND.max) / 2)).toBe(4);
     expect(heatStep(BAND.max)).toBe(4);
+  });
+
+  it('draws the same three answers under the range that the verdict reads', () => {
+    // The ramp's first two steps *are* `low` and `keep` — that is where `keep`
+    // came from, the figure having drawn this split since before the verdict
+    // could say it. If the two ever come apart, a muscle is one colour on the
+    // body and a different word on the bars.
+    for (const n of [0, 0.1, 2, BAND.keep - 0.01, BAND.keep, 7, BAND.min - 0.01]) {
+      const step = heatStep(n);
+      const level = levelOf(n);
+      expect(step).toBe(level === 'none' ? 0 : level === 'low' ? 1 : 2);
+    }
   });
 
   it('gives over the range a step of its own', () => {
