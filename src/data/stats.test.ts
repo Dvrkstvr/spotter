@@ -323,6 +323,72 @@ describe('sets per week, against the range', () => {
   });
 });
 
+/* ── where a muscle's week came from ───────────────────────────────────── */
+
+describe("a muscle's sets, broken back out into the exercises that made them", () => {
+  it('names every exercise that reached it, at what one set of each was worth', () => {
+    // Biceps is a whole set of curls and half a set of pull-ups, which is the
+    // least intuitive figure in the app and the one this exists to explain.
+    const st = over(14, [day([reps('curl', 6), reps('pullup', 4)])]);
+    const m = muscle(st, 'Biceps');
+    expect(m.sources.map((x) => [x.id, x.sets, x.share])).toEqual([
+      ['curl', 6, 1],
+      ['pullup', 2, 0.5],
+    ]);
+  });
+
+  it('adds up to the total it explains, in both units', () => {
+    // The rows and the headline are read on one card, a line apart, so a
+    // second pass over the history is a second chance for them to disagree.
+    const st = over(14, [day([reps('curl', 6), reps('pullup', 4)])]);
+    const m = muscle(st, 'Biceps');
+    expect(m.sources.reduce((a, x) => a + x.sets, 0)).toBe(m.sets);
+    expect(m.sources.reduce((a, x) => a + x.perWeek, 0)).toBe(m.perWeek);
+  });
+
+  it('orders them by what they contributed, largest first', () => {
+    // Four sets of pull-ups is two biceps sets; one set of curls is one. The
+    // order is by the contribution, never by the row count or the share.
+    const st = stats([day([reps('pullup', 4), reps('curl', 1)])]);
+    expect(muscle(st, 'Biceps').sources.map((x) => x.id)).toEqual(['pullup', 'curl']);
+  });
+
+  it('keeps `share` a property of the exercise, not of how much you did', () => {
+    // The pill says "½", and it has to say ½ whether you did one set or ten.
+    const st = stats([day([reps('pullup', 10)])]);
+    expect(muscle(st, 'Biceps').sources).toEqual([
+      { id: 'pullup', sets: 5, perWeek: 5, share: 0.5 },
+    ]);
+  });
+
+  it('collects one exercise across sessions into one row', () => {
+    const st = over(14, [
+      { date: '2026-08-20', list: [reps('curl', 3)], vol: 0 },
+      { date: '2026-08-13', list: [reps('curl', 5)], vol: 0 },
+    ]);
+    expect(muscle(st, 'Biceps').sources).toEqual([
+      { id: 'curl', sets: 8, perWeek: 4, share: 1 },
+    ]);
+  });
+
+  it('lists nothing for a muscle nobody trained', () => {
+    // `trained` is the fact this level exists to keep apart from `low`, and an
+    // empty list is what says the panel has nothing to explain rather than
+    // that the explanation is missing.
+    const st = stats([day([reps('curl', 3)])]);
+    expect(muscle(st, 'Calves').sources).toEqual([]);
+    expect(muscle(st, 'Calves').trained).toBe(false);
+  });
+
+  it('leaves an exercise deleted since out of every row', () => {
+    // It credits no muscle at all — its sets are loose — so a row naming it
+    // would be a row explaining nothing.
+    const st = stats([day([reps('curl', 3), { ex: 'gone', sets: ['50 × 10'] }])]);
+    expect(muscle(st, 'Biceps').sources.map((x) => x.id)).toEqual(['curl']);
+    expect(st.looseSets).toBe(1);
+  });
+});
+
 /* ── the weak reading ──────────────────────────────────────────────────── */
 
 describe('what needs work', () => {
