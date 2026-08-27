@@ -49,3 +49,6 @@ example
 
 # native module build output
 modules/**/android/build/
+
+# working notes, not published
+/IMPROVEMENTS.md
