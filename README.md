@@ -26,9 +26,8 @@ session, your buddy's, and the part you do together. It isn't a drawing —
 
 ## Screenshots
 
-|                                       |                                               |                                                 |
-|:-------------------------------------:|:---------------------------------------------:|:-----------------------------------------------:|
 |    ![Today](screenshots/today.png)    |   ![Logging a set](screenshots/logging.png)   | ![A superset](screenshots/logging-superset.png) |
+|:-------------------------------------:|:---------------------------------------------:|:-----------------------------------------------:|
 |   The day's plan and the week ahead   |         Two fields and a tick per set         |               A pair, back to back              |
 | ![Routines](screenshots/routines.png) | ![Insights](screenshots/insights-balance.png) |       ![Profile](screenshots/profile.png)       |
 |   Search by name, exercise or muscle  |        Sets per muscle, against a range       |           Your figures, and your buddy          |
