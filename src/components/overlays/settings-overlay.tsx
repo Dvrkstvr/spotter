@@ -29,6 +29,7 @@ import { hasRadio, isSimRadio, sayGoodbye } from '@/data/buddy-radio';
 import { FIRST_UPS } from '@/data/buddy-sync';
 import { clearDiag, exportToFolder, folderLabel, pickFolder } from '@/data/diag';
 import { DEFAULT_GROUPS, DEFAULT_KINDS } from '@/data/exercises';
+import { LANG_NAME, themeKey } from '@/data/i18n';
 import { TimeStepper } from '@/components/time-stepper';
 import { dismissAlarms, ensureAlarmPermission } from '@/data/alarms';
 import { TIP_COUNT, tipsRetired } from '@/data/tips';
@@ -62,14 +63,6 @@ const SEEDED = {
   group: new Set(DEFAULT_GROUPS.map((g) => g.key)),
   kind: new Set(DEFAULT_KINDS.map((k) => k.key)),
 };
-
-/**
- * `blurple` → `themeBlurple`, the dictionary key holding its display name.
- * Typed rather than cast to string, so adding a theme without translating it
- * fails here instead of rendering `undefined`.
- */
-const themeKey = (n: ThemeName) =>
-  `theme${n[0].toUpperCase()}${n.slice(1)}` as `theme${Capitalize<ThemeName>}`;
 
 export function SettingsOverlay() {
   const styles = useThemed(sheet);
@@ -373,7 +366,7 @@ export function SettingsOverlay() {
         <Seg
           options={(['en', 'de'] as const).map((code) => ({
             key: code,
-            label: code === 'en' ? 'English' : 'Deutsch',
+            label: LANG_NAME[code],
             on: s.lang === code,
             pick: () => patch({ lang: code }),
           }))}

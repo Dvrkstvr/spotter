@@ -8,6 +8,7 @@
 
 import { fromISO } from '@/data/date';
 import type { Repeat } from '@/data/plan';
+import type { ThemeName } from '@/design/tokens';
 
 export type Lang = 'en' | 'de';
 
@@ -378,6 +379,19 @@ export const DICT = {
     connected: 'Connected', disconnect: 'Disconnect', dividerHint: 'leave empty for a divider', trainingWith: 'training with you',
     thisWeek: 'This week', seePlan: 'See plan',
     saveAsRoutine: 'Save as new routine', routineSaved: 'Saved to your routines.',
+    /* — sharing a workout —
+       The sheet speaks the app's language; the card's own words (`card*`,
+       and the labels it borrows) are read in the *card's*, which can differ —
+       see `data/share-card.ts`. */
+    share: 'Share', shareTitle: 'Share workout',
+    shareHighlights: 'Highlights', shareLog: 'Log', shareStory: 'Story', sharePost: 'Post',
+    shareOnCard: 'On the card', shareExercises: 'Exercises', shareWeights: 'Weights',
+    shareBody: 'Muscle map', shareBuddy: "{name}'s name", shareOnce: 'this time only',
+    shareLook: 'Look', shareMatchApp: 'Match the app ›',
+    shareNote: 'Android asks where it goes. Nothing is sent until you pick.',
+    shareFailed: "The image couldn't be made. Try again.",
+    cardBest: 'best yet', cardBestLine: 'Best set yet', cardWeek: '{n} workout this week',
+    cardMore: '+ {n} more',
     loggedSessions: 'Logged', withBuddy: 'with {name}',
     noDetail: 'Logged before this phone kept the set-by-set detail.',
     nameRoutine: 'Name this routine',
@@ -887,6 +901,16 @@ export const DICT = {
     connected: 'Verbunden', disconnect: 'Trennen', dividerHint: 'leer lassen für eine Trennlinie', trainingWith: 'trainiert mit dir',
     thisWeek: 'Diese Woche', seePlan: 'Plan ansehen',
     saveAsRoutine: 'Als neue Routine speichern', routineSaved: 'In deinen Routinen gespeichert.',
+    share: 'Teilen', shareTitle: 'Training teilen',
+    shareHighlights: 'Highlights', shareLog: 'Protokoll', shareStory: 'Story', sharePost: 'Beitrag',
+    shareOnCard: 'Auf der Karte', shareExercises: 'Übungen', shareWeights: 'Gewichte',
+    shareBody: 'Muskelkarte', shareBuddy: 'Name von {name}', shareOnce: 'nur dieses Mal',
+    shareLook: 'Aussehen', shareMatchApp: 'Wie die App ›',
+    shareNote: 'Android fragt, wohin. Gesendet wird erst, wenn du auswählst.',
+    shareFailed: 'Das Bild ließ sich nicht erstellen. Versuch es noch mal.',
+    // „Einheit“, not „Training“: this counts logged sessions.
+    cardBest: 'Bestwert', cardBestLine: 'Bester Satz bisher', cardWeek: '{n} Einheit diese Woche',
+    cardMore: '+ {n} weitere',
     loggedSessions: 'Aufgezeichnet', withBuddy: 'mit {name}',
     noDetail: 'Aufgezeichnet, bevor dieses Handy die einzelnen Sätze behalten hat.',
     nameRoutine: 'Name der Routine',
@@ -1182,6 +1206,29 @@ export const fmtDayTiny = (lang: Lang, d: Date) =>
 /** 'last done 3 days ago' / 'zuletzt vor 3 Tagen', composed from the dict. */
 export const fmtLastDone = (L: Strings, days: number) =>
   `${L.lastDone} ${days === 0 ? L.agoToday : days === 1 ? L.oneDayAgo : L.daysAgo.replace('{n}', String(days))}`;
+
+/**
+ * Each language's own name for itself — the same in either dictionary, because
+ * a German speaker looking for German looks for "Deutsch". Settings and the
+ * share card's language chips both read it.
+ */
+export const LANG_NAME: Record<Lang, string> = { en: 'English', de: 'Deutsch' };
+
+/**
+ * The dictionary key naming a colour theme. Typed rather than cast to string,
+ * so adding a theme without translating it fails here instead of rendering
+ * `undefined` — in Settings and on the share sheet alike.
+ */
+export const themeKey = (n: ThemeName) =>
+  `theme${n[0].toUpperCase()}${n.slice(1)}` as `theme${Capitalize<ThemeName>}`;
+
+/** '3rd' / '3.' — the share card's count of the week's sessions. */
+export const ordinal = (lang: Lang, n: number) => {
+  if (lang === 'de') return `${n}.`;
+  const teen = n % 100 >= 11 && n % 100 <= 13;
+  const suffix = teen ? 'th' : (['th', 'st', 'nd', 'rd'][n % 10] ?? 'th');
+  return `${n}${suffix}`;
+};
 
 /** '1 exercise' / '3 exercises' — the dictionaries carry both forms. */
 export const countN = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;

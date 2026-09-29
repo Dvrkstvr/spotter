@@ -48,6 +48,8 @@ export const PERSIST = [
   'setups', 'videos', 'lang', 'groups', 'kinds', 'images', 'exEdits', 'cueEdits',
   'knownBuddies', 'buddyIds', 'buddySecrets', 'selfId', 'themeMode', 'theme', 'restSeconds', 'firstUpDefault',
   'haptics', 'restAlert', 'planAlert', 'planAlertAt', 'privateMode', 'onboarded', 'style', 'level', 'coach', 'tips',
+  // The share sheet's remembered choices — a setting, read through `prefsOf`.
+  'shareCard',
   // Ordinary settings, and they ride in a backup like every other one: a
   // restored `diagDir` names a grant the new phone doesn't hold, which is the
   // revoked-folder case the export row already answers by offering the picker.
@@ -124,7 +126,7 @@ export const PERSIST_SHAPE: Record<
   firstUpDefault: 'string', haptics: 'boolean', restAlert: 'boolean',
   planAlert: 'boolean', planAlertAt: 'number',
   privateMode: 'boolean', onboarded: 'boolean', style: 'string',
-  level: 'string', coach: 'object', tips: 'object',
+  level: 'string', coach: 'object', tips: 'object', shareCard: 'object',
   // `diagDir`'s 'string' does for its null what `sessionRole`'s does for its.
   diag: 'boolean', diagDir: 'string',
   // `session` and `rest` are object-or-null, and 'object' is exactly the

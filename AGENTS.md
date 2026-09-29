@@ -1510,6 +1510,93 @@ section. It is Calvin's, has no design behind it, and is off by default.
   phone that is only being trained with. Save-now with no folder yet asks for
   one on the way rather than sending you to the row above and back.
 
+## Sharing a workout
+
+A logged session becomes a picture you post or send — a story, a feed post, a
+friend. Not in the design; the mockup is `design/share-workout-mockup.html`,
+which stands in the same relation to this feature that Workout Diary v2 does to
+the rest of the app. `data/share-card.ts` decides what the card says,
+`components/share-card.tsx` draws it, `overlays/share-sheet.tsx` is the sheet.
+
+- **It motivates with facts, not cheering.** The copy voice rules out *Crushed
+  it!* and a feed is full of cards that say it anyway; `52 min · 8,420 kg` and a
+  set tagged *best yet* is more convincing to anyone who lifts. The one playful
+  line is the one the app already owns — the fun fact.
+- **Two cards, two shapes.** *Highlights* (three tiles, the body figure, one
+  line per exercise, the fun fact) is for a feed; *Log* (the Plan day panel's
+  card as a picture — every set, `↳` drops, the superset hairline) is for the
+  friend who trains. *Story* 9:16 is the first-run shape (Calvin's call) and
+  keeps content out of the bands Instagram and WhatsApp draw over a status;
+  *Post* 4:5 is the tallest a feed shows uncropped. A switch that means nothing
+  on a card is not drawn — Log has no *Exercises* and no *Muscle map*.
+- **One Share button, and it is Android's share sheet** (`expo-sharing`, the
+  backup export's own call). Calvin's call: the user picks the target — the
+  system sheet already knows which apps are installed, offers Instagram's
+  Stories/Feed/Chats and X's Post as targets, and its Direct Share row is how a
+  card goes straight to a friend. No app buttons of our own and no native code,
+  so it works in Expo Go and no phone needs a rebuild. What that gives up is a
+  caption, which would need an Intent with `EXTRA_TEXT`; the card carries
+  everything a caption would have said. There is no *Save image* either: Files
+  and Drive are in the sheet, and a gallery write needs the media permission
+  the tour promises never to ask for.
+- **Weights off is applied in the model, never in the drawing.** Every kilo
+  goes, including the ones in a costume: a lift keeps `× 8`, a hold keeps its
+  seconds, the volume tile becomes *Exercises*, the best line keeps the name,
+  and the fun fact goes (5 family cars *is* a volume) unless it is a distance.
+  One place a kilo could leak onto a picture headed for a feed, and it is tested.
+- **Notes never reach it, by construction.** `CardEntry` names no `marks` and no
+  `note`, so a verdict or an exercise's words cannot be read in `cardOf` at
+  all. The profile never reaches it either; `Profile.sex` only picks which
+  figure is drawn, exactly as on Insights.
+- **The partner's name is asked every time and never stored.** It belongs to
+  somebody who didn't press Share. Everything else the sheet chooses persists in
+  `shareCard` — an additive `PERSIST` key, a setting, read through `prefsOf`
+  because a stored object replaces the seeded one wholesale. No
+  `STORAGE_VERSION` bump.
+- **A best is judged by estimate and printed as the set.** `e1rmOf` against
+  every *earlier* session of the exercise (never a later one, never itself), in
+  whole kilos so a regression's decimal is not a claim on a feed, and the card
+  prints `85 × 6` — a fact — never the estimate. A first session of an exercise
+  is not a best. The tag gives way when it would cut the name it sits beside;
+  the accent figure still marks the set.
+- **The figure paints today's sets, not a weekly rate** (`SESSION_STEPS`).
+  Insights' ramp is a verdict against `BAND`, and one session supports none. The
+  contributions are `trainingStats` over the single session dated to its own
+  day — which spans one week, so its per-week rate *is* the session's sets — and
+  `bodyPaint` places them; the steps are absolute, so the same workout always
+  paints the same body.
+- **The look is the card's, not the app's.** Language, mode and colour are
+  chosen per card and fold away behind one row that shows their value; absent
+  means *follow the app*, and *Match the app ›* puts all three back.
+  `paletteOf(name, dark)` in tokens is the one non-mutating way to get a
+  palette — `applyTheme` would recolour the app behind the sheet. Names resolve
+  in the card's language and fall back **plainly**: the missing-translation grey
+  is a hint to the owner and reads as a bug on a picture for strangers.
+- **SVG, laid out by hand, and the preview is the export.** One `<Svg>` draws
+  both: scaled into the sheet, and again off-glass at exactly 1080 px while
+  Share is being answered, which `toDataURL` reads (`react-native-svg`, already
+  bundled — Inter resolves through the same `ReactFontManager` expo-font
+  registers with). Two traps, both found on a device:
+  - **The Svg is sized by a wrapper at 100%.** `react-native-svg` `parseInt`s a
+    numeric `width`, so 392.7 dp — 1080 px at 2.75× — came out a 1078-pixel card.
+  - **SVG has no layout.** Every line is measured first (`data/card-layout.ts`)
+    against Inter's real advance widths, generated from the font files the app
+    loads by `npm run metrics` into `data/inter-metrics.ts` — never edit that
+    by hand. A set never wraps in half, a pair never splits across the cut, and
+    a list that doesn't fit ends in *+ 3 more* rather than a smaller font.
+- **Two doors.** The summary (Share beside OK, which stays primary; absent on an
+  empty finish) and every logged session on Plan (*Share ›* beside *+ Save as
+  routine*, for the reason saving outlasts the summary). From Plan the sheet
+  opens on Log — the card that panel already is — and does not remember the
+  type picked there. `s.share` is UI state: the entry's `history` index (the
+  handle `saveDayAsRoutine` uses) and the door. The sheet sits at 90 after the
+  summary, below the intake.
+- **Deliberately not built:** sharing a running workout (a card of half a day),
+  a weekly recap (a second `cardOf` over `trainingStats` when someone asks), the
+  strength standing (a compliment in private, not a public claim), a photo, a
+  two-name card (Calvin's call), and a tip — Share is a labelled button in both
+  places.
+
 ## Deliberate deviations from the design
 
 Keep these; they're decisions, not drift. Each is commented at its site.
@@ -2690,7 +2777,7 @@ screens.
 Nocturne palette exactly. That is the one design invariant nothing else
 checked.
 
-What is covered, and why it is these two:
+What is covered, and why it is these three:
 
 - **`data/migrate`** — the version chain, the shape guard and the backup
   merge. Every bug in it is silent and lands on real training data: a key
@@ -2705,10 +2792,18 @@ What is covered, and why it is these two:
   replies rather than payloads: prose around the block, a dropped tag, a
   placeholder row copied out of the template, `1e999`, and a German
   `"gewicht"` where a measure identifier belongs.
+- **`data/share-card`** — the one picture that leaves the phone, so its bugs
+  are the ones you notice only after it has gone: a kilo left standing with
+  Weights off, a note about your shoulder, a *best yet* claimed over nothing or
+  over a later session, an English label on a German card. Plus the layout
+  helpers the drawing leans on: an ellipsis never past its width, a wrap never
+  inside a set.
 
-Both suites were checked by mutation rather than trusted for passing: putting
-the `migrateV3(data, data)` bug back fails five tests, and flipping `fillGaps`
-so a backup wins fails a sixth.
+All three suites were checked by mutation rather than trusted for passing:
+putting the `migrateV3(data, data)` bug back fails five tests, flipping
+`fillGaps` so a backup wins fails a sixth, and on the card, letting Weights off
+keep kilos fails two, reading bests from the whole diary fails four, and a fun
+fact that ignores the switch fails one.
 
 ## Releasing
 
