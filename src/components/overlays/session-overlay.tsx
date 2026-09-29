@@ -46,6 +46,7 @@ import { GestureDetector } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 
+import { PairingNote } from '@/components/pairing-note';
 import { HoldBtn } from '@/components/hold-btn';
 import { DragList } from '@/components/drag-list';
 import { CHECK_D, GripIcon, Icon, MARK_D } from '@/components/icon';
@@ -1900,7 +1901,10 @@ function BuddySlot({ onOpenProfile }: { onOpenProfile: () => void }) {
     );
   }
 
-  if (!s.buddy) return null;
+  // The other way the row can empty mid-workout: the pairing could not be
+  // kept. Said here for the reason "they disconnected" is — it answers what
+  // the other phone is doing — and with the way back to pairing on it.
+  if (!s.buddy) return s.pairingIssue ? <PairingNote style={styles.leftNote} /> : null;
 
   // Paired but training alone — the row is still the way to Profile.
   if (!buddyLive) {

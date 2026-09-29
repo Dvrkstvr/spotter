@@ -23,9 +23,9 @@
  */
 import Constants from 'expo-constants';
 import { useEffect, useRef } from 'react';
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 
-import { hasRadio, isSimRadio } from '@/data/buddy-radio';
+import { hasRadio, isSimRadio, playServicesVersion } from '@/data/buddy-radio';
 import { dlog, exportToFolder, flush, setDiagClock, setDiagHeader, setDiagOn } from '@/data/diag';
 import { myName, useStore } from '@/store/workout-store';
 
@@ -83,6 +83,13 @@ export function Diagnostics() {
         ? { buildName: String(Constants.expoConfig.extra.buildName) }
         : {}),
       build: hasRadio ? (isSimRadio ? 'sim' : 'standalone') : 'expo-go',
+      // Two phones disagreeing about a link are very often two phones on two
+      // Androids: which permissions the radio needs, and whether discovery
+      // wants the Location toggle, both turn on the API level. And Nearby
+      // itself ships in Play services, not in the APK, so one build of Spotter
+      // can be talking to two different builds of the radio.
+      api: Platform.Version,
+      playServices: playServicesVersion() ?? 'unknown',
       lang: s.lang,
       restSeconds: s.restSeconds,
       restAlert: s.restAlert,
@@ -272,6 +279,16 @@ export function Diagnostics() {
   useEffect(() => {
     dlog('buddy', 'pairing', { buddy: s.buddy ?? 'none' }, true);
   }, [s.buddy]);
+
+  // How this phone's own ask stands. On the value, never on the object: the
+  // object is rewritten each time an attempt is lost, and `fails` is watched
+  // beside it for exactly that — an ask that ended `failed` with no strikes
+  // ran out its deadline, one with two was refused its way there.
+  const ask = s.joinSent?.state ?? 'none';
+  const askFails = s.joinSent?.fails ?? 0;
+  useEffect(() => {
+    dlog('buddy', 'ask', { state: ask, fails: askFails || undefined }, true);
+  }, [ask, askFails]);
 
   useEffect(() => {
     dlog('buddy', 'shared session', { shared: s.sessionShared, role: s.sessionRole ?? 'none', join: s.buddyJoin ?? 'none' });

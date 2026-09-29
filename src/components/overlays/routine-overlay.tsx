@@ -29,7 +29,7 @@ import { GripIcon } from '@/components/icon';
 import { HoldBtn } from '@/components/hold-btn';
 import { FullScreen } from '@/components/sheet';
 import { useBackClose } from '@/hooks/use-back-close';
-import { radio } from '@/data/buddy-radio';
+import { sendTo } from '@/data/buddy-radio';
 import { measureOf, Routine } from '@/data/exercises';
 import { countN, repeatLabel } from '@/data/i18n';
 import { rulesFor } from '@/data/plan';
@@ -99,10 +99,7 @@ export function RoutineOverlay() {
   // then keep the routine. Start makes this phone the session host.
   const finish = (reason: 'save' | 'start') => {
     const payload = draftPayload();
-    if (payload && radio && s.buddyEndpoint)
-      radio
-        .sendPayload(s.buddyEndpoint, JSON.stringify({ v: 1, t: 'draftEnd', reason, draft: payload }))
-        .catch(() => {});
+    if (payload) sendTo(s.buddyEndpoint, { v: 1, t: 'draftEnd', reason, draft: payload });
     if (reason === 'save') patch({ coDraft: null, routineOpen: null });
     else {
       patch({ coDraft: null });

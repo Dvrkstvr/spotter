@@ -27,7 +27,7 @@ import { DragDemo, PX_PER_REP, PX_PER_STEP, useNumberDrag } from '@/components/n
 import { WeekBoard } from '@/components/week-board';
 import { TimeStepper } from '@/components/time-stepper';
 import { FullScreen } from '@/components/sheet';
-import { ensureRadioPermissions, hasRadio, sayGoodbye } from '@/data/buddy-radio';
+import { askRadioPermissions, hasRadio, sayGoodbye } from '@/data/buddy-radio';
 import {
   DEFAULT_ROUTINES,
   Level,
@@ -215,7 +215,7 @@ export function OnboardingOverlay() {
   // Dropped on a build with no radio at all — plain Expo Go, where there is no
   // pairing to teach and a screen promising a dialog that never comes teaches
   // the wrong lesson. (With the dev sim the card stands and answers instantly,
-  // exactly as it did on the perms screen: `ensureRadioPermissions` short-
+  // exactly as it did on the perms screen: `askRadioPermissions` short-
   // circuits on `isSimRadio`.) That is the *whole* gate, deliberately: the same
   // fact the permission card itself is gated on. Not Train alone as well: the
   // card lives here now, so this is the only place a re-run can say "Train
@@ -343,7 +343,7 @@ export function OnboardingOverlay() {
   };
 
   const allowRadio = async () => {
-    const ok = await ensureRadioPermissions();
+    const ok = (await askRadioPermissions()) === 'granted';
     if (ok) {
       patch({ privateMode: false });
       setPermRadio('ok');

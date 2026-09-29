@@ -14,6 +14,12 @@
  * Console keys (each followed by Enter):
  *   d — drop every live link (simulates the buddies walking out of range)
  *   l — list connected clients
+ *   x <type> [n] — lose a payload of that wire type on its way across: the
+ *       next one, or the nth from now (`x hello` loses the minter's hello of
+ *       the next pairing, `x hello 2` the adopter's answer to it). The one
+ *       place the relay reads a payload, and only its `t`: a message that goes
+ *       missing is something the air does, and the handshake's answers to it
+ *       cannot be exercised otherwise.
  */
 import ws from 'ws';
 
@@ -26,6 +32,8 @@ const pendings = new Map();
 /** pairKey — established connections */
 const links = new Set();
 let nextPayloadId = 1;
+/** wire type → how many more of it pass before one goes missing — see `x` */
+const lose = new Map();
 
 const pairKey = (a, b) => [a, b].sort().join('|');
 const log = (...args) => console.log(`[${new Date().toLocaleTimeString()}]`, ...args);
@@ -67,7 +75,11 @@ function onDiscover(c) {
 function onRequest(c, name, to) {
   const target = clients.get(to);
   if (!target) return send(c, { t: 'failed', id: to, status: 8012 });
-  c.name = name;
+  // The name a request travels under belongs to the request, as it does in
+  // Nearby — it must not become the name this client is *found* under. The app
+  // marks a pairing request in it, and a mark that leaked into discovery would
+  // be a phone advertising that it is asking to pair with everybody.
+  c.name ??= name;
   const key = pairKey(c.id, to);
   // Simultaneous mutual requests (both phones auto-reconnecting) collapse
   // into one handshake; requests on an existing link are noise.
@@ -101,8 +113,29 @@ function onReject(c, to) {
   log(`${tag(c)} rejected ${to}`);
 }
 
+/** The wire type of a payload, or null for anything that isn't one of ours. */
+function typeOf(data) {
+  try {
+    const t = JSON.parse(data)?.t;
+    return typeof t === 'string' ? t : null;
+  } catch {
+    return null;
+  }
+}
+
 function onPayload(c, to, data) {
   if (!links.has(pairKey(c.id, to))) return;
+  // Lost in the air: the sender is told it was sent, exactly as Nearby would
+  // say of a payload it had accepted, and the receiver never hears of it.
+  const t = typeOf(data);
+  const left = t === null ? undefined : lose.get(t);
+  if (left !== undefined && left > 1) lose.set(t, left - 1);
+  if (left === 1) {
+    lose.delete(t);
+    log(`${c.id} → ${to} ${t} lost (asked for from console)`);
+    send(c, { t: 'sent', id: to, payloadId: String(nextPayloadId++) });
+    return;
+  }
   send(clients.get(to), { t: 'payload', id: c.id, data });
   send(c, { t: 'sent', id: to, payloadId: String(nextPayloadId++) });
 }
@@ -119,7 +152,7 @@ const keysOf = (id) => [...links, ...pendings.keys()].filter((k) => k.split('|')
 
 const server = new ws.Server({ port: PORT }, () => {
   log(`buddy relay listening on ws://0.0.0.0:${PORT}`);
-  log('keys: d+Enter drops all links · l+Enter lists clients');
+  log('keys: d+Enter drops all links · l+Enter lists clients · x <type>+Enter loses one payload');
 });
 
 server.on('connection', (sock) => {
@@ -162,8 +195,15 @@ server.on('connection', (sock) => {
 });
 
 process.stdin.on('data', (buf) => {
-  const key = buf.toString().trim().toLowerCase();
-  if (key === 'd') {
+  const typed = buf.toString().trim();
+  const key = typed.toLowerCase();
+  if (key.startsWith('x ')) {
+    // Case kept: wire types are camelCase (`sessionInvite`).
+    const [t, n] = typed.slice(2).trim().split(/\s+/);
+    const nth = Math.max(1, Number.parseInt(n ?? '1', 10) || 1);
+    lose.set(t, nth);
+    log(`${t} #${nth} from now will be lost`);
+  } else if (key === 'd') {
     if (!links.size) log('no links to drop');
     for (const k of [...links]) dropLink(k, 'dropped from console');
   } else if (key === 'l') {
