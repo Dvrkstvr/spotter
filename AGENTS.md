@@ -1674,7 +1674,7 @@ Keep these; they're decisions, not drift. Each is commented at its site.
   — heavier next time, lighter next time, that was the weight, or words. Not in
   the design; the numbers record what you lifted and never what to do about it,
   which by next week is the part you wanted back. The mockup is
-  `design/set-notes-mockup.html`. Seven rules hold it together:
+  `design/set-notes-mockup.html`. These rules hold it together:
   - **The mark lives in the index column, and takes the digit's place.** Which
     set a row is you can count; once you have judged it the judgement is worth
     more in 16px. Taking the slot rather than adding a column is also what
@@ -1778,15 +1778,47 @@ Keep these; they're decisions, not drift. Each is commented at its site.
     nothing else; what you thought of your own set is not the buddy's business.
     A buddy snapshot carries no `history` at all, so the diary copy changes
     nothing about that.
-  - **It stays per set, and there is no per-routine note.** The words ride on a
-    `SetMark`, and `up` / `down` is a verdict about *a weight* — an exercise
-    holds three to five of those, so "heavier" at the exercise level is not a
-    statement. A routine is a template that outlives every session run from it,
-    so a note on one could only be timeless and could never reach a day; the
-    timeless per-exercise slot is already `cueEdits`, and the machine is
-    `setups`. If a *dated* per-exercise note is ever wanted it is
-    `LoggedExercise.note?: string` — additive, so waiting for someone to ask
-    costs nothing.
+  - **Verdicts stay per set, and there is no per-routine note.** `up` /
+    `down` is a verdict about *a weight* — an exercise holds three to five of
+    those, so "heavier" at the exercise level is not a statement. A routine is
+    a template that outlives every session run from it, so a note on one could
+    only be timeless and could never reach a day; the timeless per-exercise
+    slot is already `cueEdits`, and the machine is `setups`.
+  - **The exercise has words of its own, and only words** (`ExNoteLine`,
+    `ExNoteSheet`). This was parked as "wait for someone to ask", and Calvin
+    asked: energy, a machine someone had, the shoulder, what to change next
+    week are about the day at this station, not about one set of it, and there
+    was nowhere to put them. Five things hold it together:
+    - **Two optional fields, no new key.** `SessionExercise.note` while the
+      workout runs — the LIVE keys already persist the session, so a process
+      death keeps it — and `LoggedExercise.note` in the diary, written by
+      `finishSession` trimmed and only when there are words, like `marks`. An
+      exercise with nothing ticked never reaches the diary and its note goes
+      with it. `STORAGE_VERSION` stays 4.
+    - **Last time's is read out of the diary, not a `lastMarks` twin**
+      (`lastExNote` in `data/ex-notes.ts`, tested). `lastLog[id].date` already
+      names the session "last time" means, so the note is that day's entry's —
+      and only that day's: a later session that said nothing hides an older
+      note, which is `lastMarks`'s rule arrived at without a second copy of it.
+      A key that isn't stored is one no backup, merge or migration has to know
+      about. It hoists first in `LastNotes`, above the per-set lines, because it
+      is about everything that follows.
+    - **The line follows the set slot's grammar one scope up.** Nothing ticked,
+      nothing drawn; some ticked, the quiet `+ Exercise note`; all done, it
+      asks in accent (*How did it go?*); words written, the words. When the
+      exercise seals, the last set's strip is asking a few lines above it — two
+      questions for a beat, **accepted on purpose** (Calvin's call): they ask
+      different things in different places and the strip leaves the moment it
+      is answered, where holding this one back until the set was judged would
+      never ask anyone who doesn't judge sets.
+    - **The sheet is words and nothing else**, keyboard up on open, writing on
+      every keystroke, emptied is absent. It is `MarkSheet` without the tiles,
+      for the verdict reason above.
+    - **It never leaves the phone and never becomes a routine.** `progress`
+      carries `{ ex, done[] }` per exercise and nothing else, a snapshot
+      carries no `history`, and `saveAsRoutine` builds from sets. A backup
+      carries it inside `history`; `historyKey` is not over notes, so a
+      restore cannot split one session into two.
 - **Numbers are also a gesture**: touch a kg or reps cell and slide up or down
   to step it. The gesture itself lives in `components/num-drag.tsx` — it is
   shared with the setup tour's profile step, which is where a first-run user now

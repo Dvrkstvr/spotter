@@ -70,6 +70,7 @@ import {
   SEC_STEP,
   useNumberDrag,
 } from '@/components/num-drag';
+import { lastExNote } from '@/data/ex-notes';
 import { buzz } from '@/data/haptics';
 import { Strings } from '@/data/i18n';
 import {
@@ -151,6 +152,8 @@ export function SessionOverlay() {
   const [markAt, setMarkAt] = useState<{ i: number; j: number; write?: boolean } | null>(
     null
   );
+  // Which exercise's own note is open — an index into `session.list`.
+  const [exNoteAt, setExNoteAt] = useState<number | null>(null);
   // A number being dragged owns the gesture; the list must not scroll under it.
   const [scrubbing, setScrubbing] = useState(false);
   // Whether the keyboard is up. Only the tips read it: someone typing has
@@ -692,6 +695,7 @@ export function SessionOverlay() {
                               tipDone('mark');
                               setMarkAt({ i: k, j, write });
                             }}
+                            onExNote={() => setExNoteAt(k)}
                           />
                         </View>
                       ))}
@@ -713,6 +717,7 @@ export function SessionOverlay() {
                       tipDone('mark');
                       setMarkAt({ i, j, write });
                     }}
+                    onExNote={() => setExNoteAt(i)}
                   />
                 )}
 
@@ -802,6 +807,27 @@ export function SessionOverlay() {
       {/* Guarded on the index still being there: Add set can't shrink the list,
           but the buddy's copy of a routine can, and a sheet opened over a set
           that no longer exists would be a sheet with nothing behind it. */}
+      {/* Guarded like the mark sheet: the buddy's copy of a routine can
+          shrink the list under an open sheet. */}
+      {exNoteAt !== null && list[exNoteAt] && (
+        <ExNoteSheet
+          exName={(() => {
+            const m = ex(list[exNoteAt].ex);
+            return m ? exInfo(m).text : list[exNoteAt].ex;
+          })()}
+          value={list[exNoteAt].note ?? ''}
+          onChange={(v) =>
+            mutSession(exNoteAt, (e) => {
+              // Emptied is absent, so a note cleared here leaves the exercise
+              // exactly as it was before one was started.
+              if (v.trim()) e.note = v;
+              else delete e.note;
+            })
+          }
+          onClose={() => setExNoteAt(null)}
+        />
+      )}
+
       {markAt && list[markAt.i] && markAt.j < list[markAt.i].sets.length && (
         <MarkSheet
           n={setNumberOf(list[markAt.i].sets, markAt.j)}
@@ -943,6 +969,7 @@ function Ledger({
   showAdd,
   onScrub,
   onMark,
+  onExNote,
 }: {
   /** index into `session.list` — every write here goes through it */
   i: number;
@@ -959,6 +986,8 @@ function Ledger({
   showAdd?: boolean;
   onScrub: (on: boolean) => void;
   onMark: (j: number, write?: boolean) => void;
+  /** open the exercise's own note — see `ExNoteSheet` */
+  onExNote: () => void;
 }) {
   const styles = useThemed(sheet);
   const c = useColors();
@@ -1246,7 +1275,99 @@ function Ledger({
           )}
         </View>
       )}
+
+      <ExNoteLine entry={entry} onPress={onExNote} />
     </View>
+  );
+}
+
+/**
+ * The exercise's own note, under its ledger: the set notes' grammar, one scope
+ * up.
+ *
+ * - **Nothing ticked, nothing drawn.** An exercise you haven't started has no
+ *   day to be a note about; an offer standing on it is furniture.
+ * - **Some sets ticked: the quiet offer.** Findable, not asking.
+ * - **Every set done: it asks**, in accent — the same moment and the same
+ *   register as the set strip, which is asking about the last set a few lines
+ *   up. Two questions for a beat, accepted on purpose: they sit in different
+ *   places and ask different things, and the set strip leaves the moment it is
+ *   answered. Holding this one back until the set was judged would mean never
+ *   asking anyone who doesn't judge sets.
+ * - **Words written: the words**, which are also the way back in.
+ *
+ * No fill and no dash, like every line in the note slot: dashed means *this one
+ * is held* at three sites.
+ */
+function ExNoteLine({ entry, onPress }: { entry: SessionExercise; onPress: () => void }) {
+  const styles = useThemed(sheet);
+  const c = useColors();
+  const { L } = useStore();
+  const words = entry.note?.trim();
+  const any = entry.sets.some((x) => x.done);
+  const all = entry.sets.length > 0 && entry.sets.every((x) => x.done);
+  if (!words && !any) return null;
+
+  return (
+    <Pressable onPress={onPress} style={styles.exNoteLine}>
+      <Icon
+        d={MARK_D.note}
+        size={12}
+        color={words || all ? c.accent400 : c.neutral600}
+        strokeWidth={2.2}
+      />
+      <Text
+        style={[
+          styles.markLineText,
+          words ? styles.markLineOwn : all ? styles.markLineAsk : styles.markLineAdd,
+        ]}
+        numberOfLines={words ? 3 : 1}
+      >
+        {words ?? (all ? `${L.exNoteAsk} ›` : L.exNoteAdd)}
+      </Text>
+    </Pressable>
+  );
+}
+
+/**
+ * Writing the exercise's note. `MarkSheet` without the verdicts: a verdict is
+ * about *a weight*, and an exercise holds three to five of those, so there is
+ * nothing for heavier or lighter to mean at this scope — only words.
+ *
+ * The keyboard comes up with it, because words are the only thing it is for.
+ * It writes on every keystroke, like the mark sheet; nothing here needs a Save,
+ * and emptying the box is how a note is cleared.
+ */
+function ExNoteSheet({
+  exName,
+  value,
+  onChange,
+  onClose,
+}: {
+  exName: string;
+  value: string;
+  onChange: (v: string) => void;
+  onClose: () => void;
+}) {
+  const styles = useThemed(sheet);
+  const { L } = useStore();
+  useBackClose(onClose);
+
+  return (
+    <Sheet zIndex={84} maxHeight="70%" onClose={onClose}>
+      <H4>{exName}</H4>
+      <Field label={L.exNoteLabel} style={styles.markField}>
+        <Input
+          value={value}
+          placeholder={L.exNotePlaceholder}
+          autoFocus
+          onChangeText={onChange}
+          multiline
+          style={styles.markInput}
+        />
+      </Field>
+      <Btn variant="secondary" block label={L.close} style={styles.markClose} onPress={onClose} />
+    </Sheet>
   );
 }
 
@@ -1466,10 +1587,22 @@ function LastNotes({ id }: { id: string }) {
   const rows = (s.lastMarks[id] ?? [])
     .map((m, i) => ({ m, i }))
     .filter((r): r is { m: MarkNote; i: number } => !!r.m);
-  if (!rows.length) return null;
+  // What you said about the exercise as a whole — first, because it is about
+  // all of what follows rather than one row of it. Read out of the diary, off
+  // the session `lastLog` names; see `lastExNote`.
+  const whole = lastExNote(s.history, s.lastLog[id], id);
+  if (!rows.length && !whole) return null;
 
   return (
     <View style={styles.lastNotes}>
+      {whole && (
+        <View style={styles.lastNote}>
+          <Icon d={MARK_D.note} size={12} color={c.neutral500} strokeWidth={2.2} />
+          <Text style={styles.lastNoteText} numberOfLines={3}>
+            {L.markLastTime.replace('{t}', whole.note)}
+          </Text>
+        </View>
+      )}
       {rows.map(({ m, i }) => (
         <View key={i} style={styles.lastNote}>
           <Icon d={MARK_D[m.mark]} size={12} color={c.neutral500} strokeWidth={2.2} />
@@ -3180,6 +3313,8 @@ const sheet = themed(() => ({
    * it is exactly as tall as the line it replaces; the chips' reach is `slop`
    * rather than padding for the same reason.
    */
+  /** The exercise's own note line — `markLine` with room above the add row. */
+  exNoteLine: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, paddingLeft: 2 },
   markStrip: { flexDirection: 'row', alignItems: 'center', gap: 16, marginTop: 5, paddingLeft: 2 },
   markChip: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   markChipText: { fontFamily: font.regular, fontSize: 11, color: color.neutral300 },

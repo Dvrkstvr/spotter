@@ -87,6 +87,11 @@ export const DICT = {
     markStripNote: 'Note…',
     // Judged and nothing said yet — the reason is what a verdict is missing.
     addWords: 'Add a few words',
+    // The exercise's own note, one scope up from a set's: offered once a set
+    // is ticked, asked once they all are. The ask has no name in it — the
+    // exercise is the heading right above.
+    exNoteAdd: '+ Exercise note', exNoteAsk: 'How did it go?',
+    exNoteLabel: 'About this exercise today', exNotePlaceholder: 'Energy, a machine taken, what to change next week…',
     holdAddSet: 'Hold to add a set', startNow: 'Start now', restLeftLabel: 'Rest · {t}',
     holdNext: 'Hold for the next exercise',
     // Two sets that share one rest — see `data/superset.ts`. `dropAfter` and
@@ -657,6 +662,8 @@ export const DICT = {
     addNote: '+ Notiz',
     markStripNote: 'Notiz…',
     addWords: 'Ein paar Worte dazu',
+    exNoteAdd: '+ Notiz zur Übung', exNoteAsk: 'Wie lief’s?',
+    exNoteLabel: 'Zu dieser Übung heute', exNotePlaceholder: 'Energie, Gerät besetzt, was du nächste Woche änderst…',
     holdAddSet: 'Für einen neuen Satz halten', startNow: 'Jetzt starten', restLeftLabel: 'Pause · {t}',
     holdNext: 'Für die nächste Übung halten',
     // Satz durchgehend, wie überall sonst: Dropsatz, Supersatz, „Direkt nach
