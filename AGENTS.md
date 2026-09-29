@@ -1789,12 +1789,41 @@ Keep these; they're decisions, not drift. Each is commented at its site.
     for the whole-unit one — reps, seconds of a hold, minutes of a run. Half a
     kilo is small enough that 12px still lands where you meant; a whole rep on
     the same distance turns a careful nudge into a lottery.
+  - **A hold's seconds are the one unit too small to drag one at a time, so
+    they get two grids.** An aiming drag steps `SEC_STEP` (5 s), and above
+    `COARSE_ON` the same cell snaps to `SEC_COARSE` — whole minutes — until the
+    finger drops under `COARSE_OFF`. At 1 s a step a two-minute plank was 2400px
+    of travel, and holds are timed in minutes and quarters of them anyway.
+    Calvin's call on 5 over 15: the sweep now covers the distance, so the fine
+    grid only has to aim, and 15 cannot say a 40 s hold. Four things hold it
+    together:
+    - **The grid changes and the rate does not.** Travel is still `step` per
+      `px` times the gain, so the cell feels like every other one; a sweep just
+      has fewer figures it can land on.
+    - **Two thresholds, not one**, because a finger's velocity is noisy frame to
+      frame and a single line flickers 120 / 125 through the middle of a sweep.
+    - **Dropping back to the fine grid settles from the figure on screen.** A
+      sweep showing 120 may be carrying 127 behind it, and the fine grid would
+      otherwise open on a 125 nobody dragged to.
+    - **`emit` never steps against the finger.** Nearest-rounding onto a grid
+      the figure is off can: 37 s swept down is 30 on its way, which rounds to
+      the minute *above*. Invisible at half a kilo, a wrong-way jump at a
+      minute — so a step against the travel is not written. A glide keeps the
+      grid it was released on and the direction it was thrown in.
+
+    Typing still takes any second you like; the grid is the drag's. The
+    `duration` and `distance` minutes stay on `step` 1 with no coarse grid —
+    they are stored whole, and seconds there would be a change of stored unit,
+    which the measure rule forbids.
   - **The glide is cancelled by touching the cell, and by nothing else having
     to know.** `stopGlide` is the one path (unmount included, via an effect
     cleanup), and it answers whether there *was* one — which is what makes the
     touch that caught it count as having done something, so it doesn't also open
     the keyboard on the way up. It deliberately does not buzz: `buzz.step`
     reports a figure moving under your finger, and by then your finger is off.
+    The same cleanup hands the list its scroll back if the cell unmounts
+    mid-drag, since `onFinalize` is not promised to a detector that is gone —
+    and a list left unscrollable is a failure nothing on the screen explains.
   - **The cell is `box-only` always, focused or not, and that is
     load-bearing.** A number cell is a `TextInput`, and Android's
     `ReactEditText` answers every ACTION_DOWN with

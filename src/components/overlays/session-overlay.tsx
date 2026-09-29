@@ -58,6 +58,8 @@ import {
   DragDemo,
   PX_PER_REP,
   PX_PER_STEP,
+  SEC_COARSE,
+  SEC_STEP,
   useNumberDrag,
 } from '@/components/num-drag';
 import { buzz } from '@/data/haptics';
@@ -970,7 +972,8 @@ function Ledger({
   const c = useColors();
   const { s, L, patch, ex, exInfo, gInfo, kInfo, setup, mutSession, tipDone } = useStore();
   const meta = ex(entry.ex);
-  const units = unitsFor(measureOf(meta), L);
+  const measure = measureOf(meta);
+  const units = unitsFor(measure, L);
 
   /**
    * Where a drop would go: immediately after the set you just lifted, which is
@@ -1112,6 +1115,7 @@ function Ledger({
           lines={chain.ids.map((j) => ({ j, set: entry.sets[j] }))}
           liveJ={liveJ}
           single={units.single}
+          measure={measure}
           units={units}
           waiting={chain.ids.includes(liveJ) ? waiting : null}
           asking={chain.ids.includes(liveJ) ? asking : null}
@@ -1903,6 +1907,7 @@ function NumCell({
   value,
   ghost,
   step,
+  coarse,
   px,
   live,
   warn,
@@ -1916,6 +1921,8 @@ function NumCell({
   /** last time's figure — where a drag starts from when the cell is empty */
   ghost: string;
   step: number;
+  /** the grid a sweep snaps to — only a hold's seconds have one; see `SEC_COARSE` */
+  coarse?: number;
   /** travel per step at aiming speed — `PX_PER_STEP` or the coarser `PX_PER_REP` */
   px: number;
   live: boolean;
@@ -1996,6 +2003,7 @@ function NumCell({
     value,
     ghost,
     step,
+    coarse,
     px,
     onText,
     onScrub,
@@ -2155,6 +2163,7 @@ function SetLine({
   drop,
   set,
   single,
+  measure,
   live,
   held,
   demo,
@@ -2183,6 +2192,8 @@ function SetLine({
   set: LoggedSet;
   /** `duration` — one wide field instead of two, and no weight to walk to */
   single: boolean;
+  /** what the two cells mean — a `time` hold's right cell drags on a grid of its own */
+  measure: Measure;
   /** the set you're on — raised, with numbers at thumb size */
   live: boolean;
   /** live, but not yours yet: your own rest, their turn, or an open question */
@@ -2339,10 +2350,13 @@ function SetLine({
               inputRef={repsRef}
               value={set.reps}
               ghost={ghost.r}
-              step={1}
               // The whole-unit column, whichever unit it is: reps, seconds of a
               // hold, minutes of a run. All of them are the bigger fact, and
-              // all of them get the longer travel.
+              // all of them get the longer travel. A hold's seconds are the one
+              // unit too small to drag one at a time, so they step five and
+              // snap to whole minutes in a sweep — see `SEC_STEP`.
+              step={measure === 'time' ? SEC_STEP : 1}
+              coarse={measure === 'time' ? SEC_COARSE : undefined}
               px={PX_PER_REP}
               // The one cell a refusal can be about: the left one is allowed
               // to be empty, this one is what makes a set a set.
@@ -2439,6 +2453,7 @@ function SetStack({
   lines,
   liveJ,
   single,
+  measure,
   units,
   waiting,
   asking,
@@ -2461,6 +2476,7 @@ function SetStack({
   /** the row index of the live set, or -1 */
   liveJ: number;
   single: boolean;
+  measure: Measure;
   /** the exercise's units, for writing a drop's delta in the right one */
   units: { left: string; right: string; single: boolean };
   waiting: Waiting | null;
@@ -2539,6 +2555,7 @@ function SetStack({
                 drop={j !== head ? fell(set) : null}
                 set={set}
                 single={single}
+                measure={measure}
                 live={j === liveJ}
                 held={held}
                 demo={j === liveJ && !!demo}
