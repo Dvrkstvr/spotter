@@ -53,7 +53,15 @@ import { FullScreen, Sheet } from '@/components/sheet';
 import { Tip } from '@/components/tip';
 import type { Bid } from '@/data/buddy-sync';
 import { FIRST_UPS } from '@/data/buddy-sync';
-import { isSingle, MarkNote, Measure, measureOf, SET_MARKS, SetMark } from '@/data/exercises';
+import {
+  blankOf,
+  isSingle,
+  MarkNote,
+  Measure,
+  measureOf,
+  SET_MARKS,
+  SetMark,
+} from '@/data/exercises';
 import {
   DragDemo,
   PX_PER_REP,
@@ -138,7 +146,11 @@ export function SessionOverlay() {
   const [overview, setOverview] = useState(false);
   // Which set has the mark sheet open. Both indexes, because a superset puts
   // two exercises on the screen and a bare row number would be ambiguous.
-  const [markAt, setMarkAt] = useState<{ i: number; j: number } | null>(null);
+  // `write` is how the sheet was asked for: from the words prompt or the
+  // strip's ✎, the keyboard comes up with it — see `MarkSheet`'s `write`.
+  const [markAt, setMarkAt] = useState<{ i: number; j: number; write?: boolean } | null>(
+    null
+  );
   // A number being dragged owns the gesture; the list must not scroll under it.
   const [scrubbing, setScrubbing] = useState(false);
   // Whether the keyboard is up. Only the tips read it: someone typing has
@@ -676,9 +688,9 @@ export function SessionOverlay() {
                             demo={!!live && live.i === k && showTip === 'drag'}
                             showAdd={k === addUnder}
                             onScrub={setScrubbing}
-                            onMark={(j) => {
+                            onMark={(j, write) => {
                               tipDone('mark');
-                              setMarkAt({ i: k, j });
+                              setMarkAt({ i: k, j, write });
                             }}
                           />
                         </View>
@@ -697,9 +709,9 @@ export function SessionOverlay() {
                     demo={!!live && showTip === 'drag'}
                     showAdd
                     onScrub={setScrubbing}
-                    onMark={(j) => {
+                    onMark={(j, write) => {
                       tipDone('mark');
-                      setMarkAt({ i, j });
+                      setMarkAt({ i, j, write });
                     }}
                   />
                 )}
@@ -796,6 +808,7 @@ export function SessionOverlay() {
           isDrop={!!list[markAt.i].sets[markAt.j].link}
           after={setNumberOf(list[markAt.i].sets, markAt.j - 1)}
           removeLabel={removeSetLabel(list[markAt.i].sets, markAt.j, L)}
+          write={!!markAt.write}
           set={list[markAt.i].sets[markAt.j]}
           exName={(() => {
             const m = ex(list[markAt.i].ex);
@@ -908,27 +921,6 @@ const removeSetLabel = (sets: LoggedSet[], j: number, L: Strings) => {
 };
 
 /**
- * **A logged set whose reps reach zero stops being logged.** Written on the
- * draft, after whatever just changed the cell.
- *
- * The tick refuses to write a row with nothing in the right-hand cell; a row
- * that is *already* ticked can be emptied down to the same nothing afterwards,
- * and the two have to answer alike or the rule only ever held for sets you
- * had not lifted yet. So the tick comes off rather than the edit being
- * blocked — blocking cannot be done kindly, because the cell is a text field
- * and an empty string is the first keystroke of every retype: refusing it
- * would mean never being able to clear a 12 to make it an 8. And it is the
- * gentler answer besides, since the way back is the tap it always was.
- *
- * One reading of it, because there are three doors into that cell — typing,
- * dragging, and copying the ghost onto the row — and a rule kept at two of
- * them is a rule for two of them.
- */
-const keepLogged = (cur: LoggedSet) => {
-  if (cur.done && !num(cur.reps, 0)) cur.done = false;
-};
-
-/**
  * The column header, the rows, and the two held buttons under them — for one
  * exercise, drawn once on an ordinary screen and twice inside a superset.
  *
@@ -966,7 +958,7 @@ function Ledger({
   demo?: boolean;
   showAdd?: boolean;
   onScrub: (on: boolean) => void;
-  onMark: (j: number) => void;
+  onMark: (j: number, write?: boolean) => void;
 }) {
   const styles = useThemed(sheet);
   const c = useColors();
@@ -985,6 +977,17 @@ function Ledger({
    * off a set that hasn't happened is not a thing to offer.
    */
   const dropAt = liveJ >= 0 ? liveJ : entry.sets.length;
+
+  /**
+   * The line you last finished, which is where the verdict strip is drawn.
+   *
+   * The furthest ticked row rather than `dropAt - 1`, because in a superset
+   * the live row is in the *other* half: `liveJ` is -1 here while this half's
+   * first set is the thing you have just put down. It is -1 before anything is
+   * ticked. `SetStack` draws the strip only once that set's whole chain is
+   * done, so a set still dropping is asked about when it has finished.
+   */
+  const fresh = entry.sets.reduce((at, x, j) => (x.done ? j : at), -1);
 
   /**
    * The last tick this ledger turned down, as a row and a count.
@@ -1129,29 +1132,32 @@ function Ledger({
           // Opening the sheet is the whole of what the tip was for — it
           // teaches what the line does, not where it is — and what you then
           // decide about the set is your business. Every way in lands here:
-          // the `+ Note` line, your own note line, and the index cell.
+          // the strip's ✎, the words prompt, the `+ Note` line, your own note
+          // line, and the index cell.
           onMark={onMark}
+          fresh={chain.ids.includes(fresh) ? fresh : -1}
+          // The strip's verdicts write here, without the sheet — the same
+          // write `onPick` makes, and the same lesson the tip is teaching.
+          onVerdict={(j, m) => {
+            tipDone('mark');
+            mutSession(i, (e) => {
+              e.sets[j].mark = m;
+            });
+          }}
           onCopy={(j, w, r) => {
             tipDone('ghost');
             mutSession(i, (e) => {
               e.sets[j].w = w;
               e.sets[j].reps = r;
-              // The third door, and the one nobody would go looking for: a
-              // ghost with no figure in it, copied onto a set already ticked.
-              keepLogged(e.sets[j]);
             });
           }}
           // The refused tick's answer, drawn on the line it is about.
           warn={refused}
+          // Every write here is to an open line: a ticked one draws its
+          // figures as text and its ghost inert (`LockedCell`), so a logged
+          // set cannot be edited down to the `× 0` the tick refuses.
           onW={(j, v) => mutSession(i, (e) => { e.sets[j].w = v; })}
-          // Typing and dragging are two of `keepLogged`'s three doors — the
-          // clamp at zero is the drag's own end of the same edit.
-          onReps={(j, v) =>
-            mutSession(i, (e) => {
-              e.sets[j].reps = v;
-              keepLogged(e.sets[j]);
-            })
-          }
+          onReps={(j, v) => mutSession(i, (e) => { e.sets[j].reps = v; })}
           /* The block's one tick, and it moves one line at a time.
              Logging is `logSet`, which is also what Enter on the reps field
              runs — the box used to carry a second copy of the
@@ -1265,12 +1271,20 @@ function MarkSheet({
   set,
   exName,
   removeLabel,
+  write,
   onClose,
   onPick,
   onNote,
   onLink,
   onRemove,
 }: {
+  /**
+   * Opened to write in — from the words prompt or the strip's ✎ — so the
+   * keyboard comes up with the sheet. Opened from the set number it doesn't:
+   * that way in is as likely to be about the verdict, the link or removing the
+   * set, and a keyboard over those is in the way of all three.
+   */
+  write: boolean;
   /** the number of the set this row belongs to — `setNumberOf`, not the row */
   n: number;
   /** a line of the set above rather than the head of one */
@@ -1365,6 +1379,7 @@ function MarkSheet({
         <Input
           value={set.note ?? ''}
           placeholder={L.markNotePlaceholder}
+          autoFocus={write}
           onChangeText={onNote}
           multiline
           style={styles.markInput}
@@ -2046,6 +2061,33 @@ function NumCell({
   );
 }
 
+/**
+ * A ticked line's figure: the number it was logged with, as text.
+ *
+ * A logged set is a record, and a record drawn as a field invites the edit
+ * nobody meant — a drag that started as a scroll, a stray keystroke into a set
+ * finished three minutes ago. So it is not a field. The way back to one is
+ * the tick, which is also the only way a set was ever taken back; a tap here
+ * does nothing, because a tap that edited would be a second way in, and one
+ * that opened the mark sheet would answer a question about the number with a
+ * sheet about something else.
+ *
+ * It keeps `NumCell`'s footprint exactly — the same minimum height, padding
+ * and a border that is there and transparent — so ticking a set moves nothing
+ * on the row, and `inputW` / `flyDx` still describe it. A ticked line is
+ * never the live one, so only the resting metrics are needed.
+ */
+function LockedCell({ value, style }: { value: string; style?: StyleProp<ViewStyle> }) {
+  const styles = useThemed(sheet);
+  return (
+    <View style={[style, styles.locked]}>
+      <Text style={styles.lockedText} numberOfLines={1}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
 /** Whatever is standing between you and this set — see `waiting` above. */
 type Waiting = {
   /** the set isn't yours yet: your own rest, or their turn. Dashes the box. */
@@ -2318,14 +2360,25 @@ function SetLine({
                 the left for *go lighter next time*, and two of them meaning
                 two things on one line is worse than none. The minus already
                 says which way it went. */}
-            <Pressable onPress={copy} style={styles.colPrev}>
+            {/* Inert on a ticked line, for the reason its cells are text: a
+                copy is the third way into a figure, and a logged set has
+                none. */}
+            <Pressable onPress={copy} disabled={set.done} style={styles.colPrev}>
               {drop ? (
                 <Text style={styles.dropText}>{drop}</Text>
               ) : (
                 <Text style={styles.prevText}>{prevLabel(set.prev, single)}</Text>
               )}
             </Pressable>
-            {!single && (
+            {/* A ticked line is a record, so its figures are text — see
+                `LockedCell`. The way back to a field is the tick, the same tap
+                that took it away. A focused cell that locks under Enter needs
+                no blur of its own: RN's `TextInput` blurs itself on unmount
+                when it held focus, which takes the keyboard down with it. */}
+            {!single && set.done && (
+              <LockedCell style={styles.colFlex} value={set.w || blankOf(measure)} />
+            )}
+            {!single && !set.done && (
               <NumCell
                 style={styles.colFlex}
                 live={live}
@@ -2344,29 +2397,33 @@ function SetLine({
                 onSubmitEditing={() => repsRef.current?.focus()}
               />
             )}
-            <NumCell
-              style={styles.colFlex}
-              live={live}
-              inputRef={repsRef}
-              value={set.reps}
-              ghost={ghost.r}
-              // The whole-unit column, whichever unit it is: reps, seconds of a
-              // hold, minutes of a run. All of them are the bigger fact, and
-              // all of them get the longer travel. A hold's seconds are the one
-              // unit too small to drag one at a time, so they step five and
-              // snap to whole minutes in a sweep — see `SEC_STEP`.
-              step={measure === 'time' ? SEC_STEP : 1}
-              coarse={measure === 'time' ? SEC_COARSE : undefined}
-              px={PX_PER_REP}
-              // The one cell a refusal can be about: the left one is allowed
-              // to be empty, this one is what makes a set a set.
-              warn={warn}
-              onText={onReps}
-              onScrub={onScrub}
-              keyboardType="number-pad"
-              returnKeyType="done"
-              onSubmitEditing={onLog}
-            />
+            {set.done ? (
+              <LockedCell style={styles.colFlex} value={set.reps} />
+            ) : (
+              <NumCell
+                style={styles.colFlex}
+                live={live}
+                inputRef={repsRef}
+                value={set.reps}
+                ghost={ghost.r}
+                // The whole-unit column, whichever unit it is: reps, seconds of a
+                // hold, minutes of a run. All of them are the bigger fact, and
+                // all of them get the longer travel. A hold's seconds are the one
+                // unit too small to drag one at a time, so they step five and
+                // snap to whole minutes in a sweep — see `SEC_STEP`.
+                step={measure === 'time' ? SEC_STEP : 1}
+                coarse={measure === 'time' ? SEC_COARSE : undefined}
+                px={PX_PER_REP}
+                // The one cell a refusal can be about: the left one is allowed
+                // to be empty, this one is what makes a set a set.
+                warn={warn}
+                onText={onReps}
+                onScrub={onScrub}
+                keyboardType="number-pad"
+                returnKeyType="done"
+                onSubmitEditing={onLog}
+              />
+            )}
             {/* The tick belongs to the *set*, so `SetStack` draws one over
                 the block. What stays here is its footprint — same width, same
                 height — because `inputW` and `flyDx` above are written out of
@@ -2468,6 +2525,8 @@ function SetStack({
   onLog,
   onScrub,
   onMark,
+  fresh,
+  onVerdict,
 }: {
   /** the set's number — its position among chains, never among rows */
   n: number;
@@ -2493,7 +2552,11 @@ function SetStack({
   onToggle: () => void;
   onLog: (j: number) => void;
   onScrub: (on: boolean) => void;
-  onMark: (j: number) => void;
+  onMark: (j: number, write?: boolean) => void;
+  /** the line you last finished, when it is in this set — else -1 */
+  fresh: number;
+  /** a verdict picked off the strip, without the sheet */
+  onVerdict: (j: number, m: SetMark) => void;
 }) {
   const styles = useThemed(sheet);
   const c = useColors();
@@ -2578,23 +2641,64 @@ function SetStack({
         </View>
 
         {/* Words already written, on the line they are about — then the way in,
-            once. See `offerAt` for why the offer is not drawn per line. */}
+            once. See `offerAt` for why the offer is not drawn per line, and
+            `fresh` for the one set that is asked rather than offered. */}
         {lines.map(({ j, set }) =>
           set.mark && set.note?.trim() ? (
-            <Pressable key={j} onPress={() => onMark(j)} style={styles.markLine}>
+            <Pressable key={j} onPress={() => onMark(j, true)} style={styles.markLine}>
               <Icon d={MARK_D[set.mark]} size={12} color={c.accent400} strokeWidth={2.2} />
               <Text style={[styles.markLineText, styles.markLineOwn]} numberOfLines={2}>
                 {set.note.trim()}
               </Text>
             </Pressable>
+          ) : j === fresh && done && !set.mark ? (
+            /* The set you just put down, asked about while you are resting from
+               it — the one moment the verdict is both fresh and cheap. The
+               four answers are on the glass, so a verdict is one tap rather
+               than open, pick, close; the ✎ opens the sheet with the keyboard
+               already up. Once per exercise and only here: on every ticked set
+               this would be a ledger of questions, and older sets keep the
+               quiet offer below.
+               Accent, because it is the question the screen is asking right
+               now — but no fill and above all no dash: dashed means *this one
+               is held* at three sites. The chips are glyph-sized, so they take
+               `slop` like every other small control, and the strip is exactly
+               as tall as the `+ Note` line it stands in for, so a tick moves
+               the list no further than it did. */
+            <View key={j} style={styles.markStrip}>
+              {SET_MARKS.map((m) => (
+                <Pressable
+                  key={m}
+                  accessibilityRole="button"
+                  accessibilityLabel={markLabel(m, L)}
+                  hitSlop={slop}
+                  onPress={() => (m === 'note' ? onMark(j, true) : onVerdict(j, m))}
+                  style={styles.markChip}
+                >
+                  <Icon d={MARK_D[m]} size={12} color={c.accent400} strokeWidth={2.2} />
+                  <Text style={styles.markChipText} numberOfLines={1}>
+                    {m === 'note' ? L.markStripNote : markLabel(m, L)}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          ) : j === fresh && done ? (
+            // Judged and nothing said: the verdict is already in the index
+            // cell, so what is left to ask for is the reason. Words are what
+            // make a verdict usable a week later — *lighter* says what, the
+            // sentence says why.
+            <Pressable key={j} onPress={() => onMark(j, true)} style={styles.markLine}>
+              <Icon d={MARK_D.note} size={12} color={c.accent400} strokeWidth={2.2} />
+              <Text style={[styles.markLineText, styles.markLineAsk]} numberOfLines={1}>
+                {L.addWords} ›
+              </Text>
+            </Pressable>
           ) : j === offerAt ? (
-            // The quietest thing on the screen — dimmer than the ghost figures
-            // beside it, because it is an offer and everything else on the row
-            // is the workout. No fill and above all no dash: dashed means *this
-            // one is held* at three sites, and a hint drawn as a control you
-            // must press and hold is the exact confusion it exists to end.
-            <Pressable key={j} onPress={() => onMark(j)} style={styles.markLine}>
-              <Icon d={MARK_D.note} size={12} color={c.neutral700} strokeWidth={2.2} />
+            // The quiet offer, for sets that are no longer the one you just
+            // finished — still findable, no longer asking. No fill and no dash,
+            // for the strip's reason.
+            <Pressable key={j} onPress={() => onMark(j, true)} style={styles.markLine}>
+              <Icon d={MARK_D.note} size={12} color={c.neutral600} strokeWidth={2.2} />
               <Text style={[styles.markLineText, styles.markLineAdd]} numberOfLines={1}>
                 {L.addNote}
               </Text>
@@ -3063,7 +3167,22 @@ const sheet = themed(() => ({
   markLine: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 5, paddingLeft: 2 },
   markLineText: { flex: 1, fontFamily: font.regular, fontSize: 11, color: color.neutral500 },
   markLineOwn: { color: color.neutral400 },
-  markLineAdd: { color: color.neutral700 },
+  /**
+   * The quiet offer on older sets. One step up from where it started
+   * (`neutral700`), which was dimmer than the ghost figures and read as
+   * decoration: an offer nobody sees is not a quiet offer, it is no offer.
+   */
+  markLineAdd: { color: color.neutral600 },
+  /** The words prompt on the set just judged — asking, so read at text weight. */
+  markLineAsk: { color: color.neutral300 },
+  /**
+   * The verdict strip under the set just finished. `markLine`'s metrics, so
+   * it is exactly as tall as the line it replaces; the chips' reach is `slop`
+   * rather than padding for the same reason.
+   */
+  markStrip: { flexDirection: 'row', alignItems: 'center', gap: 16, marginTop: 5, paddingLeft: 2 },
+  markChip: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  markChipText: { fontFamily: font.regular, fontSize: 11, color: color.neutral300 },
 
   /**
    * Last session's verdicts, hoisted to the top of the exercise.
@@ -3103,6 +3222,28 @@ const sheet = themed(() => ({
   },
   /** While a hold-drag is stepping the number. */
   setInputDragging: { borderColor: color.accent, backgroundColor: wash.accent(10) },
+  /**
+   * A ticked line's figure — `Input`'s box with the box taken away. The
+   * height, padding and border width are `ui.tsx`'s `.input` plus `setInput`
+   * above, and the border stays, transparent, because it is part of the
+   * height: ticking a set must not move the row it is on.
+   */
+  locked: {
+    minHeight: 36,
+    paddingVertical: 6,
+    paddingHorizontal: 2,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    borderRadius: radius.md,
+    justifyContent: 'center',
+  },
+  lockedText: {
+    textAlign: 'center',
+    fontFamily: font.regular,
+    fontSize: 15,
+    color: color.text,
+    fontVariant: ['tabular-nums'],
+  },
 
   /**
    * A set that took more than one line — see `SetStack`.
