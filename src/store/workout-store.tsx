@@ -116,8 +116,12 @@ export type LoggedSet = {
  * entries that happen to be joined, so `progress.list`, `removeSessionEx`, the
  * overview and `totals` all keep reading a list of exercises and only the
  * screen groups them into stops.
+ *
+ * `note` is what you said about the exercise as a whole, as opposed to one set
+ * of it — see `LoggedExercise.note`, which is where it goes at Finish. It rides
+ * in the LIVE keys with the rest of the session, so a process death keeps it.
  */
-export type SessionExercise = { ex: string; sets: LoggedSet[]; with?: 'next' };
+export type SessionExercise = { ex: string; sets: LoggedSet[]; with?: 'next'; note?: string };
 export type Session = { rid: string | null; name: string; list: SessionExercise[] };
 export type Summary = {
   name: string;
@@ -232,6 +236,19 @@ export type LoggedExercise = {
    * cardio and distance totals. Optional ⇒ no `STORAGE_VERSION` bump.
    */
   measure?: Measure;
+  /**
+   * What you said about the exercise as a whole — energy, a machine someone
+   * had, the shoulder, what to change next week. A set's words are about that
+   * set; these are about the day at this station, and there was nowhere to
+   * put them. Trimmed, and written only when there are words, like `marks` —
+   * so every entry that predates it is unchanged and `STORAGE_VERSION` stays 4.
+   *
+   * Next session reads it back out of here rather than out of a `lastMarks`
+   * twin (`lastExNote`): `lastLog[id].date` already names the session to read,
+   * and a key that isn't stored is a key no backup, merge or migration has to
+   * know about.
+   */
+  note?: string;
 };
 /**
  * One finished session: which local day it landed on, from which routine, and
@@ -2556,6 +2573,10 @@ function useWorkoutState() {
             // `load` — every lift, and every entry that predates this, stays
             // exactly as it was.
             ...(measure !== 'load' ? { measure } : {}),
+            // Words about the exercise, when there are any. An exercise with
+            // nothing ticked never reaches this push, and its note goes with
+            // it: a day that didn't happen has nothing to be a note about.
+            ...(e.note?.trim() ? { note: e.note.trim() } : {}),
           });
           lastLog[e.ex] = { date: today, sets: ghostSets };
           // Read off `ghostMarks`, not `marked`: a verdict left on a drop

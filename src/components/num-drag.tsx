@@ -60,6 +60,24 @@ export const GIVE_X = 12;
 export const PX_PER_STEP = 12;
 export const PX_PER_REP = 20;
 /**
+ * The seconds of a hold, which is the one whole-unit column where a whole unit
+ * is too small to drag in. At 1 s a step, a two-minute plank was 2400px of
+ * careful travel, and a hold is timed in minutes and the quarters of them
+ * anyway. So an aiming drag steps `SEC_STEP` and a sweep steps `SEC_COARSE` —
+ * whole minutes, snapped to the minute, which is the figure a sweep is looking
+ * for. Typing still takes any second you like; the grid is the drag's.
+ */
+export const SEC_STEP = 5;
+export const SEC_COARSE = 60;
+/**
+ * Where a drag with a `coarse` grid changes grid. Two thresholds rather than
+ * one, because a finger's velocity is noisy frame to frame: a single line would
+ * flicker the figure between 120 and 125 through the middle of a sweep. On
+ * above `COARSE_ON`, off only once under `COARSE_OFF`.
+ */
+const COARSE_ON = 1200;
+const COARSE_OFF = 700;
+/**
  * How much more a pixel is worth in a sweep than in a nudge. Below `SLOW_V`
  * the travel above is exactly what it says; from there the gain climbs to
  * `MAX_GAIN` at `FAST_V`, and quadratically rather than linearly so that an
@@ -111,6 +129,7 @@ export function useNumberDrag({
   value,
   ghost,
   step,
+  coarse,
   px,
   onText,
   onScrub,
@@ -120,6 +139,12 @@ export function useNumberDrag({
   /** last time's figure — where a drag starts from when the cell is empty */
   ghost: string;
   step: number;
+  /**
+   * The grid a sweep snaps to instead of `step` — `SEC_COARSE` on a hold's
+   * seconds. Absent, a sweep only moves faster on the same grid, which is every
+   * other cell.
+   */
+  coarse?: number;
   /** travel per step at aiming speed — `PX_PER_STEP` or the coarser `PX_PER_REP` */
   px: number;
   onText: (v: string) => void;
@@ -148,13 +173,27 @@ export function useNumberDrag({
   // has already said its piece and must not also open the keyboard on the way
   // up. Written once per touch, in the pan's `onBegin`.
   const caught = useRef(false);
+  // Whether the drag is on the `coarse` grid right now. Decided per frame from
+  // the finger's speed, and kept by a glide from the frame it was released on.
+  const sweep = useRef(false);
+  // Whether this cell has the list's scroll switched off, and the latest
+  // `onScrub` to hand it back through — see the unmount effect below.
+  const scrubbing = useRef(false);
+  const scrubTo = useRef(onScrub);
+  useEffect(() => {
+    scrubTo.current = onScrub;
+  });
 
   // A glide outliving the cell would step a figure into a screen that has moved
   // on. Nothing else has to cancel it: every other way one ends goes through
-  // `stopGlide`.
+  // `stopGlide`. And a cell unmounted mid-drag — a row that stops being a
+  // field under the finger — may never see `onFinalize`, which is what hands
+  // the list its scroll back; a list left unscrollable is the one failure here
+  // nothing on the screen would explain, so the cleanup answers for it.
   useEffect(
     () => () => {
       if (raf.current != null) cancelAnimationFrame(raf.current);
+      if (scrubbing.current) scrubTo.current(false);
     },
     []
   );
@@ -165,10 +204,20 @@ export function useNumberDrag({
    * and never while the clamp at zero is holding it still. That is what keeps a
    * buzz meaning "the number moved", and it also stops a drag writing to the
    * store sixty times a second. Answers whether it wrote.
+   *
+   * `dir` is the way the figure is travelling, and a step against it is not
+   * written. Nearest-rounding onto a grid can do that whenever the figure is
+   * off it: 37 s dragged fast *down* is 30 on its way, which rounds to the
+   * minute *above*. On a grid of half a kilo that was never big enough to see;
+   * on a grid of a minute it would be the figure jumping the wrong way.
    */
-  const emit = () => {
-    const next = fmt(Math.round(raw.current / step) * step);
+  const emit = (dir: number) => {
+    const grid = sweep.current && coarse ? coarse : step;
+    const next = fmt(Math.round(raw.current / grid) * grid);
     if (next === last.current) return false;
+    if (dir !== 0 && Math.sign(num(next, 0) - num(last.current, 0)) === -Math.sign(dir)) {
+      return false;
+    }
     last.current = next;
     stepped.current = true;
     onText(next);
@@ -197,7 +246,7 @@ export function useNumberDrag({
     const dt = at.current === 0 ? 0 : Math.min(0.064, (now - at.current) / 1000);
     at.current = now;
     raw.current = Math.max(0, raw.current + vel.current * dt);
-    emit();
+    emit(vel.current);
     vel.current *= Math.exp(-dt / GLIDE_TAU);
     // There is nothing below zero to coast into, so a downward glide ends at
     // the clamp instead of running its decay out against it.
@@ -232,6 +281,8 @@ export function useNumberDrag({
       last.current = fmt(raw.current);
       lastY.current = 0;
       stepped.current = false;
+      sweep.current = false;
+      scrubbing.current = true;
       setDragging(true);
       onScrub(true);
       if (s.haptics) buzz.grab();
@@ -239,11 +290,25 @@ export function useNumberDrag({
     .onUpdate((g) => {
       const dy = g.translationY - lastY.current;
       lastY.current = g.translationY;
+      if (coarse) {
+        const v = Math.abs(g.velocityY);
+        if (!sweep.current && v > COARSE_ON) sweep.current = true;
+        else if (sweep.current && v < COARSE_OFF) {
+          sweep.current = false;
+          // Settle from the figure on screen, not from the running total
+          // behind it: a sweep showing 120 may be carrying 127, and the fine
+          // grid would otherwise open on a 125 nobody dragged to.
+          raw.current = num(last.current, raw.current);
+        }
+      }
       // Up is more. This frame's pixels are worth `step` per `px` at aiming
       // speed and up to `MAX_GAIN` of that in a sweep — the gain is read per
-      // frame, so one gesture can sweep and then settle.
+      // frame, so one gesture can sweep and then settle. A `coarse` cell moves
+      // at exactly the same rate and only snaps to a coarser grid while it
+      // sweeps: what changes is which figures you can land on, not how far a
+      // pixel carries.
       raw.current = Math.max(0, raw.current - (dy / px) * gainAt(g.velocityY) * step);
-      if (emit() && s.haptics) buzz.step();
+      if (emit(-dy) && s.haptics) buzz.step();
     })
     .onEnd((g, success) => {
       if (!success) return;
@@ -273,6 +338,7 @@ export function useNumberDrag({
     // Fires on release and on cancellation alike, so the list can never be
     // left unscrollable.
     .onFinalize(() => {
+      scrubbing.current = false;
       setDragging(false);
       onScrub(false);
     });

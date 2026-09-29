@@ -1630,9 +1630,8 @@ Keep these; they're decisions, not drift. Each is commented at its site.
   of what a tick may record: both ways in run it, and the box's own inline
   copy of the fill-from-last-time rule is what let the two disagree about an
   untouched drop.
-- **The right-hand figure is what makes a set a set, and the app says so twice
-  — once when you tick, once if you take it away again.** Reps, the seconds of
-  a hold, the minutes of a run. The left one may legitimately end up empty:
+- **The right-hand figure is what makes a set a set, and the tick is where the
+  app says so.** Reps, the seconds of a hold, the minutes of a run. The left one may legitimately end up empty:
   that is how bodyweight and an unrecorded distance are written.
   - **A tick that would record nothing is refused, visibly.** The test used to
     live inside the `patch` updater, whose early return is silent — so the
@@ -1644,20 +1643,38 @@ Keep these; they're decisions, not drift. Each is commented at its site.
     it is the only thing that could have been wrong, and drawn rather than
     written — a line of copy would outlive the moment it explains and settle
     into furniture on the screen working hardest not to have any.
-  - **A logged set whose reps reach zero stops being logged** (`keepLogged`).
-    The same rule from the other side: without it the tick's refusal only ever
-    held for sets you had not lifted yet, and clearing the cell afterwards
-    still filed the `× 0`. It is one reading over three doors — typing,
-    dragging to the clamp, and copying an empty ghost onto a ticked row — and
-    it unticks rather than blocking the edit, because the cell is a text field
-    and an empty string is the first keystroke of every retype: refusing that
-    would mean never being able to clear a 12 to make it an 8. The way back is
-    the tap it always was.
+  - **A ticked line is a record, so its figures are text** (`LockedCell`).
+    Calvin's call. A logged set drawn as two fields invited the edit nobody
+    meant — a drag that began as a scroll, a keystroke into a set finished
+    three minutes ago — so once a line is ticked its cells stop being
+    `NumCell`s and its ghost stops copying. The way back to a field is the tick,
+    which was already the only way a set is taken back; **a tap on the figure
+    does nothing**, because one that edited would be a second way in and one
+    that opened the mark sheet would answer a question about the number with a
+    sheet about something else. Four things follow:
+    - **`keepLogged` is gone, and so is the problem it solved.** It existed
+      because a ticked set could be emptied down to the `× 0` the tick refuses,
+      through three doors — typing, dragging to the clamp, copying an empty
+      ghost — and it unticked rather than blocked because an empty string is
+      the first keystroke of every retype. All three doors are shut now, so the
+      rule holds by construction rather than by a check at each door.
+    - **It keeps the cell's footprint exactly** — `.input`'s height, padding and
+      a transparent border — so ticking moves nothing on the row and `inputW` /
+      `flyDx` still describe it. A ticked line is never the live one, so only
+      the resting metrics are needed.
+    - **An empty left figure is written `blankOf`** (`BW` / `—`), the way the
+      diary writes it, off the `measure` prop the hold's seconds grid already
+      threads through `SetLine`.
+    - **A cell that locks while focused needs no blur of its own.** Enter on
+      reps logs the set, which unmounts the focused editor — and RN's
+      `TextInput` blurs itself on unmount when it held focus, which takes the
+      keyboard with it. `useNumberDrag`'s unmount cleanup hands the list its
+      scroll back for the same moment mid-drag.
 - **A set can also carry a verdict** (`SetMark`: `up` / `down` / `ok` / `note`)
   — heavier next time, lighter next time, that was the weight, or words. Not in
   the design; the numbers record what you lifted and never what to do about it,
   which by next week is the part you wanted back. The mockup is
-  `design/set-notes-mockup.html`. Seven rules hold it together:
+  `design/set-notes-mockup.html`. These rules hold it together:
   - **The mark lives in the index column, and takes the digit's place.** Which
     set a row is you can count; once you have judged it the judgement is worth
     more in 16px. Taking the slot rather than adding a column is also what
@@ -1700,10 +1717,11 @@ Keep these; they're decisions, not drift. Each is commented at its site.
     carrying a rest countdown or the buddy's turn. `prevMark` stays on
     `LoggedSet` for the mark sheet, which prints last time's verdict for *that*
     set and is per-set correctly.
-  - **The set row has exactly one note slot**: your own words, else — on a set
-    you have *ticked* — the way in (`addNote`), else nothing. **All three
-    arrangements were built and two were tried on the phone**, and the order is
-    worth keeping because the reasoning is:
+  - **The set row has exactly one note slot**: your own words, else — on the
+    set you *just finished* — the verdict strip, else — on any other ticked
+    set — the way in (`addNote`), else nothing. **Four arrangements were built
+    and three were tried on the phone**, and the order is worth keeping because
+    the reasoning is:
     - *The index digit alone* was the original. 16px, unlabelled, and a thing
       you had to already know about — a control you have to be told about is
       one most people never use, and the honest fix for that is the control,
@@ -1718,14 +1736,32 @@ Keep these; they're decisions, not drift. Each is commented at its site.
       become furniture. What it costs is that the way in arrives rather than
       being always there; what it buys is that it arrives on every set you
       could use it on, which is the part the index digit never managed.
+    - *Asked on the set just finished* is where it is now, because the third
+      one was found and not used. `+ Note` was drawn at `neutral700`, dimmer
+      than the ghost figures, and a verdict cost three taps — open, pick,
+      close — while still breathing hard. So the set you last ticked
+      (`fresh` in `Ledger`: the furthest ticked row, not `dropAt - 1`, because
+      in a superset the live row is in the other half) carries the four
+      answers on the glass: ▲ ▼ = are one tap, ✎ opens the sheet with the
+      keyboard already up (`MarkSheet`'s `write`). Once judged without words it
+      asks for the reason instead (`addWords`) — *lighter* says what, the
+      sentence says why. It is drawn only once the set's whole chain is done,
+      so a set still dropping is asked about when it has finished, and it is
+      drawn **once per exercise**: on every ticked set it would be a ledger of
+      questions. Older sets keep `+ Note`, one step brighter (`neutral600`).
+      The strip is `markLine`'s height and its chips take `slop`, so a tick
+      moves the list no further than the old line did.
 
-    It borrows no outline — no fill and above all no dash, for the reason a tip
-    doesn't: dashed means *this one is held* at three sites.
-  - **The `mark` tip was re-aimed rather than joined by a second one.** It used
-    to read *Tap the set number*, which was honest while that was the only way
-    in; with `addNote` on the glass the hidden thing is no longer the control
-    but what it is for — `+ Note` says *note* and says nothing about a verdict,
-    and nothing on the screen says the verdict comes back. So it now teaches
+    Everything in that slot borrows no outline — no fill and above all no
+    dash, for the reason a tip doesn't: dashed means *this one is held* at three
+    sites. The strip is accent because it is the one question the screen is
+    asking right now; the offer is neutral because it isn't.
+  - **The `mark` tip was re-aimed rather than joined by a second one** — twice.
+    It used to read *Tap the set number*, which was honest while that was the
+    only way in; then *Tap + Note*, while that was. With the strip on the glass
+    the hidden thing is no longer the control but what it is for — the chips
+    say *heavier* and *lighter*, and nothing on the screen says the verdict
+    comes back. So it now teaches
     that, and arms from the *first* logged set rather than the second, which is
     both when the line it names is drawn and when there is a set to have an
     opinion about. A second tip would have put two hints on one feature, which
@@ -1742,15 +1778,47 @@ Keep these; they're decisions, not drift. Each is commented at its site.
     nothing else; what you thought of your own set is not the buddy's business.
     A buddy snapshot carries no `history` at all, so the diary copy changes
     nothing about that.
-  - **It stays per set, and there is no per-routine note.** The words ride on a
-    `SetMark`, and `up` / `down` is a verdict about *a weight* — an exercise
-    holds three to five of those, so "heavier" at the exercise level is not a
-    statement. A routine is a template that outlives every session run from it,
-    so a note on one could only be timeless and could never reach a day; the
-    timeless per-exercise slot is already `cueEdits`, and the machine is
-    `setups`. If a *dated* per-exercise note is ever wanted it is
-    `LoggedExercise.note?: string` — additive, so waiting for someone to ask
-    costs nothing.
+  - **Verdicts stay per set, and there is no per-routine note.** `up` /
+    `down` is a verdict about *a weight* — an exercise holds three to five of
+    those, so "heavier" at the exercise level is not a statement. A routine is
+    a template that outlives every session run from it, so a note on one could
+    only be timeless and could never reach a day; the timeless per-exercise
+    slot is already `cueEdits`, and the machine is `setups`.
+  - **The exercise has words of its own, and only words** (`ExNoteLine`,
+    `ExNoteSheet`). This was parked as "wait for someone to ask", and Calvin
+    asked: energy, a machine someone had, the shoulder, what to change next
+    week are about the day at this station, not about one set of it, and there
+    was nowhere to put them. Five things hold it together:
+    - **Two optional fields, no new key.** `SessionExercise.note` while the
+      workout runs — the LIVE keys already persist the session, so a process
+      death keeps it — and `LoggedExercise.note` in the diary, written by
+      `finishSession` trimmed and only when there are words, like `marks`. An
+      exercise with nothing ticked never reaches the diary and its note goes
+      with it. `STORAGE_VERSION` stays 4.
+    - **Last time's is read out of the diary, not a `lastMarks` twin**
+      (`lastExNote` in `data/ex-notes.ts`, tested). `lastLog[id].date` already
+      names the session "last time" means, so the note is that day's entry's —
+      and only that day's: a later session that said nothing hides an older
+      note, which is `lastMarks`'s rule arrived at without a second copy of it.
+      A key that isn't stored is one no backup, merge or migration has to know
+      about. It hoists first in `LastNotes`, above the per-set lines, because it
+      is about everything that follows.
+    - **The line follows the set slot's grammar one scope up.** Nothing ticked,
+      nothing drawn; some ticked, the quiet `+ Exercise note`; all done, it
+      asks in accent (*How did it go?*); words written, the words. When the
+      exercise seals, the last set's strip is asking a few lines above it — two
+      questions for a beat, **accepted on purpose** (Calvin's call): they ask
+      different things in different places and the strip leaves the moment it
+      is answered, where holding this one back until the set was judged would
+      never ask anyone who doesn't judge sets.
+    - **The sheet is words and nothing else**, keyboard up on open, writing on
+      every keystroke, emptied is absent. It is `MarkSheet` without the tiles,
+      for the verdict reason above.
+    - **It never leaves the phone and never becomes a routine.** `progress`
+      carries `{ ex, done[] }` per exercise and nothing else, a snapshot
+      carries no `history`, and `saveAsRoutine` builds from sets. A backup
+      carries it inside `history`; `historyKey` is not over notes, so a
+      restore cannot split one session into two.
 - **Numbers are also a gesture**: touch a kg or reps cell and slide up or down
   to step it. The gesture itself lives in `components/num-drag.tsx` — it is
   shared with the setup tour's profile step, which is where a first-run user now
@@ -1789,12 +1857,41 @@ Keep these; they're decisions, not drift. Each is commented at its site.
     for the whole-unit one — reps, seconds of a hold, minutes of a run. Half a
     kilo is small enough that 12px still lands where you meant; a whole rep on
     the same distance turns a careful nudge into a lottery.
+  - **A hold's seconds are the one unit too small to drag one at a time, so
+    they get two grids.** An aiming drag steps `SEC_STEP` (5 s), and above
+    `COARSE_ON` the same cell snaps to `SEC_COARSE` — whole minutes — until the
+    finger drops under `COARSE_OFF`. At 1 s a step a two-minute plank was 2400px
+    of travel, and holds are timed in minutes and quarters of them anyway.
+    Calvin's call on 5 over 15: the sweep now covers the distance, so the fine
+    grid only has to aim, and 15 cannot say a 40 s hold. Four things hold it
+    together:
+    - **The grid changes and the rate does not.** Travel is still `step` per
+      `px` times the gain, so the cell feels like every other one; a sweep just
+      has fewer figures it can land on.
+    - **Two thresholds, not one**, because a finger's velocity is noisy frame to
+      frame and a single line flickers 120 / 125 through the middle of a sweep.
+    - **Dropping back to the fine grid settles from the figure on screen.** A
+      sweep showing 120 may be carrying 127 behind it, and the fine grid would
+      otherwise open on a 125 nobody dragged to.
+    - **`emit` never steps against the finger.** Nearest-rounding onto a grid
+      the figure is off can: 37 s swept down is 30 on its way, which rounds to
+      the minute *above*. Invisible at half a kilo, a wrong-way jump at a
+      minute — so a step against the travel is not written. A glide keeps the
+      grid it was released on and the direction it was thrown in.
+
+    Typing still takes any second you like; the grid is the drag's. The
+    `duration` and `distance` minutes stay on `step` 1 with no coarse grid —
+    they are stored whole, and seconds there would be a change of stored unit,
+    which the measure rule forbids.
   - **The glide is cancelled by touching the cell, and by nothing else having
     to know.** `stopGlide` is the one path (unmount included, via an effect
     cleanup), and it answers whether there *was* one — which is what makes the
     touch that caught it count as having done something, so it doesn't also open
     the keyboard on the way up. It deliberately does not buzz: `buzz.step`
     reports a figure moving under your finger, and by then your finger is off.
+    The same cleanup hands the list its scroll back if the cell unmounts
+    mid-drag, since `onFinalize` is not promised to a detector that is gone —
+    and a list left unscrollable is a failure nothing on the screen explains.
   - **The cell is `box-only` always, focused or not, and that is
     load-bearing.** A number cell is a `TextInput`, and Android's
     `ReactEditText` answers every ACTION_DOWN with

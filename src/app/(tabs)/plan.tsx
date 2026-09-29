@@ -550,6 +550,19 @@ export default function PlanScreen() {
                               )
                             )}
                           </View>
+                          {/* What was said about the exercise as a whole,
+                              under the sets it is about — the set notes'
+                              greys and glyph, read-only for the same reason:
+                              this is history. Absent on every entry that
+                              predates it. */}
+                          {e.note?.trim() ? (
+                            <View style={styles.logExNote}>
+                              <Icon d={MARK_D.note} size={12} color={c.neutral500} strokeWidth={2.2} />
+                              <Text style={styles.logNote} numberOfLines={4}>
+                                {e.note.trim()}
+                              </Text>
+                            </View>
+                          ) : null}
                         </View>
                       );
                     });
@@ -761,6 +774,8 @@ const sheet = themed(() => ({
   /** The sets run loose and wrap; each carries its own unit, so a day that
       mixes a run, a plank and a bench press still reads straight down. */
   logSets: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 14, rowGap: 2, marginTop: 3 },
+  /** The exercise's own note, under its sets — `logMarked`'s row at full width. */
+  logExNote: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
   logSet: {
     fontFamily: font.regular,
     fontSize: 12,

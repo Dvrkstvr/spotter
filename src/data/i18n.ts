@@ -75,12 +75,23 @@ export const DICT = {
     // short because four of them share a row; the sentence they read as is
     // built by `markLastTime`.
     setLabel: 'Set {n}', markUp: 'Heavier', markDown: 'Lighter', markOk: 'Just right', markNote: 'Note',
-    markNoteLabel: 'Note to yourself', markNotePlaceholder: 'What to remember for next time',
+    markNoteLabel: 'Note to yourself', markNotePlaceholder: 'Grip, form, a twinge, the seat height…',
     markLastTime: 'Last time · {t}', markClear: 'Tap the mark again to clear it',
     // The way in, on a set that has been lifted and has nothing written on it
     // yet. `+ ` because that is how this app writes an action that adds a
     // thing — `+ Add exercise`, `+ Save as routine`.
     addNote: '+ Note',
+    // The set you just finished asks rather than offers: the verdicts sit on
+    // the glass, and this is the fourth chip, which opens the words. The
+    // ellipsis is the promise that there is more behind it than a tap.
+    markStripNote: 'Note…',
+    // Judged and nothing said yet — the reason is what a verdict is missing.
+    addWords: 'Add a few words',
+    // The exercise's own note, one scope up from a set's: offered once a set
+    // is ticked, asked once they all are. The ask has no name in it — the
+    // exercise is the heading right above.
+    exNoteAdd: '+ Exercise note', exNoteAsk: 'How did it go?',
+    exNoteLabel: 'About this exercise today', exNotePlaceholder: 'Energy, a machine taken, what to change next week…',
     holdAddSet: 'Hold to add a set', startNow: 'Start now', restLeftLabel: 'Rest · {t}',
     holdNext: 'Hold for the next exercise',
     // Two sets that share one rest — see `data/superset.ts`. `dropAfter` and
@@ -169,7 +180,7 @@ export const DICT = {
     // what the labelled one is for. `+ Note` says note and nothing about a
     // verdict, and nothing on the screen says it comes back.
     tipMark: 'Say how the set went',
-    tipMarkSub: 'Tap + Note under a logged set — heavier, lighter, just right, or a few words. It’s there next time.',
+    tipMarkSub: 'Under the set you just logged — heavier, lighter, just right, or a few words. It’s there next time.',
     tipSwipe: 'Swipe for the next exercise',
     tipSwipeSub: 'Or open the chip up top and jump to any of them.',
     tipChip: 'The whole workout is behind the chip',
@@ -646,9 +657,13 @@ export const DICT = {
     measureFixed: 'Beim Anlegen festgelegt — eine Änderung würde alles bereits Aufgezeichnete entwerten.',
     lastTime: 'Letztes Mal', addSet: 'Satz hinzufügen', sameAsLast: 'Wie letztes Mal', next: 'Weiter ›', nextExercise: 'Nächste Übung', discard: 'Verwerfen',
     setLabel: 'Satz {n}', markUp: 'Schwerer', markDown: 'Leichter', markOk: 'Genau richtig', markNote: 'Notiz',
-    markNoteLabel: 'Notiz an dich selbst', markNotePlaceholder: 'Was du dir fürs nächste Mal merken willst',
+    markNoteLabel: 'Notiz an dich selbst', markNotePlaceholder: 'Griff, Technik, ein Ziehen, die Sitzhöhe…',
     markLastTime: 'Letztes Mal · {t}', markClear: 'Nochmal tippen entfernt die Markierung',
     addNote: '+ Notiz',
+    markStripNote: 'Notiz…',
+    addWords: 'Ein paar Worte dazu',
+    exNoteAdd: '+ Notiz zur Übung', exNoteAsk: 'Wie lief’s?',
+    exNoteLabel: 'Zu dieser Übung heute', exNotePlaceholder: 'Energie, Gerät besetzt, was du nächste Woche änderst…',
     holdAddSet: 'Für einen neuen Satz halten', startNow: 'Jetzt starten', restLeftLabel: 'Pause · {t}',
     holdNext: 'Für die nächste Übung halten',
     // Satz durchgehend, wie überall sonst: Dropsatz, Supersatz, „Direkt nach
@@ -709,7 +724,7 @@ export const DICT = {
     tipRest: 'Die Pause läuft schon',
     tipRestSub: 'Sie steht auf dem Satz, der als Nächstes dran ist. „Jetzt starten“ kürzt sie ab.',
     tipMark: 'Sag, wie der Satz war',
-    tipMarkSub: 'Tipp + Notiz unter einem abgehakten Satz an — schwerer, leichter, passt, oder ein paar Worte. Nächstes Mal steht’s da.',
+    tipMarkSub: 'Unter dem Satz, den du gerade abgehakt hast — schwerer, leichter, passt, oder ein paar Worte. Nächstes Mal steht’s da.',
     tipSwipe: 'Wisch zur nächsten Übung',
     tipSwipeSub: 'Oder öffne den Chip oben und spring zu jeder beliebigen.',
     tipChip: 'Hinter dem Chip liegt das ganze Training',
