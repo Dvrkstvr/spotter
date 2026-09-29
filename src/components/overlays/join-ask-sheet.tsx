@@ -13,8 +13,8 @@
  */
 import { Text, View } from 'react-native';
 
-import { radio } from '@/data/buddy-radio';
-import { routineClosure } from '@/data/buddy-sync';
+import { hangUp, sendTo } from '@/data/buddy-radio';
+import { type BuddyMessage, routineClosure } from '@/data/buddy-sync';
 import { useBackClose } from '@/hooks/use-back-close';
 import { Sheet } from '@/components/sheet';
 import { themed, useThemed } from '@/design/theme';
@@ -26,10 +26,7 @@ export function JoinAskSheet() {
   const styles = useThemed(sheet);
   const { s, L, patch, routine, rInfo, endPairing } = useStore();
 
-  const send = (payload: object) => {
-    if (radio && s.buddyEndpoint)
-      radio.sendPayload(s.buddyEndpoint, JSON.stringify(payload)).catch(() => {});
-  };
+  const send = (msg: BuddyMessage) => sendTo(s.buddyEndpoint, msg);
 
   // No is the end of the link as well as of the question — a connection that
   // outlived a refusal is exactly the thing this handshake is here to prevent.
@@ -37,13 +34,7 @@ export function JoinAskSheet() {
   // reads it as a drop and comes back to ask again.
   const decline = () => {
     const ep = s.buddyEndpoint;
-    const sent =
-      radio && ep
-        ? radio.sendPayload(ep, JSON.stringify({ v: 1, t: 'joinReply', ok: false })).catch(() => {})
-        : Promise.resolve();
-    sent.then(() => {
-      if (radio && ep) radio.disconnectFrom(ep).catch(() => {});
-    });
+    sendTo(ep, { v: 1, t: 'joinReply', ok: false }).then(() => hangUp(ep));
     endPairing();
   };
   useBackClose(decline);

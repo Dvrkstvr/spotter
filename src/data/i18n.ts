@@ -424,8 +424,34 @@ export const DICT = {
     join: 'Join', notNow: 'Not now',
     pairedBuddies: 'Paired', buddyNearby: 'Nearby', buddyAway: 'Not nearby',
     requestSession: 'Request a session', forgetBuddy: 'Forget this buddy',
-    rejoinWorkout: 'Rejoin the workout',
+    rejoinWorkout: 'Rejoin the workout', inviteToWorkout: 'Invite to this workout',
+    // What is stopping the radio, and the way out — see `RadioLine`. A
+    // statement of what is true rather than a hint, so each names the
+    // mechanism first and what it costs second; the way out is the link on
+    // the end. "Nearby phones" rather than Android's own "nearby devices":
+    // the permission is called something else again on an older phone.
+    radioBluetooth: 'Bluetooth is off — turn it on to find your partner.',
+    radioLocation: 'Location is off — this phone needs it on to find your partner.',
+    radioPermission: 'Android hasn’t allowed the search for nearby phones — allow it to find your partner.',
+    radioBlocked: 'The search for nearby phones isn’t allowed, and Android no longer asks — allow it in the settings.',
+    radioRefused: 'Bluetooth won’t start the search — switch it off and on again.',
+    radioFixAllow: 'Allow ›', radioFixSettings: 'Open settings ›',
+    radioFixBluetooth: 'Bluetooth settings ›', radioFixLocation: 'Location settings ›',
     askSent: 'Asked {name} — waiting for an answer…', askDeclined: '{name} said not right now',
+    // The radio never got through, which is not an answer — so nothing here
+    // says who didn't pick up. What happened, then the way out.
+    askFailed: 'The ask never reached {name} — open Spotter on both phones and ask again.',
+    // A pairing that could not be made or kept — one line per `PairingIssue`.
+    // What happened, then the way out, and never whose phone is to blame: the
+    // way out is "sharing", the word `buddySub` already taught for it.
+    pairStale: 'Your pairing with {name} is out of date — open sharing on both phones and pair again.',
+    pairKnocked: '{name} tried to connect, but the pairing is out of date — open sharing on both phones and pair again.',
+    pairHailed: '{name} wants to pair — open sharing on both phones to confirm the code.',
+    pairUnconfirmed: 'The pairing with {name} wasn’t confirmed — open sharing on both phones and try again.',
+    pairStalled: 'The pairing with {name} didn’t finish — keep the phones close and try again.',
+    pairTheyOld: '{name} needs the newer Spotter — both phones have to run the same version.',
+    pairWeOld: 'This phone needs the newer Spotter — {name} is already on it.',
+    pairAgain: 'Pair again ›',
     joinAskTitle: 'Can I join?', joinAskBody: '{name} would like to join {routine}.',
     joinAskIdleBody: '{name} would like to train with you.',
     letThemIn: 'Let them in', letsTrain: "Let's train",
@@ -943,8 +969,26 @@ export const DICT = {
     join: 'Mitmachen', notNow: 'Jetzt nicht',
     pairedBuddies: 'Gekoppelt', buddyNearby: 'In der Nähe', buddyAway: 'Nicht in der Nähe',
     requestSession: 'Training anfragen', forgetBuddy: 'Diesen Partner vergessen',
-    rejoinWorkout: 'Wieder einsteigen',
+    rejoinWorkout: 'Wieder einsteigen', inviteToWorkout: 'Zum Training einladen',
+    radioBluetooth: 'Bluetooth ist aus — schalt es ein, um deinen Partner zu finden.',
+    radioLocation: 'Der Standort ist aus — dieses Handy braucht ihn, um deinen Partner zu finden.',
+    radioPermission: 'Android hat die Suche nach Handys in der Nähe nicht erlaubt — erlaub sie, um deinen Partner zu finden.',
+    radioBlocked: 'Die Suche nach Handys in der Nähe ist nicht erlaubt, und Android fragt nicht mehr — erlaub sie in den Einstellungen.',
+    radioRefused: 'Bluetooth startet die Suche nicht — schalt es aus und wieder ein.',
+    radioFixAllow: 'Erlauben ›', radioFixSettings: 'Einstellungen öffnen ›',
+    radioFixBluetooth: 'Bluetooth-Einstellungen ›', radioFixLocation: 'Standort-Einstellungen ›',
     askSent: '{name} gefragt — warte auf Antwort…', askDeclined: '{name} sagt: gerade nicht',
+    askFailed: 'Die Anfrage kam bei {name} nicht an — frag nochmal, wenn Spotter auf beiden Handys offen ist.',
+    // Eine Kopplung, die nicht zustande kam oder nicht mehr hält. Erst was
+    // passiert ist, dann der Ausweg — und nie, wessen Handy schuld ist.
+    pairStale: 'Deine Kopplung mit {name} ist veraltet — öffnet das Teilen auf beiden Handys und koppelt neu.',
+    pairKnocked: '{name} wollte sich verbinden, aber die Kopplung ist veraltet — öffnet das Teilen auf beiden Handys und koppelt neu.',
+    pairHailed: '{name} möchte koppeln — öffnet das Teilen auf beiden Handys und bestätigt den Code.',
+    pairUnconfirmed: 'Die Kopplung mit {name} wurde nicht bestätigt — öffnet das Teilen auf beiden Handys und versucht es nochmal.',
+    pairStalled: 'Die Kopplung mit {name} kam nicht zustande — haltet die Handys nah beieinander und versucht es nochmal.',
+    pairTheyOld: '{name} braucht das neuere Spotter — beide Handys müssen dieselbe Version haben.',
+    pairWeOld: 'Dieses Handy braucht das neuere Spotter — {name} hat es schon.',
+    pairAgain: 'Neu koppeln ›',
     joinAskTitle: 'Darf ich mitmachen?', joinAskBody: '{name} möchte bei {routine} mitmachen.',
     joinAskIdleBody: '{name} möchte mit dir trainieren.',
     letThemIn: 'Reinlassen', letsTrain: 'Los geht’s',

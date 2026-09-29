@@ -22,7 +22,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CHECK_D, Icon } from '@/components/icon';
 import { FullScreen } from '@/components/sheet';
 import { useBackClose } from '@/hooks/use-back-close';
-import { hasRadio, radio } from '@/data/buddy-radio';
+import { hasRadio, sendTo } from '@/data/buddy-radio';
 import { connectPeer, scanPeers, sendToPeer } from '@/data/buddy-transport';
 import { BuddyDiff, diffBuddy, SyncItem, syncItemId } from '@/data/buddy-sync';
 import { Strings } from '@/data/i18n';
@@ -92,19 +92,18 @@ export function BuddySyncOverlay() {
     mark(id);
     // Tell the peer the item landed — their "Missing on {name}" row flips to
     // Received without anyone over there touching anything.
-    if (radio && endpoint)
-      radio.sendPayload(endpoint, JSON.stringify({ v: 1, t: 'itemAck', id })).catch(() => {});
+    sendTo(endpoint, { v: 1, t: 'itemAck', id });
   };
 
   const send = (item: SyncItem) => {
     if (!snapshot) return;
     const id = syncItemId(item);
-    if (radio && endpoint) {
+    if (hasRadio && endpoint) {
       // Real: push it over the air; the buddy's phone merges it on arrival.
-      radio
-        .sendPayload(endpoint, JSON.stringify({ v: 1, t: 'item', item }))
-        .then(() => mark(id))
-        .catch(() => {});
+      // A send Nearby refused marks nothing — the row stays a button.
+      sendTo(endpoint, { v: 1, t: 'item', item }).then((ok) => {
+        if (ok) mark(id);
+      });
     } else {
       sendToPeer(snapshot.peer.id, item).then(() => mark(id));
     }

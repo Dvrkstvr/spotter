@@ -20,13 +20,15 @@ import type {
   DraftPayload,
   FirstUp,
   FirstUpChoice,
+  PairingIssue,
   SessionInvite,
   SyncItem,
   TurnChoice,
   TurnMode,
 } from '@/data/buddy-sync';
+import type { JoinSent, NearbyPeer } from '@/data/buddy-link';
 import type { BuddySnapshot } from '@/data/buddy-transport';
-import { mergeFirstUp, mergeTurns, routineClosure } from '@/data/buddy-sync';
+import { endsPairing, mergeFirstUp, mergeTurns, routineClosure } from '@/data/buddy-sync';
 import { mondayISO, todayISO } from '@/data/date';
 import { dlog } from '@/data/diag';
 import { deviceInstallId, randomInstallId } from '@/data/identity';
@@ -46,6 +48,7 @@ import {
   STORAGE_VERSION,
 } from '@/data/migrate';
 import { deletePersisted } from '@/data/photos';
+import type { RadioState } from '@/data/radio-state';
 import {
   anchorFor,
   dropEntries,
@@ -517,8 +520,30 @@ export type State = {
   /** pairing confirmed, snapshot not here yet — it decides if the sync screen opens */
   buddySyncPending: boolean;
   /** live radio state (real transport only; all transient) */
-  nearbyPeers: { endpointId: string; id: string | null; name: string }[];
+  nearbyPeers: NearbyPeer[];
+  /**
+   * What is stopping the radio, if anything — see `data/radio-state.ts`. A
+   * refused start used to be retried for ever and written only to the
+   * diagnostics log, so a phone with Bluetooth off went on saying "Searching…"
+   * and "Not nearby" about a search that was not running. <BuddyRadio> is the
+   * only writer; the roster and the share sheet read it and say which
+   * precondition is missing.
+   *
+   * Transient, and outside `PERSIST` on purpose: it is a reading of this
+   * minute's switches and permissions, and a stored one would be a claim about
+   * a phone as it was the last time the app ran. `ok` also covers "not known
+   * to be stopped" — no radio, the sim, nothing asking for one — which is what
+   * keeps the line off every screen that has no business showing it.
+   */
+  radioState: RadioState;
   buddyEndpoint: string | null;
+  /**
+   * Endpoints a connection request is in flight to. <BuddyRadio> is the only
+   * writer — it mirrors the markers its one request function keeps, each
+   * cleared by the connection's outcome or by its own deadline — so a row
+   * reading *Invite sent* off this cannot outlive the request it describes.
+   */
+  requesting: string[];
   /** a connection awaiting the users' code check — both phones confirm */
   pendingAuth: {
     endpointId: string;
@@ -544,7 +569,7 @@ export type State = {
   /** they asked to train together — their name, awaiting your answer */
   joinAsk: string | null;
   /** your own outstanding ask, and who it went to */
-  joinSent: { to: string; state: 'waiting' | 'declined' } | null;
+  joinSent: JoinSent | null;
   /** whether the live session is shared with the buddy */
   sessionShared: boolean;
   /** who initiated the shared session — ties on turn order go to the host */
@@ -574,6 +599,18 @@ export type State = {
   myBids: Record<string, Bid>;
   /** the buddy tapped Disconnect; a line says so until it's dismissed */
   buddyLeft: string | null;
+  /**
+   * A pairing that could not be made or kept, and why — the radio's refusals
+   * said out loud. Every one of these used to be a line in the diagnostics log
+   * and nothing on the glass: a proof that failed, a request turned away, a
+   * buddy on a build too old to greet. The radio is the only writer
+   * (`failPairing`); a line on the roster, in the share sheet and above the
+   * tab bar reads it, and it goes when it is dismissed, when that buddy is
+   * forgotten, or when a link to them is trusted after all. Transient, like
+   * `buddyLeft`: it is about an attempt, and the attempt does not survive a
+   * restart either.
+   */
+  pairingIssue: { name: string; why: PairingIssue } | null;
   /**
    * The rest a logged set earned you — every logged set earns one, buddy or
    * not. `at` is the session clock it started on: counting in `elapsed` ticks
@@ -720,7 +757,9 @@ const initialState: State = {
   buddySync: false,
   buddySyncPending: false,
   nearbyPeers: [],
+  radioState: 'ok',
   buddyEndpoint: null,
+  requesting: [],
   pendingAuth: null,
   buddySnapshot: null,
   buddySynced: [],
@@ -735,6 +774,7 @@ const initialState: State = {
   firstUp: { policy: 'host', seed: 0, rev: 0 },
   myBids: {},
   buddyLeft: null,
+  pairingIssue: null,
   rest: null,
   buddyRest: null,
   coDraft: null,
@@ -2211,6 +2251,36 @@ function useWorkoutState() {
         : { buddySecrets: { ...s.buddySecrets, [name]: token } }
     );
 
+  /** Everything buddy-shaped, put back to nothing. Shared by both teardowns. */
+  const pairingDown = (s: State, left: string | null): Partial<State> => ({
+    buddy: null,
+    buddyEndpoint: null,
+    buddySnapshot: null,
+    buddySynced: [],
+    buddySync: false,
+    buddySyncPending: false,
+    pendingAuth: null,
+    // `nearbyPeers` is deliberately left alone. Nearby reports an endpoint
+    // once per discovery run, and ending a pairing while the link is already
+    // down does not restart discovery — so clearing the list here emptied
+    // the roster of people who were still in the room, with nothing coming
+    // to refill it. With the link up the list is already empty: the radio
+    // cleared it when it stopped looking.
+    buddyInvite: null,
+    joinAsk: null,
+    joinSent: null,
+    buddyLeft: left,
+    sessionShared: false,
+    sessionRole: null,
+    buddyJoin: null,
+    buddyProgress: null,
+    buddyRest: null,
+    turnModes: {},
+    firstUp: freshFirstUp(s.firstUpDefault),
+    myBids: {},
+    coDraft: null,
+  });
+
   /**
    * Tear the pairing down — both when this phone taps Disconnect and when the
    * buddy's `bye` arrives. Everything buddy-shaped goes, including the shared
@@ -2222,30 +2292,35 @@ function useWorkoutState() {
    * disconnect needs to stick: nothing on the roster is connected to without
    * being asked, so there is nothing to reconnect behind your back.
    */
-  const endPairing = (left: string | null = null) =>
-    patch((s) => ({
-      buddy: null,
-      buddyEndpoint: null,
-      buddySnapshot: null,
-      buddySynced: [],
-      buddySync: false,
-      buddySyncPending: false,
-      pendingAuth: null,
-      nearbyPeers: [],
-      buddyInvite: null,
-      joinAsk: null,
-      joinSent: null,
-      buddyLeft: left,
-      sessionShared: false,
-      sessionRole: null,
-      buddyJoin: null,
-      buddyProgress: null,
-      buddyRest: null,
-      turnModes: {},
-      firstUp: freshFirstUp(s.firstUpDefault),
-      myBids: {},
-      coDraft: null,
-    }));
+  const endPairing = (left: string | null = null) => patch((s) => pairingDown(s, left));
+
+  /**
+   * A pairing failed in a way the user has to hear about — see `PairingIssue`.
+   * The radio calls this instead of disconnecting and saying nothing.
+   *
+   * What it takes down depends on whether trying again could ever work. A
+   * secret the two phones no longer share, or a build one of them is behind
+   * on, cannot heal by itself: the standing pairing goes (`endsPairing`), and
+   * with it the reconnect ticker that would otherwise ask every five seconds
+   * for ever, and an ask still waiting on that name. The session is untouched,
+   * as in every teardown here — whoever was mid-workout finishes alone. An
+   * issue about one attempt (a knock, a code nobody confirmed) only leaves the
+   * line: somebody tapping the wrong row must not end a workout two people are
+   * in the middle of.
+   *
+   * `nearbyPeers` is kept, as in every teardown (see `pairingDown`).
+   */
+  const failPairing = (name: string, why: PairingIssue) =>
+    patch((s) => {
+      const ends = endsPairing(why);
+      return {
+        ...(ends && s.buddy === name ? pairingDown(s, null) : {}),
+        ...(ends && s.joinSent?.to === name && s.joinSent.state === 'waiting'
+          ? { joinSent: null }
+          : {}),
+        pairingIssue: { name, why },
+      };
+    });
 
   /**
    * Unpair for good — the one thing that does take a name off the list. The
@@ -2259,7 +2334,13 @@ function useWorkoutState() {
       // fresh one, and a stale secret for a name you no longer trust is exactly
       // what should not linger.
       const { [name]: _secret, ...buddySecrets } = s.buddySecrets;
-      return { knownBuddies: s.knownBuddies.filter((n) => n !== name), buddyIds, buddySecrets };
+      return {
+        knownBuddies: s.knownBuddies.filter((n) => n !== name),
+        buddyIds,
+        buddySecrets,
+        // A line about somebody who is no longer on the list is about nobody.
+        ...(s.pairingIssue?.name === name ? { pairingIssue: null } : {}),
+      };
     });
   };
 
@@ -2931,6 +3012,7 @@ function useWorkoutState() {
     rememberBuddy,
     recordBuddySecret,
     endPairing,
+    failPairing,
     forgetBuddy,
     requestSession,
     rejoinSession,

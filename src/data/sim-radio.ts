@@ -140,6 +140,11 @@ export function createSimRadio(url: string): Radio {
       push({ t: 'reject', to: endpointId });
     },
     async sendPayload(endpointId, data) {
+      // Nearby refuses a send to an endpoint it holds no connection to, and
+      // that refusal is one of the things <BuddyRadio> listens for. The relay
+      // would only drop the payload on the floor, so the refusal is made here,
+      // worded as the native module words it.
+      if (!linked.has(endpointId)) throw new Error('8005: STATUS_NOT_CONNECTED_TO_ENDPOINT');
       push({ t: 'payload', to: endpointId, data });
     },
     async disconnectFrom(endpointId) {
