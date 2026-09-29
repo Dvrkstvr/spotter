@@ -345,6 +345,38 @@ function snapshot(): Palette {
 let current = snapshot();
 
 /**
+ * Any theme's palette as a value, **without applying it** — for a surface
+ * drawn in a look other than the app's own. The share card is the one: its
+ * language, mode and colour are the card's choice, and drawing it through
+ * `applyTheme` would recolour the whole app behind the sheet.
+ *
+ * The same slots `applyTheme` writes, down to `warn` following the mode alone,
+ * so `paletteOf(name, dark)` is exactly what `useColors()` returns once that
+ * theme is live. Cached per theme and mode, which also keeps the identity a
+ * memoised child compares on stable.
+ */
+const lookCache = new Map<string, Palette>();
+export function paletteOf(name: ThemeName, dark: boolean): Palette {
+  const id = `${name}:${dark ? 'd' : 'l'}`;
+  const hit = lookCache.get(id);
+  if (hit) return hit;
+  const p = paletteFor(name, dark);
+  const out: Palette = {
+    ...p,
+    divider: mix(p.text, 16),
+    warn: warnFor(dark),
+    wash: {
+      text: (pct) => mix(p.text, pct),
+      accent: (pct) => mix(p.accent, pct),
+      scrim: (pct) => mix(SCRIM, pct),
+      bg: (pct) => mix(p.bg, pct),
+    },
+  };
+  lookCache.set(id, out);
+  return out;
+}
+
+/**
  * The live palette, for module scope only — a context default, a script.
  *
  * Never call this during render. It takes no arguments, so to the React

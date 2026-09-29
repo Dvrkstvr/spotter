@@ -1,5 +1,5 @@
 /** Exercise library and per-exercise instructions. Ported from the design's EX / INFO. */
-import { Lang, LangMap } from './i18n';
+import type { Lang, LangMap, Strings } from './i18n';
 
 /**
  * What the two numbers in a set row mean.
@@ -52,6 +52,29 @@ export const isSingle = (m: Measure) => m === 'duration';
 
 /** Which character stands in for an empty left-hand field. */
 export const blankOf = (m: Measure) => (m === 'load' || m === 'time' ? 'BW' : '—');
+
+/**
+ * One logged set, written out with its units: "70 kg × 8", "BW × 20",
+ * "5 km × 30 min", "90 min".
+ *
+ * `schemeLine` does this for a *plan*, where the numbers are a routine item and
+ * the set count is part of the sentence. This does it for a set that actually
+ * happened, from the stored "70 × 8" string — and it carries its units on its
+ * back, because the day view lists them loose rather than under a column
+ * header, and a day can mix all four measures.
+ *
+ * An empty left field keeps whichever blank `blankOf` wrote: BW is a fact
+ * worth printing, an unrecorded distance is not, so the dash drops out and
+ * leaves the minutes standing alone.
+ */
+export const loggedLine = (logged: string, m: Measure, L: Strings): string => {
+  const [rawL = '', rawR = ''] = String(logged).split('×').map((x) => x.trim());
+  if (m === 'duration') return `${rawR} ${L.unitMin}`;
+  const right = m === 'load' ? rawR : `${rawR} ${m === 'time' ? L.unitSec : L.unitMin}`;
+  const left =
+    rawL === '—' ? '' : rawL === 'BW' ? 'BW' : `${rawL} ${m === 'distance' ? L.unitKm : L.unitKg}`;
+  return left ? `${left} × ${right}` : right;
+};
 
 /**
  * What a set said about the next one.

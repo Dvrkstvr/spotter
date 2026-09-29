@@ -56,6 +56,7 @@
     "build:aab": "node scripts/build-apk.mjs --aab",
     "install:apk": "node scripts/install-apk.mjs",
     "icons": "node scripts/make-icons.mjs",
+    "metrics": "node scripts/make-inter-metrics.mjs",
     "version": "node scripts/sync-version.mjs",
     "licenses": "node scripts/licenses.mjs",
     "test": "vitest run",

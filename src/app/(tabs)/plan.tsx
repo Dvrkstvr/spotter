@@ -54,7 +54,7 @@ export default function PlanScreen() {
   const styles = useThemed(sheet);
   const c = useColors();
   const {
-    s, L, patch, ex, exInfo, routine, doneOn, sessionsOn, rInfo, saveDayAsRoutine, start,
+    s, L, patch, ex, exInfo, routine, doneOn, sessionsOn, rInfo, saveDayAsRoutine, openShare, start,
     restorePlanDay, tipDone,
   } = useStore();
   const router = useRouter();
@@ -587,9 +587,36 @@ export default function PlanScreen() {
                     buddy, or a routine you drifted far enough from that the
                     day deserves its own name. */}
                 {!!h.list?.length &&
-                  (saved === i ? (
-                    <Text style={styles.logSaved}>{L.routineSaved}</Text>
-                  ) : naming === i ? (
+                  (naming !== i ? (
+                    <View style={styles.logFoot}>
+                      {saved === i ? (
+                        <Text style={styles.logSaved}>{L.routineSaved}</Text>
+                      ) : (
+                        <Btn
+                          variant="ghost"
+                          label={`+ ${L.saveAsRoutine}`}
+                          labelStyle={styles.saveLink}
+                          style={styles.saveLinkBtn}
+                          onPress={() => {
+                            setNewName('');
+                            setNaming(i);
+                          }}
+                        />
+                      )}
+                      {/* Sharing outlasts the summary for the reason saving
+                          does: nobody can be relied on to decide in the
+                          fifteen seconds after a set that they want to post
+                          it. From here the sheet opens on the Log card —
+                          the card this panel already is. */}
+                      <Btn
+                        variant="ghost"
+                        label={`${L.share} ›`}
+                        labelStyle={styles.saveLink}
+                        style={styles.saveLinkBtn}
+                        onPress={() => openShare(i, 'plan')}
+                      />
+                    </View>
+                  ) : (
                     <View style={styles.saveRow}>
                       <Input
                         style={styles.saveInput}
@@ -608,17 +635,6 @@ export default function PlanScreen() {
                         onPress={keep}
                       />
                     </View>
-                  ) : (
-                    <Btn
-                      variant="ghost"
-                      label={`+ ${L.saveAsRoutine}`}
-                      labelStyle={styles.saveLink}
-                      style={styles.saveLinkBtn}
-                      onPress={() => {
-                        setNewName('');
-                        setNaming(i);
-                      }}
-                    />
                   ))}
               </View>
             );
@@ -810,6 +826,8 @@ const sheet = themed(() => ({
 
   saveLinkBtn: { alignSelf: 'flex-start', marginTop: 11, paddingVertical: 2, paddingHorizontal: 0 },
   saveLink: { fontSize: 12 },
+  /** Save and Share side by side, on the line the save offer always had. */
+  logFoot: { flexDirection: 'row', alignItems: 'center', gap: 18 },
   saveRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 11 },
   saveInput: { flex: 1, width: undefined },
   saveBtn: { paddingVertical: 7 },

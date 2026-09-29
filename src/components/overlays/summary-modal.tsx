@@ -18,7 +18,7 @@ import { useStore } from '@/store/workout-store';
 
 export function SummaryModal() {
   const styles = useThemed(sheet);
-  const { s, L, patch, saveAsRoutine } = useStore();
+  const { s, L, patch, saveAsRoutine, openShare } = useStore();
   const router = useRouter();
   const [routineName, setRoutineName] = useState('');
 
@@ -81,7 +81,22 @@ export function SummaryModal() {
             single-language — the dictionary's own word for this verdict is
             the one thing that must not be English on a German phone's
             payoff screen. */}
-        <Btn variant="primary" block label={L.ok} style={styles.doneBtn} onPress={close} />
+        <View style={styles.btns}>
+          {/* Share sits to the left and stays secondary: the payoff screen is
+              about the workout, not an advertisement for posting it. Absent
+              on an empty finish — there is nothing to share, and the quiet
+              exit stays quiet. The session is the one `finishSession` just
+              appended, which is why its index is the last. */}
+          {!summary.empty && s.history.length > 0 && (
+            <Btn
+              variant="secondary"
+              label={L.share}
+              style={[styles.doneBtn, styles.shareBtn]}
+              onPress={() => openShare(s.history.length - 1, 'summary')}
+            />
+          )}
+          <Btn variant="primary" label={L.ok} style={[styles.doneBtn, styles.okBtn]} onPress={close} />
+        </View>
         {!summary.empty && <Confetti />}
       </RiseIn>
     </KeyboardAvoidingView>
@@ -250,7 +265,10 @@ const sheet = themed(() => ({
   saveRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 14 },
   saveInput: { flex: 1, width: undefined },
   saveLabel: { fontSize: 12.5 },
-  doneBtn: { marginTop: 16, height: 42 },
+  btns: { flexDirection: 'row', gap: 8, marginTop: 16 },
+  doneBtn: { height: 42 },
+  shareBtn: { flex: 1 },
+  okBtn: { flex: 1.4 },
   /** Anchor over the whole card; particles spawn on its top edge and overflow freely. */
   confetti: { ...fill },
 }));

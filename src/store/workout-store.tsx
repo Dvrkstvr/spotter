@@ -70,6 +70,7 @@ import {
   infoFor,
   isSingle,
   Level,
+  loggedLine,
   MarkNote,
   Measure,
   measureOf,
@@ -83,6 +84,7 @@ import type { Sex } from '@/data/strength';
 import { DEFAULT_COACH, type CoachOptions, type ResolvedPlan } from '@/data/coach';
 import { setCounts, stopsOf } from '@/data/superset';
 import type { TipId, Tips } from '@/data/tips';
+import { DEFAULT_SHARE, prefsOf, type SharePrefs } from '@/data/share-card';
 import { deviceLang, DICT, fmtDayLong, Lang, LangMap, Strings } from '@/data/i18n';
 import { ThemeMode, ThemeName } from '@/design/tokens';
 
@@ -462,6 +464,22 @@ export type State = {
    * gestures were never explained to it either.
    */
   tips: Tips;
+  /**
+   * What the share sheet remembers: card type, shape, the three content
+   * switches, and the card's own look (absent fields follow the app). A
+   * *setting*, additive like `coach` and `tips`, so no `STORAGE_VERSION`
+   * bump — and always read through `prefsOf`, because a stored object
+   * replaces the seeded one wholesale. The partner switch is not in it: see
+   * `data/share-card.ts`.
+   */
+  shareCard: SharePrefs;
+  /**
+   * The session the share sheet is about, as its index in `history` — entries
+   * carry no id, and this is the handle `saveDayAsRoutine` already uses — and
+   * which door it came through: from Plan the sheet opens on the Log card, the
+   * card that panel already is. UI state, outside `PERSIST`.
+   */
+  share: { at: number; from: 'summary' | 'plan' } | null;
   scanning: boolean;
   /**
    * This phone's install id, advertised alongside the profile name (see
@@ -726,6 +744,8 @@ const initialState: State = {
   coachOpen: false,
   coach: { ...DEFAULT_COACH, kinds: [...DEFAULT_COACH.kinds] },
   tips: {},
+  shareCard: { ...DEFAULT_SHARE, look: {} },
+  share: null,
   scanning: false,
   // ANDROID_ID resolves at module load and never changes; the random
   // fallback is minted once here and then pinned by persistence.
@@ -999,32 +1019,12 @@ export const restLeftOf = (s: Pick<State, 'rest' | 'restSeconds' | 'elapsed'>) =
 export const buddyRestLeftOf = (s: Pick<State, 'buddyRest' | 'elapsed'>) =>
   s.buddyRest ? Math.max(0, s.buddyRest.left - (s.elapsed - s.buddyRest.at)) : 0;
 
+/** Lives in `data/exercises` so the pure share card prints a set the way the diary does. */
+export { loggedLine };
+
 /** mm:ss. The live session's clock and every logged one are the same number. */
 export const fmtClock = (secs: number) =>
   `${String(Math.floor(secs / 60)).padStart(2, '0')}:${String(secs % 60).padStart(2, '0')}`;
-
-/**
- * One logged set, written out with its units: "70 kg × 8", "BW × 20",
- * "5 km × 30 min", "90 min".
- *
- * `schemeLine` does this for a *plan*, where the numbers are a routine item and
- * the set count is part of the sentence. This does it for a set that actually
- * happened, from the stored "70 × 8" string — and it carries its units on its
- * back, because the day view lists them loose rather than under a column
- * header, and a day can mix all four measures.
- *
- * An empty left field keeps whichever blank `blankOf` wrote: BW is a fact
- * worth printing, an unrecorded distance is not, so the dash drops out and
- * leaves the minutes standing alone.
- */
-export const loggedLine = (logged: string, m: Measure, L: Strings): string => {
-  const [rawL = '', rawR = ''] = String(logged).split('×').map((x) => x.trim());
-  if (m === 'duration') return `${rawR} ${L.unitMin}`;
-  const right = m === 'load' ? rawR : `${rawR} ${m === 'time' ? L.unitSec : L.unitMin}`;
-  const left =
-    rawL === '—' ? '' : rawL === 'BW' ? 'BW' : `${rawL} ${m === 'distance' ? L.unitKm : L.unitKg}`;
-  return left ? `${left} × ${right}` : right;
-};
 
 /**
  * Build a fresh session from a routine, with "last time" ghosts filled in.
@@ -1487,6 +1487,14 @@ function useWorkoutState() {
    * is re-applied and nothing is overwritten.
    */
   const resetTips = () => patch({ tips: {} });
+
+  /* — sharing a workout — */
+
+  const openShare = (at: number, from: 'summary' | 'plan') => patch({ share: { at, from } });
+  const closeShare = () => patch({ share: null });
+  /** Merged over the stored setting as `prefsOf` reads it, never over the raw blob. */
+  const setShareCard = (next: Partial<SharePrefs>) =>
+    patch((st) => ({ shareCard: { ...prefsOf(st.shareCard), ...next } }));
 
   /* — mutation — */
 
@@ -2974,6 +2982,9 @@ function useWorkoutState() {
     tipShown,
     tipDone,
     resetTips,
+    openShare,
+    closeShare,
+    setShareCard,
     mutSession,
     addSessionEx,
     adoptBuddyEx,

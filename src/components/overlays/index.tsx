@@ -7,7 +7,7 @@
  *   70 exercise · 75 routine · 76 insights · 77 coach · 78 settings
  *   79 buddy sync · 80 session
  *   83 plan · 85 picker · 86 how-to · 87 nearby
- *   88 new exercise · 89 buddy invite / join ask · 90 summary · 91 intake
+ *   88 new exercise · 89 buddy invite / join ask · 90 summary, then share · 91 intake
  *
  * 76 (insights), 77 (coach), 79 (buddy sync), 83 (plan), and 89 (buddy
  * invite, join ask) are not from the design: the plan sheet replaces the
@@ -42,6 +42,7 @@ import { ScanSheet } from '@/components/overlays/scan-sheet';
 import { PlanSheet } from '@/components/overlays/plan-sheet';
 import { SessionOverlay } from '@/components/overlays/session-overlay';
 import { SettingsOverlay } from '@/components/overlays/settings-overlay';
+import { ShareSheet } from '@/components/overlays/share-sheet';
 import { SummaryModal } from '@/components/overlays/summary-modal';
 import { Diagnostics } from '@/components/diagnostics';
 import { PlanAlarm } from '@/components/plan-alarm';
@@ -98,6 +99,10 @@ export function Overlays() {
       {social && s.buddyInvite && <BuddyInviteSheet />}
       {social && s.joinAsk !== null && <JoinAskSheet />}
       {s.summary && <SummaryModal />}
+      {/* 90 like the summary and painted after it, because the summary is one
+          of its two doors and closing it has to land back there. Below the
+          intake, which answers another app and outranks anything open here. */}
+      {s.share && <ShareSheet />}
       {/* 95 — above everything, the summary included: on a first run it *is*
           the app, and reopened from Settings it has to cover Settings. Not
           gated on `social`: its permission screen is where privateMode gets

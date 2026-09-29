@@ -57,7 +57,8 @@ import { missingName, Tag } from '@/design/ui';
  * union of their two, with each side keeping its own centre. If the artwork
  * ever moves, these go stale *visibly*, which is the failure worth having.
  */
-const CROP = {
+/** Exported for the share card, which draws the same figure into its own SVG. */
+export const CROP = {
   male: { front: '47 90 634 1259', back: '767 90 634 1259', units: 634, ratio: 1259 / 634 },
   female: { front: '-2 -7 644 1442', back: '821 -7 644 1442', units: 644, ratio: 1442 / 644 },
 } as const;
@@ -93,7 +94,7 @@ const MAX_SOURCES = 5;
  * Compiler hoists a module-level colour read once, and the figure would keep
  * whichever theme happened to be loaded first.
  */
-const heatRamp = (c: Palette): string[] => [
+export const heatRamp = (c: Palette): string[] => [
   // Nothing logged. The same grey an empty bar track is drawn on, so the two
   // views agree about what the bottom of the scale looks like.
   c.neutral900,
@@ -143,7 +144,7 @@ const shareLabel = (share: number, L: Strings): string =>
  * its wrapper rather than in the asset data. The parts carry the figure on
  * their own strokes instead.
  */
-const ART = {
+export const ART = {
   male: { front: bodyFront, back: bodyBack },
   female: { front: bodyFemaleFront, back: bodyFemaleBack },
 } as const;

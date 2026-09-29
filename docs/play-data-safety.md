@@ -42,9 +42,14 @@ the device is neither, and the form says so explicitly.
   party — it is the feature the user asked for, in the same sense that a share
   sheet is not "sharing" under this form. Nearby Connections is Google Play
   services; that layer is Google's own.
-- **The AI coach and backup export are user-initiated transfers via the Android
-  share sheet.** Play's own guidance excludes data the user explicitly hands to
-  another app through a system sharing mechanism.
+- **The AI coach, backup export and a shared workout card are user-initiated
+  transfers via the Android share sheet.** Play's own guidance excludes data the
+  user explicitly hands to another app through a system sharing mechanism. The
+  workout card is an image the user previews in full before pressing Share, and
+  the app names no target of its own — Android's sheet asks where it goes. What
+  the image may carry is fixed in `src/data/share-card.ts`: never a set note or
+  an exercise note, never the profile, and the training partner's name only when
+  switched on for that one share.
 - **Location is declared, never used.** `ACCESS_FINE_LOCATION` /
   `ACCESS_COARSE_LOCATION` are capped at `maxSdkVersion` and exist only because
   Android 12 and earlier required them for any nearby-device scan; the Bluetooth
