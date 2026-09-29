@@ -2,18 +2,30 @@
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
+import { PairingNote } from '@/components/pairing-note';
 import { GEAR_D, Icon } from '@/components/icon';
 import { ImageSlot } from '@/components/image-slot';
+import { RadioLine, radioDown } from '@/components/radio-line';
 import { Screen } from '@/components/screen';
 import { StatsCard, STATS_WINDOW_DAYS } from '@/components/stats-card';
-import { hasRadio, radio, sayGoodbye } from '@/data/buddy-radio';
-import { encodePeerName } from '@/data/buddy-sync';
+import { type JoinSent, pickPeer } from '@/data/buddy-link';
+import {
+  askRadioPermissions,
+  hasRadio,
+  radio,
+  requestLink,
+  sayGoodbye,
+  sendTo,
+} from '@/data/buddy-radio';
+import { routineClosure } from '@/data/buddy-sync';
+import { dlog } from '@/data/diag';
+import type { Strings } from '@/data/i18n';
 import { trainingStats } from '@/data/stats';
 import { useBuddyLive } from '@/hooks/use-buddy-live';
 import { themed, useColors, useThemed } from '@/design/theme';
-import { color, font, radius, slop, t, tracking } from '@/design/tokens';
+import { color, font, radius, slop, space, t, tracking } from '@/design/tokens';
 import { Btn, Chip, H2, H6, missingName } from '@/design/ui';
-import { myName, useStore } from '@/store/workout-store';
+import { useStore } from '@/store/workout-store';
 
 export default function YouScreen() {
   const styles = useThemed(sheet);
@@ -25,6 +37,7 @@ export default function YouScreen() {
     allEx,
     loggedThisMonth,
     ex,
+    routine,
     exInfo,
     gInfo,
     turnMode,
@@ -50,9 +63,48 @@ export default function YouScreen() {
 
   const sayBye = () => sayGoodbye(s.buddyEndpoint);
 
+  // Only a routine session can be shared — freeform doesn't travel (v1).
+  const running = routine(s.session?.rid);
+  // Hosting used to be decided on one transition — a routine starting while
+  // the link was already up — so a workout begun thirty seconds before the
+  // link healed was solo for good. This is the same invite on a tap: the
+  // payload <BuddyRadio> sends on that transition and the writes the join
+  // sheet's yes makes, so their phone cannot tell the three apart.
+  const inviteToWorkout = () => {
+    const ep = s.buddyEndpoint;
+    if (!radio || !ep || !running) return;
+    dlog('buddy', 'hosting — invite out by tap', { rid: running.id }, true);
+    sendTo(ep, {
+      v: 1,
+      t: 'sessionInvite',
+      invite: { routine: running, ...routineClosure(s, running) },
+    });
+    patch({
+      sessionShared: true,
+      sessionRole: 'host',
+      buddyJoin: 'pending',
+      // Whatever their last shared workout left behind — a *finished* is the
+      // only thing that can be standing here, see `canInvite` — is about a
+      // session this invite is not. Theirs starts over with their answer.
+      buddyProgress: null,
+      buddyRest: null,
+    });
+  };
+
   // The radio stops looking once a link is up, so while one is, "not nearby"
   // is a claim this phone can't make about anybody else. Say nothing instead.
-  const looking = radio !== null && s.buddyEndpoint === null;
+  // The same goes for a radio that cannot run: with Bluetooth off nobody was
+  // looked for, and the line under the heading says why.
+  const looking = radio !== null && s.buddyEndpoint === null && !radioDown(s.radioState);
+
+  // Opening share mode is one of the three acts Android's permission dialog
+  // may follow — the tour's card and the line under the roster are the other
+  // two. It used to follow a dropped link instead. Already granted, this
+  // resolves with nothing shown; without a radio it asks for nothing.
+  const openShare = () => {
+    patch({ scanning: true });
+    void askRadioPermissions();
+  };
 
   const sub =
     [
@@ -185,9 +237,15 @@ export default function YouScreen() {
             </View>
             <View style={styles.buddyText}>
               <Text style={styles.buddyName}>{s.buddy}</Text>
-              {/* Paired is standing; this line tracks the live link. */}
+              {/* Paired is standing; this line tracks the live link. With the
+                  radio down nothing is reconnecting, so it says nothing —
+                  the line under the roster heading says what is wrong. */}
               <Text style={styles.buddyStatus}>
-                {!hasRadio || s.buddyEndpoint ? L.connected : L.linkLost}
+                {!hasRadio || s.buddyEndpoint
+                  ? L.connected
+                  : radioDown(s.radioState)
+                    ? ''
+                    : L.linkLost}
               </Text>
             </View>
             <Btn
@@ -197,7 +255,7 @@ export default function YouScreen() {
               // Still connected → straight to the sync screen; connection gone
               // → find the buddy nearby again first. Mock connects instantly.
               onPress={() =>
-                patch(hasRadio && !s.buddyEndpoint ? { scanning: true } : { buddySync: true })
+                hasRadio && !s.buddyEndpoint ? openShare() : patch({ buddySync: true })
               }
             />
             <Btn
@@ -218,10 +276,15 @@ export default function YouScreen() {
               block
               label={L.invite}
               style={styles.inviteBtn}
-              onPress={() => patch({ scanning: true })}
+              onPress={openShare}
             />
           </View>
         )}
+
+        {/* Under the card rather than under the roster: a first pairing that
+            failed has no roster to sit beneath, and it is the button above
+            that the line sends you back to. */}
+        <PairingNote style={styles.pairingNote} />
 
         {/* Everyone this phone is paired with. The radio keeps looking for them
             while the app is open, so a row goes live on its own when they walk
@@ -229,15 +292,18 @@ export default function YouScreen() {
         {s.knownBuddies.length > 0 && (
           <>
             <H6 style={styles.sectionHead}>{L.pairedBuddies}</H6>
+            {/* Draws nothing while the radio runs. While it can't, this is
+                what stands where the rows' "Not nearby" would have been. */}
+            <RadioLine style={styles.radioLine} />
             <View>
               {s.knownBuddies.map((name) => {
                 const linked = s.buddy === name && (!hasRadio || s.buddyEndpoint !== null);
                 // By recorded install id first: a buddy who renamed
                 // themselves still shows as nearby under their roster name
-                // until the next snapshot adopts the new one.
-                const peer = s.nearbyPeers.find(
-                  (p) => p.name === name || (p.id !== null && p.id === s.buddyIds[name])
-                );
+                // until the next snapshot adopts the new one. The newest
+                // match, through the picker the reconnect ticker uses — the
+                // row and the radio have to mean the same address by *Nearby*.
+                const peer = pickPeer(s.nearbyPeers, name, s.buddyIds[name]);
                 // Asking is what opens a link, so there's nothing left to ask
                 // once one is up: the request only shows to a buddy in range
                 // while this phone is connected to nobody. (That's every row —
@@ -256,6 +322,19 @@ export default function YouScreen() {
                   !s.sessionShared &&
                   s.buddyProgress !== null &&
                   !s.buddyProgress.finished;
+                // The third tenant of the slot, and the one for a link that is
+                // up beside a workout that isn't shared: it needs the link
+                // canAsk needs down, and it yields to canRejoin — while their
+                // shared workout is still broadcasting, the way in is into
+                // theirs, not a second one offered over it. A free session
+                // has no routine to send and offers nothing.
+                const canInvite =
+                  radio !== null &&
+                  linked &&
+                  s.buddyEndpoint !== null &&
+                  running !== undefined &&
+                  !s.sessionShared &&
+                  !canRejoin;
                 return (
                   <View key={name} style={styles.knownRow}>
                     <Text style={styles.knownName} numberOfLines={1}>
@@ -285,17 +364,13 @@ export default function YouScreen() {
                           // 'waiting', so send them through Invite to re-pair (and
                           // mint a secret) instead.
                           if (s.buddySecrets[name] === undefined) {
-                            patch({ scanning: true });
+                            openShare();
                             return;
                           }
                           requestSession(name);
-                          if (peer)
-                            radio
-                              ?.requestConnection(
-                                encodePeerName(s.selfId, myName(s)),
-                                peer.endpointId
-                              )
-                              .catch(() => {});
+                          // A plain request, proved by the secret — never a
+                          // pairing, which only the share sheet asks for.
+                          if (peer) requestLink(peer.endpointId, 'tap');
                         }}
                       />
                     )}
@@ -305,6 +380,14 @@ export default function YouScreen() {
                         label={L.rejoinWorkout}
                         labelStyle={styles.knownAction}
                         onPress={() => rejoinSession()}
+                      />
+                    )}
+                    {canInvite && (
+                      <Btn
+                        variant="ghost"
+                        label={L.inviteToWorkout}
+                        labelStyle={styles.knownAction}
+                        onPress={inviteToWorkout}
                       />
                     )}
                     <Pressable
@@ -327,10 +410,7 @@ export default function YouScreen() {
             {s.joinSent && (
               <Pressable onPress={() => patch({ joinSent: null })}>
                 <Text style={styles.askNote}>
-                  {(s.joinSent.state === 'waiting' ? L.askSent : L.askDeclined).replace(
-                    '{name}',
-                    s.joinSent.to
-                  )}
+                  {ASK_LINE[s.joinSent.state](L).replace('{name}', s.joinSent.to)}
                 </Text>
               </Pressable>
             )}
@@ -439,6 +519,18 @@ export default function YouScreen() {
     </Screen>
   );
 }
+
+/**
+ * What the roster says about your own ask, one line per way it can stand.
+ * `failed` is not `declined`: one is the radio not getting through, the other
+ * is an answer, and a line that blurred them would blame a person for a
+ * Bluetooth stack.
+ */
+const ASK_LINE: Record<JoinSent['state'], (L: Strings) => string> = {
+  waiting: (L) => L.askSent,
+  declined: (L) => L.askDeclined,
+  failed: (L) => L.askFailed,
+};
 
 /** The name field is an underlined heading, not a boxed .input. */
 function TextField({
@@ -645,10 +737,12 @@ const sheet = themed(() => ({
     borderBottomColor: t.rule,
   },
   knownName: { flex: 1, fontFamily: font.regular, fontSize: 14, color: color.text },
+  radioLine: { paddingHorizontal: t.rowPadH, paddingBottom: space[3] },
   knownState: { fontFamily: font.regular, fontSize: 11, color: color.neutral600 },
   knownAction: { fontSize: 12 },
   forget: { width: 22, height: 26, alignItems: 'center', justifyContent: 'center' },
   forgetGlyph: { fontFamily: font.regular, fontSize: 15, color: color.neutral600 },
+  pairingNote: { marginTop: 9 },
   askNote: { fontFamily: font.regular, fontSize: 11.5, color: color.neutral500, marginTop: 9 },
 
   stats: { flexDirection: 'row', gap: 8, paddingBottom: 14 },

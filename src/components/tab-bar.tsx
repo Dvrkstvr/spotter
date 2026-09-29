@@ -14,6 +14,7 @@ import { Animated, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Icon } from '@/components/icon';
+import { PairingNote } from '@/components/pairing-note';
 import { TABS } from '@/data/exercises';
 import { themed, useColors, useThemed } from '@/design/theme';
 import { color, font, linger, motion, tracking, wash } from '@/design/tokens';
@@ -123,6 +124,11 @@ export function TabBar({ state, navigation }: TabBarProps) {
           </Text>
         </Pressable>
       )}
+
+      {/* Same slot, same reason: a pairing that ended, or could not be made,
+          is said wherever you happen to be. Not on Profile, where the buddy
+          section says it itself — one fact, once per screen. */}
+      {!minimized && current !== ROUTE.you && <PairingNote style={styles.leftNote} />}
 
       <View
         style={[styles.bar, { paddingBottom: 8 + insets.bottom }]}

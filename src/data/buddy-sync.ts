@@ -423,15 +423,37 @@ export type DraftPayload = {
  * a pairing survives the buddy renaming themselves. A raw name with no
  * separator (an older build advertising name-only) parses as id-less and
  * matches by name, as before.
+ *
+ * A *request* made from share mode says so: `<installId>+|<displayName>`. The
+ * name a connection is requested under is the one thing the other phone reads
+ * before it has to accept or refuse, so it is the only place the two can agree
+ * on what kind of connection this is going to be — a pairing, which both
+ * confirm by code, or a reconnect, which both prove by secret. Without it each
+ * side decided alone, from what it happened to hold, and a phone that still
+ * held a secret skipped the code its buddy was busy showing. Advertising never
+ * carries the mark: it is a fact about one request, not about the phone.
  */
-export const encodePeerName = (id: string, name: string) => (id ? `${id}|${name}` : name);
+export const encodePeerName = (id: string, name: string, pairing = false) =>
+  id || pairing ? `${id}${pairing ? PAIR_MARK : ''}|${name}` : name;
+
+const PAIR_MARK = '+';
 
 export type PeerIdentity = { id: string | null; name: string };
 
-export const decodePeerName = (raw: string): PeerIdentity => {
+/** Who a connection name says is there, and whether they are asking to pair. */
+export type PeerName = PeerIdentity & { pairing: boolean };
+
+export const decodePeerName = (raw: string): PeerName => {
   const i = raw.indexOf('|');
-  const id = i > 0 ? raw.slice(0, i) : '';
-  return /^[a-z0-9]{8,}$/.test(id) ? { id, name: raw.slice(i + 1) } : { id: null, name: raw };
+  const head = i > 0 ? raw.slice(0, i) : '';
+  const pairing = head.endsWith(PAIR_MARK);
+  const id = pairing ? head.slice(0, -PAIR_MARK.length) : head;
+  if (/^[a-z0-9]{8,}$/.test(id)) return { id, name: raw.slice(i + 1), pairing };
+  // The mark with no id in front of it: a pairing request from a phone that
+  // has none to advertise. Anything else before the bar is part of a name.
+  return head === PAIR_MARK
+    ? { id: null, name: raw.slice(i + 1), pairing: true }
+    : { id: null, name: raw, pairing: false };
 };
 
 /**
@@ -547,18 +569,251 @@ export const proofOk = (
   role: ProofRole
 ): boolean => !!secret && typeof proof === 'string' && proof === authProof(secret, digits, role);
 
+/* ── the handshake: version, kind, verdict ─────────────────────────────── */
+
+/**
+ * The handshake's own version, carried in every `hello` as `pv`. It moves only
+ * when two builds can no longer finish a handshake with each other — not for
+ * an additive field, which the parser's field-by-field rebuild already lets an
+ * older build ignore. 1 is every build before the field existed, which sends
+ * none; 2 is the first to say which kind of connection it thinks it is in and
+ * to acknowledge an enrolment.
+ *
+ * It exists for the diagnosis rather than the negotiation. Two sideloaded
+ * phones a build apart used to fail a proof and say nothing, which reads
+ * exactly like a stale pairing and sends both people off to re-pair for no
+ * reason; the version is checked first so that case gets its own sentence.
+ */
+export const PROTOCOL_VERSION = 2;
+
+/** A peer's handshake version against this build's. Absent means 1. */
+export const versionGap = (pv: number | undefined): 'same' | 'older' | 'newer' => {
+  const theirs = pv ?? 1;
+  return theirs === PROTOCOL_VERSION ? 'same' : theirs < PROTOCOL_VERSION ? 'older' : 'newer';
+};
+
+/**
+ * Which handshake a connection runs. `pair` is the code-confirmed one: both
+ * people looked at the digits, and the requester mints a fresh secret for the
+ * other side to adopt. `proof` is the silent one: both already hold a secret
+ * and each shows the other it does. Each phone settles on one when the
+ * connection is offered and says which in its hello, so a disagreement is
+ * something both of them *read* instead of something one of them acts on.
+ */
+export type HelloKind = 'pair' | 'proof';
+
+/**
+ * Why a pairing could not be made or kept, as the user is told it.
+ *
+ * - `stale` — the two phones no longer hold the same secret: a proof that was
+ *   refused or missing, a hello of the other kind, a plain request turned away.
+ * - `knocked` — a buddy on the roster asked to connect and this phone has no
+ *   secret to check them against.
+ * - `hailed` — a buddy on the roster asked to pair while sharing was closed
+ *   here, so there was nowhere to show the code.
+ * - `unconfirmed` — a code stage that ended without both confirmations.
+ * - `stalled` — a pairing that connected and then never finished greeting.
+ * - `theyOld` / `weOld` — the handshake versions differ, and which phone is
+ *   behind.
+ */
+export type PairingIssue =
+  | 'stale'
+  | 'knocked'
+  | 'hailed'
+  | 'unconfirmed'
+  | 'stalled'
+  | 'theyOld'
+  | 'weOld';
+
+/**
+ * The issues that end a standing pairing rather than just reporting on an
+ * attempt. These three cannot heal by trying again — the secret or the build
+ * has to change first — so leaving `buddy` set would leave the reconnect
+ * ticker asking every five seconds for something it has just been told it
+ * cannot have. The rest are about one attempt and leave whatever stood.
+ */
+export const endsPairing = (why: PairingIssue) =>
+  why === 'stale' || why === 'theyOld' || why === 'weOld';
+
+/**
+ * Whether pairing again through share mode is the way out of this one — which
+ * it is for everything but a version gap. A code does not mend a build.
+ */
+export const mendsByPairing = (why: PairingIssue) => why !== 'theyOld' && why !== 'weOld';
+
+/** A connection as it is offered, before either phone has accepted it. */
+export type Offer = {
+  /** this phone is being asked, rather than asking */
+  incoming: boolean;
+  /**
+   * The request is a pairing: read off the mark in the name it arrived under
+   * (`decodePeerName`), or — for this phone's own — what it asked for.
+   */
+  pairing: boolean;
+  /** share mode is open here, which is the only place a code can be shown */
+  sharing: boolean;
+  onRoster: boolean;
+  haveSecret: boolean;
+};
+
+export type OfferVerdict =
+  /** `pair`: open the code stage. `proof`: accept in silence, prove after. */
+  | { take: HelloKind }
+  /** Turned away. `why` is what the user is told, or null for nothing. */
+  | { take: null; why: PairingIssue | null };
+
+/**
+ * What to do with a connection that is being offered — and so which handshake
+ * it will run. The kind is settled by the *request*, which both phones can
+ * read, and not by what either happens to hold, which only one of them can.
+ * They used to derive it each for themselves: a phone that held a secret took
+ * the silent branch and one that didn't took the code, so two phones that
+ * disagreed about the secret — the only two that ever need to pair again —
+ * could not, and neither said why.
+ *
+ * - **A pairing always goes through the code**, a held secret included. Two
+ *   people who both opened sharing have asked to pair, and an old secret is
+ *   not a reason to skip the question. With sharing closed there is nowhere to
+ *   show a code, so the request is turned away — with a line if it came from
+ *   the roster, because that buddy is standing next to you wondering.
+ * - **A plain request is proved or refused**, with sharing open as much as
+ *   with it closed: the secret is the gate, and the sheet being up does not
+ *   weaken it. The side with nothing to prove it by says so — whichever side
+ *   that is.
+ * - **A stranger is never given a line.** Knocking is not a way to put words
+ *   on somebody's screen.
+ *
+ * One request is *taken* for a pairing without saying so: an incoming one with
+ * no mark and nothing to prove it by, while sharing is open. It is what a
+ * build from before the mark sends from its own share sheet, and the code is
+ * the only gate such a request could ever pass. If it was a plain request from
+ * a current build after all, the two hellos disagree and both phones are told.
+ */
+export const judgeOffer = (o: Offer): OfferVerdict => {
+  const pairing = o.pairing || (o.incoming && o.sharing && !o.haveSecret);
+  if (pairing) {
+    if (o.sharing) return { take: 'pair' };
+    return { take: null, why: o.incoming && o.onRoster ? 'hailed' : null };
+  }
+  if (o.haveSecret) return { take: 'proof' };
+  if (!o.incoming) return { take: null, why: 'stale' };
+  return { take: null, why: o.onRoster ? 'knocked' : null };
+};
+
+/**
+ * What a rejection says, given the handshake this phone had settled on. Only
+ * ever asked about the *other* phone's no — this one's own is a decision it
+ * already knows about.
+ *
+ * A pairing turned down is a code stage that closed from the far side:
+ * cancelled there, or never opened because sharing wasn't. A plain request is
+ * different, because this phone accepted it on the strength of a secret, and a
+ * current build turns one away for exactly one reason — it has no secret to
+ * check it against. So the two have come apart. Ours, refused: the pairing is
+ * out of date. Theirs, withdrawn: they found they could not prove it.
+ */
+export const judgeRefusal = (kind: HelloKind, incoming: boolean): PairingIssue =>
+  kind === 'pair' ? 'unconfirmed' : incoming ? 'knocked' : 'stale';
+
+export type HelloVerdict =
+  /** `adopt` is the freshly minted secret to record and acknowledge. */
+  { ok: true; adopt?: string } | { ok: false; why: PairingIssue };
+
+/**
+ * What to make of a peer's hello, given the handshake this phone is running.
+ * Pure, so the three things that must never be got wrong here are tests
+ * rather than reading: the version is judged before anything else, a hello of
+ * the other kind is never acted on, and a proof is only ever checked under the
+ * peer's direction.
+ *
+ * `incoming` is this phone's side of the connection — it accepted the request
+ * rather than made it. On a pairing that is also the side that adopts: the
+ * requester mints, so a requester's hello with no token in it is a pairing
+ * that cannot be finished. And the minter, for its part, accepts only a hello
+ * that acknowledges the token it minted (`minted`, `enrolAck`) — it keeps no
+ * secret the other side has not confirmed receiving.
+ */
+export const judgeHello = (
+  mine: {
+    kind: HelloKind;
+    incoming: boolean;
+    secret: string | undefined;
+    digits: string;
+    /** what this phone minted on this connection — the minting side only */
+    minted?: string;
+  },
+  hello: Hello
+): HelloVerdict => {
+  const gap = versionGap(hello.pv);
+  if (gap !== 'same') return { ok: false, why: gap === 'older' ? 'theyOld' : 'weOld' };
+  if (hello.kind !== mine.kind) return { ok: false, why: 'stale' };
+  if (mine.kind === 'pair') {
+    if (mine.incoming)
+      return hello.newToken ? { ok: true, adopt: hello.newToken } : { ok: false, why: 'stale' };
+    return enrolAckOk(mine.minted, hello.ack, mine.digits)
+      ? { ok: true }
+      : { ok: false, why: 'stale' };
+  }
+  // The peer's direction is the opposite of ours: if we accepted the
+  // connection they requested it, and vice versa. A proof hashed under our
+  // own lane — a reflection of the one we just sent — verifies under neither.
+  const peerRole: ProofRole = mine.incoming ? 'initiator' : 'responder';
+  return proofOk(mine.secret, hello.proof, mine.digits, peerRole)
+    ? { ok: true }
+    : { ok: false, why: 'stale' };
+};
+
+/**
+ * The acknowledgement of an enrolment: a proof of the *new* secret, hashed for
+ * this connection under the adopter's lane. It is a field on the adopter's
+ * hello rather than a message of its own — the adopter holds its hello back
+ * until the minter's has arrived, so by the time it speaks it has the token to
+ * acknowledge. That is the smallest ack there is, and it leaves `hello` the
+ * only thing ever honoured before trust.
+ *
+ * Keyed rather than bare, so it also says the token arrived *whole*. The
+ * adopter is always the side that accepted the request, so the lane is always
+ * `responder` — and the minter, being the requester, never hashes under that
+ * lane itself, so an echo of anything it sent cannot stand in for one.
+ */
+export const enrolAck = (token: string, digits: string) => authProof(token, digits, 'responder');
+
+export const enrolAckOk = (token: string | undefined, proof: unknown, digits: string) =>
+  proofOk(token, proof, digits, 'responder');
+
 /* ── wire protocol (real radio) ────────────────────────────────────────── */
+
+export type Hello = {
+  v: 1;
+  t: 'hello';
+  name: string;
+  id?: string;
+  pv?: number;
+  kind?: HelloKind;
+  proof?: string;
+  newToken?: string;
+  /** the adopter's acknowledgement of `newToken` — see `enrolAck` */
+  ack?: string;
+};
 
 /** Messages the two phones exchange once Nearby connects them. */
 export type BuddyMessage =
   /**
    * The first message on every connection, before anything sensitive crosses.
-   * A reconnecting peer carries `proof` (see `authProof`); the first pairing
-   * carries `newToken` from the minting side instead — the code check was the
-   * gate there, and this only *establishes* the secret for next time. Nothing
-   * but a `hello` is honoured from an unauthenticated endpoint.
+   * It says which handshake the sender is running (`kind`) and at what
+   * version (`pv`) — see `HelloKind`, `PROTOCOL_VERSION`. A `proof` hello
+   * carries `proof` (see `authProof`); a `pair` hello from the minting side
+   * carries `newToken` instead — the code check was the gate there, and this
+   * only *establishes* the secret for next time — and the adopting side's
+   * answers with `ack`. The minter keeps nothing until that lands: a
+   * `newToken` that was lost on the way used to leave one phone holding a
+   * secret the other had never seen, which is a pairing that cannot reconnect
+   * and says so to nobody. Nothing but a `hello` is honoured from an
+   * unauthenticated endpoint. `pv` and `kind` are optional in the type because
+   * a build that predates them sends neither, and that absence is exactly what
+   * `versionGap` reads.
    */
-  | { v: 1; t: 'hello'; name: string; id?: string; proof?: string; newToken?: string }
+  | Hello
   /** `id` is the sender's install id; absent from older builds */
   | { v: 1; t: 'snapshot'; name: string; id?: string; data: SyncSide }
   | { v: 1; t: 'item'; item: SyncItem }
@@ -625,6 +880,8 @@ const CAP = { str: 200, list: 400, items: 200 } as const;
  */
 const WEIGHT_MAX = 100000;
 const REV_MAX = 1e9;
+/** Headroom over any version this will ever reach; it only bounds a hostile one. */
+const PV_MAX = 1e6;
 const clampRev = (n: number) => Math.max(-REV_MAX, Math.min(REV_MAX, n));
 
 const capStr = (v: unknown, cap = CAP.str): string =>
@@ -902,8 +1159,17 @@ export const parseBuddyMessage = (raw: string): BuddyMessage | null => {
             t: 'hello',
             name: capStr(m.name),
             ...(typeof m.id === 'string' ? { id: capStr(m.id) } : {}),
+            // Named, like every field here, or an updated sender's version
+            // would be stripped on arrival and read as a build that has none.
+            // A version that is not a small whole number is no version: it
+            // falls to absent, which `versionGap` reads as the oldest build.
+            ...(typeof m.pv === 'number' && Number.isInteger(m.pv) && m.pv >= 1 && m.pv <= PV_MAX
+              ? { pv: m.pv }
+              : {}),
+            ...(m.kind === 'pair' || m.kind === 'proof' ? { kind: m.kind } : {}),
             ...(typeof m.proof === 'string' ? { proof: capStr(m.proof) } : {}),
             ...(typeof m.newToken === 'string' ? { newToken: capStr(m.newToken) } : {}),
+            ...(typeof m.ack === 'string' ? { ack: capStr(m.ack) } : {}),
           }
         : null;
     case 'snapshot': {

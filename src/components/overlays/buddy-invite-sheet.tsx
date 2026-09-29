@@ -7,7 +7,7 @@
  */
 import { Text, View } from 'react-native';
 
-import { radio } from '@/data/buddy-radio';
+import { sendTo } from '@/data/buddy-radio';
 import { countN } from '@/data/i18n';
 import { useBackClose } from '@/hooks/use-back-close';
 import { Sheet } from '@/components/sheet';
@@ -20,10 +20,7 @@ export function BuddyInviteSheet() {
   const styles = useThemed(sheet);
   const { s, L, acceptInvite, declineInvite } = useStore();
 
-  const send = (t: 'sessionJoin' | 'sessionDecline') => {
-    if (radio && s.buddyEndpoint)
-      radio.sendPayload(s.buddyEndpoint, JSON.stringify({ v: 1, t })).catch(() => {});
-  };
+  const send = (t: 'sessionJoin' | 'sessionDecline') => sendTo(s.buddyEndpoint, { v: 1, t });
 
   const decline = () => {
     send('sessionDecline');

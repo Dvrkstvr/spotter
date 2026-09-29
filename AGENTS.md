@@ -1499,6 +1499,29 @@ section. It is Calvin's, has no design behind it, and is off by default.
   captured while the session still stands. **A set landing is now its own
   event**, derived from that count, because everything else in a workout hangs
   off it and a drop set or a superset earns no rest to infer it from.
+- **A connection is written down at every step that leaves no state behind**,
+  which before this was nearly all of them: the log said a request went out and
+  that a link came up, and nothing in between. `endpoint found` / `endpoint
+  lost`, `request out` / `request refused`, `connection offered`, `connection
+  refused by us`, `connection failed`, `connected`, `handshake`, `bandwidth`.
+  Instrumentation only — no behaviour and nothing on the wire moved. Four
+  things about it:
+  - **Every request is written down by the one function that makes it** —
+    `request` in `<BuddyRadio>`, reached from outside as `requestLink` — and
+    `from` — `tap` / `found` / `ticker` / `invite` — is the one thing the four
+    sites differ in.
+  - **A refusal carries Nearby's status on its `code`**, as
+    `REQUEST_FAILED:8011` — a rejected promise has a code and a message and
+    nothing else. `radioErr` reads the number back off a string the module
+    wrote, which is the point: not out of a message Google did.
+  - **`connected` with no `handshake` under it is a finding**, not a gap.
+    `link up` is derived from `buddyEndpoint`, which a reconnect does not set
+    until the proof checks out, so a handshake that never finishes used to be
+    indistinguishable from a connection that never formed.
+  - **A peer's id is logged as the header logs `self`** — eight characters — so
+    a line in one phone's file matches the top of the other's. The header
+    gained `api` and `playServices` for the same errand: Nearby ships in Play
+    services, so one APK can be talking to two builds of the radio.
 - **The automatic export waits for the session to settle** (`EXPORT_SETTLE_MS`).
   Written on the instant the session ends, the file stops at `session ended` —
   and the goodbye, the link coming down and the radio restarting all land in the
@@ -2153,7 +2176,35 @@ Keep these; they're decisions, not drift. Each is commented at its site.
   tapping anything; a buddy is re-accepted with no code. That is a deliberate
   battery trade, decided with Calvin — the alternative was both people having to
   tap before either could be seen. Silent re-accept is gated on the pairing
+  secret, not the name, and is only ever the answer to a *plain* request — a
+  pairing asked for from the share sheet takes the code whoever holds what.
+  See below.
   secret, not the name — see below.
+  - **"While the app is open" means on screen, or mid-workout** (`awake` in
+    `<BuddyRadio>`). Advertising belongs to the process, not to the screen: a
+    backgrounded app with no session has no foreground service, Android may
+    freeze its JS, and Nearby goes on advertising for it — the buddy reads
+    *Nearby*, asks, and the request is accepted by nobody. So the radio is put
+    away when `AppState` goes to `background` with no session running, and
+    comes back with the app. With a session the foreground service keeps JS
+    alive and nothing changes — that is the radio a dropped link heals
+    through. *Nearby* means *can answer*.
+  - **It is one condition, not a second start/stop path.** `active` is
+    `wanted && awake`, so a pause stands down through the same cleanup a link
+    coming up does — retries cancelled, `nearbyPeers` emptied — and the
+    reconnect ticker is gated on `awake` beside it. A link that is already up
+    is left alone: this is about being findable, not about being connected.
+  - **Android calls the permission dialog `background` too**, being another
+    activity over this one. Believing it would stop the radio mid-question and
+    ask the same question again on the way back, so a pause that arrives while
+    the dialog is up is ignored (`radioAsking` in `buddy-radio.ts`, which is
+    where the dialog is put up). The same `background` is reported for the
+    photo picker and the share sheet, and there the radio really does pause
+    and resume — cheap, and true.
+  - **A rename restarts advertising and nothing else** (`adName`, debounced by
+    `RENAME_MS`, handed to the radio effect as `readvertise`). Discovery must
+    not restart with it, or a rename would empty every row's *Nearby*. It is
+    carried out inside the round, like every other start and stop.
 - **Nothing takes a name off that list but the user** (× / `forgetBuddy`). It is
   how you see who is around when you run into each other, which only works if
   it outlasts every link that ever dropped — including the ones you ended.
@@ -2162,27 +2213,33 @@ Keep these; they're decisions, not drift. Each is commented at its site.
   is ANDROID_ID or a once-minted random) and the snapshot carries the sender's
   id — so a rename lands as "same id, new name" and `rememberBuddy` renames the
   roster entry instead of meeting a stranger. `buddyIds` is a separate persisted
-  key (roster name → id). But **both halves of the advertised name are
+  key (roster name → id). The advertised name is read when advertising starts,
+  so a rename restarts it (`adName`) — after `RENAME_MS`, because the name
+  field writes on every keystroke and a radio restarted per letter spends the
+  rename refusing its own starts. But **both halves of the advertised name are
   self-asserted strings a nearby attacker can forge** — the id authenticates
   nothing on its own. So identity is *proved*, not asserted:
   - **The pairing secret (`buddySecrets`, `randomToken` in buddy-sync) is minted
-    once during the code-gated first pairing** and persisted on both phones. On
-    every reconnect the peer must prove it before this phone trusts them —
-    before it sends its snapshot, merges an `item`, honours a `sessionInvite`,
-    or applies a draft. The first pairing is still the only place a stranger
-    gets on the roster, and Nearby's confirmed auth digits are still the gate
-    there; the secret is what carries that trust across every later silent
-    reconnect.
+    by a confirmed code, every time one is confirmed**, and persisted on both
+    phones. On every reconnect the peer must prove it before this phone trusts
+    them — before it sends its snapshot, merges an `item`, honours a
+    `sessionInvite`, or applies a draft. The code is still the only place a
+    stranger gets on the roster, and Nearby's confirmed auth digits are still
+    the gate there; the secret is what carries that trust across every later
+    silent reconnect. It used to be minted *once* and reused if held
+    (`buddySecrets[name] ?? randomToken()`), which is what made pairing again
+    useless as a way out: the one phone that still held a secret kept it.
   - **`hello` is the first message on every link** (`parseBuddyMessage`
     honours nothing else from an unproven endpoint). A reconnect carries
-    `proof = authProof(secret, digits)` — a keyed hash bound to *this*
+    `proof = authProof(secret, digits, role)` — a keyed hash bound to *this*
     connection's Nearby auth digits, which both endpoints witness and no third
-    party can predict, so a captured proof can't be replayed and the raw secret
-    never re-crosses the wire. A first pairing carries `newToken` from the
-    minting side instead (the requester, `!incoming`); the code was the gate, so
-    this only seeds the secret. `authed` / `meta` in `<BuddyRadio>` are the
-    transient per-endpoint handshake state; `buddyEndpoint` is not set on a
-    reconnect until the proof checks out.
+    party can predict, and to the sender's direction, so a captured proof
+    can't be replayed, a reflected one can't verify, and the raw secret never
+    re-crosses the wire. A pairing carries `newToken` from the minting side
+    instead (the requester, `!incoming`); the code was the gate, so this only
+    seeds the secret. `authed` / `meta` in `<BuddyRadio>` are the transient
+    per-endpoint handshake state; **neither `buddyEndpoint` nor `buddy` is set
+    until the hello has been judged**, on a pairing as much as on a reconnect.
   - **A name-only impersonator gets a connection and nothing else.** It can
     match a roster name and be accepted at the link layer, but it can't produce
     the proof, so every sensitive message it sends is dropped and the link is
@@ -2193,6 +2250,137 @@ Keep these; they're decisions, not drift. Each is commented at its site.
     paired before secrets existed has none — they re-pair once, through the
     code, to mint one** (a known name with no secret is treated as a stranger,
     not silently accepted). An id-less older build no longer auto-reconnects.
+- **Two phones agree on what a connection is before either accepts it, and a
+  connection that fails says so.** The audit's finding B2
+  (`design/buddy-connection-audit.md`): each phone used to decide *alone*,
+  from what it happened to hold, whether a connection was a first pairing or a
+  reconnect. So two phones that disagreed about the secret — one forgot the
+  other, reinstalled, lost a `newToken` in flight — were the only two that ever
+  needed to pair again and the only two that could not: the one still holding a
+  secret skipped the code its buddy was busy showing, each refused the other's
+  hello, and both screens looked as though nothing had been tried. The
+  decisions are pure and in `data/buddy-sync.ts` (`judgeOffer`,
+  `judgeRefusal`, `judgeHello`); the radio only carries them out.
+  - **The request settles the kind, not the holdings.** A tap in the share
+    sheet asks for a *pairing* and says so in the name it requests under —
+    `id+|name`, the mark on `encodePeerName` — because that name is the one
+    thing the other phone reads before it has to accept or refuse. Every other
+    request (the roster's ask, the ticker, the found-handler) is *plain*. The
+    requester remembers which it asked for (`requestPeer` / `takeRequestKind`
+    in `buddy-radio.ts`), since its own connection-initiated event carries the
+    *advertiser's* name and says nothing about the request. **Every outgoing
+    request goes through `requestPeer`** — a bare `radio.requestConnection` is
+    a request whose kind the two ends will derive separately, which is the bug.
+    The one `request` in `<BuddyRadio>` is its only caller, and `from` decides
+    the kind: `invite` is a pairing, everything else is plain.
+    Advertising never carries the mark: it is a fact about one request.
+  - **A pairing always goes through the code, a held secret included**, and
+    the confirmed code re-mints. A plain request is proved by the secret or
+    refused — with the share sheet open as much as with it closed. That last
+    half is a deliberate narrowing of "share mode always takes the code": the
+    sheet being up is not a fact the *other* phone can see, so a plain ask
+    arriving at a phone that happened to have sharing open would put a code on
+    one screen and nothing on the other, and end two people with a perfectly
+    good pairing at *out of date*. The secret is the same gate either way.
+  - **One request is taken for a pairing without saying so**: incoming,
+    unmarked, nothing to prove it by, sharing open. It is what a build from
+    before the mark sends from its own share sheet, and the code is the only
+    gate it could pass — which is what gets that build as far as a hello, where
+    it can be told apart from a stale pairing.
+  - **The hello says which handshake it is running** (`kind: 'pair' |
+    'proof'`) **and at what version** (`pv`, `PROTOCOL_VERSION` = 2; absent
+    reads as 1). The version is judged *first*: two sideloaded phones a build
+    apart used to fail a proof, which reads exactly like a stale pairing and
+    sends both people off to re-pair for nothing. `pv` moves only when two
+    builds can no longer finish a handshake — not for an additive field, which
+    the parser's rebuild already lets an older build ignore — and it is not the
+    envelope: `v: 1` has not moved. A hello of the other kind is never acted
+    on, in either direction; the two-phones block in `buddy-sync.test.ts` is
+    the property that no attempt ends with one phone trusting and the other
+    not, over every combination of who holds what.
+  - **The minter keeps nothing the adopter has not confirmed**, and the
+    confirmation is a field, not a message. The minted token is held in
+    `meta`, not the store. The adopting side — always the one that accepted the
+    request — *holds its hello back* until the minter's has arrived, records
+    the token, and then says hello with `ack = enrolAck(token, digits)`: a
+    proof of the *new* secret, for this connection, under the responder's
+    lane. Only a hello carrying that does the minter record its copy and
+    `trust` on. Keyed rather than bare so it also says the token arrived
+    *whole*, and hashed under a lane the minter never uses, so nothing the
+    minter sent can be echoed back as one.
+    - **It was a message of its own first (`helloAck`), and the emulators are
+      what retired it.** To let that message through, the minter had to count
+      the endpoint as heard-from once its hello was judged — and the adopter's
+      snapshot then arrived through the same door and made the pairing
+      standing on a phone that had never been acknowledged: `buddy` set, a
+      card reading *Reconnecting…*, a ticker asking for ever. Folding it into
+      the hello removes the door. `hello` is still the only thing honoured
+      before trust, with no exception to state.
+    - **The adopter keeps its deadline past its own `trust`.** It trusts as it
+      answers, so it cannot yet know the answer arrived; hearing anything back
+      from the minter is what closes its handshake. If nothing comes, the half
+      it took comes down again (`stalled` → `endPairing`) — otherwise it is a
+      pairing only one phone believes in, and its ticker's next request lands
+      on the other phone as a code stage nobody asked for.
+    - **This does not solve two generals**, and says so: the adopter has
+      recorded a secret the minter never kept. It is harmless — nothing will
+      ever prove against it, and the next confirmed code replaces it — and
+      both phones have been told the pairing did not finish.
+  - **A refusal is said, on the glass** (`pairingIssue`, `failPairing`,
+    `<PairingNote>`). One line — what happened, then the way out — drawn on the
+    roster, in the share sheet, above the tab bar and in the session's buddy
+    slot, the last two being where `buddyLeft` already speaks and for the same
+    reason. Seven issues (`PairingIssue`), and they split two ways:
+    - **Three end a standing pairing** (`endsPairing`: `stale`, `theyOld`,
+      `weOld`). They cannot heal by trying again, so `buddy` is cleared and the
+      ticker stops — leaving it set is what made the old failure loop every
+      five seconds for ever. The session is untouched, as in every teardown.
+      The other four are about one attempt and leave whatever stood: somebody
+      tapping the wrong row in a share sheet must not end a workout two people
+      are in the middle of.
+    - **Five are mended by pairing** (`mendsByPairing`), and the line carries
+      the one tap into share mode. A version gap is not mended by a code, so
+      those two only dismiss.
+    - **A stranger is never given a line.** Only a name already on the roster
+      can put words on this screen — knocking is not a way to write on
+      somebody's phone. That name is still forgeable, so an impersonator can
+      raise a line and, for the three that end a pairing, end one; what it
+      cannot do is what it could not do before — be trusted, be sent anything,
+      or **cost the phone its secret, which no failure ever drops**. Only a
+      confirmed code replaces a secret. That is why `stale` does not clear
+      `buddySecrets`, tempting as it is: it would turn a spoofed name into a
+      forced re-pair.
+    - **Only the other phone's no is news.** A rejection reaches both ends
+      with the same status, so the share sheet cancels through
+      `declinePairing` and the radio can tell the user's own Cancel from the
+      other person's. And only `STATUS_REJECTED` is read at all: any other
+      failure is the radio's trouble and not a fact about the pairing.
+  - **A pairing waits for the other hello, so the wait has an end**
+    (`HANDSHAKE_MS`). It used to `trust` on connect. A pairing that stalls is
+    reported (`stalled`) — two people are waiting on a sheet; a reconnect that
+    stalls is torn down quietly and left to the ticker, because saying so every
+    ten seconds through a bad patch would be noise. A failed handshake hangs up
+    `LEAVE_MS` later rather than at once: this phone's own hello is how the
+    other one learns *why*, and `sendPayload` resolving only ever meant
+    enqueued. For the same reason an adopter that refuses the minter's hello
+    still sends its own first, with nothing acknowledged.
+  - **A pairing is on the roster from `trust`, not from the snapshot.** The
+    secret has just been recorded under that name, and `judgeOffer` only finds
+    a secret through a roster entry — so a pairing whose snapshot never came
+    used to hold a secret it could not see. The snapshot still does the
+    renaming.
+  - **Nothing here is persisted that was not already.** `buddySecrets` is the
+    same additive key holding the same shape; `pairingIssue` is transient. No
+    `STORAGE_VERSION` bump. It *is* a protocol change — both phones take the
+    build together, and a phone on the older one is told *needs the newer
+    Spotter* by the phone that isn't.
+  - **The relay can lose a message on request** (`x hello 2` + Enter in
+    `scripts/buddy-relay.mjs` loses the second hello from now — the adopter's
+    answer, which is the acknowledgement), and that is the only way the
+    enrolment's answer to a lost ack can be exercised at all. It is the one
+    place the relay reads a payload, and only its `t`. All of this was run on
+    the two emulators before it was written down; both design changes above
+    came out of that run, not out of reading.
 - **The only connection this app opens by itself is back to the buddy of the
   session in progress** (`s.buddy`), because a mid-workout drop has to heal
   without anyone tapping. Everyone else on the roster is discovered, listed and
@@ -2231,6 +2419,203 @@ Keep these; they're decisions, not drift. Each is commented at its site.
     positive costs a silent re-link seconds later. Native change — both
     phones rebuild — but not a protocol change: an older peer sends nothing
     new and is sent nothing new.
+- **Every wait on the radio has an end, and every request and payload has one
+  way out.** A connection that *sometimes needed the app restarting* was four
+  different states with one thing in common: each was a wait nothing was
+  timing, reached through a refusal nobody heard. The audit is
+  `design/buddy-connection-audit.md` (its step 2); the arithmetic is
+  `src/data/buddy-link.ts`, pure like `plan.ts` and tested, and the clocks are
+  `<BuddyRadio>`'s.
+  - **One `request`, one `send`, one `hangUp`** — built in the wiring effect
+    and lent to the rest of the app through `claimLink`, as `requestLink` /
+    `sendTo` / `hangUp` in `data/buddy-radio.ts`. App code never calls
+    `radio.requestConnection`, `sendPayload` or `disconnectFrom` itself. There
+    were four request sites with four error handlers, three of them empty, and
+    a dozen sends that each swallowed their own rejection.
+  - **A request is in flight until its connection has an outcome, or for
+    `REQUEST_MS`**, and nothing stacks a second on it. A Bluetooth connection
+    commonly takes longer to form than the ticker's five seconds, so the tap,
+    the found-event and the ticker used to ask the same endpoint three times
+    over. The markers are mirrored into the store as `requesting` (transient,
+    the radio the only writer), which is what the share sheet's *Invite sent*
+    reads — a local flag there could only be reset by a code stage that, for a
+    request that failed early, never came.
+  - **The newest advertisement is the one that can be live** (`withFound`,
+    `pickPeer`). Nearby mints a new endpoint id when an app restarts and is
+    late — or never — to report the old one lost, so a buddy who restarted was
+    listed twice and every `find` took the dead entry: the row said *Nearby*,
+    the tap went nowhere, and each restart of *their* app added another that
+    only restarting *this* one cleared. Found drops everything else carrying
+    that install id; the roster row and the ticker choose through one picker,
+    last match first, which is the backstop for peers that advertise no id.
+  - **A refusal of 8011 or 8012 evicts the entry, and discovery restarts
+    behind it** — after `STALE_AFTER` refusals in a row, or at once when the
+    eviction left nobody listed for that phone. The second half is not in the
+    audit and is load-bearing: Nearby reports an endpoint once per discovery
+    run, and 8012 is as often a passing radio error as a dead address, so an
+    eviction without a fresh run leaves a buddy invisible while they stand
+    there. Restarts are spaced `RETRY_MS` apart — discovery is the heavy half
+    of the radio. A rejection (8004) counts toward neither: it is an answer
+    from a phone that is there.
+  - **An ask ends** — `ASK_MS` from the tap to a trusted link, or
+    `ASK_ATTEMPTS` lost attempts, whichever is first — as `joinSent`'s third
+    state, `failed`, with its own line on the roster. Once the link is up the
+    wait is for a person and has no deadline. The count lives *inside*
+    `joinSent` (`fails`), so it is read and written in one functional patch —
+    a refusal can land before React has committed the tap that asked — and a
+    fresh ask resets it by being a fresh object. The ticker keeps its
+    unlimited patience for the one case that earned it, a standing pairing;
+    which is also why a failed ask lets `buddy` go **unless a shared session
+    is running**: an impatient tap on *Request a session* mid-workout must not
+    be what ends the healing.
+  - **A handshake has `HANDSHAKE_MS`**, from `onConnected` to `trust`, held on
+    the `meta` record it belongs to. Point-to-point allows one connection, so
+    a half-open link whose other half never said hello refused every later
+    request to anybody and made no sends for the zombie detector to count.
+    `dropLink` also answers for a link that never became `buddyEndpoint` now:
+    it clears a code stage left open on it and charges a waiting ask.
+  - **Every local disconnect forgets the endpoint as well** (`hangUp`). Nearby
+    does not promise the side that hangs up an `onDisconnected` of its own,
+    and an endpoint id belongs to the advertiser, so a record left behind —
+    `authed` above all — would be met again by the next connection to it. A
+    fresh `onConnectionInitiated` clears `authed` for its endpoint for the
+    same reason.
+  - **A send Nearby refuses outright counts like one it failed to deliver**,
+    and 8005 / 8011 — *there is no link* — tears down at once. One payload can
+    report both ways, which makes a doubly-failed send a teardown on its own;
+    that errs the cheap way round.
+  - **The status is read off the rejection's `code`** (`statusOf`), where the
+    native module writes it — `REQUEST_FAILED:8011`. The message is the
+    fallback, number first and name second, for a native build from before
+    the code carried it and for the sim, which words its refusals as prose.
+  - `endPairing` no longer empties `nearbyPeers`. With the link up the list is
+    already empty; with it down, clearing it emptied the roster of people
+    still in the room with no discovery restart coming to refill it.
+
+  No protocol change and no native one — but the phones are sideloaded, so
+  both still need the rebuilt APK. The sim radio refuses a send to an endpoint
+  it is not linked to, worded as the native module words it, so the teardown
+  can be exercised on two emulators.
+- **A radio that cannot run says so** (`radioState`, `data/radio-state.ts`,
+  `<RadioLine>`). A refused advertising or discovery start used to be retried
+  every five seconds for ever and written only to the diagnostics log, so a
+  phone with Bluetooth off went on drawing the radar and calling its partner
+  *Not nearby* — two claims about a search that was not running. Now the
+  roster and the share sheet carry one line saying which precondition is
+  missing and the way out, and while it stands neither makes the claim it
+  replaced. Six things hold it together:
+  - **The status code decides, and it is read off the rejection.** The native
+    module appends Nearby's own code to the error's (`DISCOVERY_FAILED:8025`)
+    and `statusOf` reads it back, falling back to the front of the message.
+    `8025` is the Location switch, `8029`–`8039` a permission. The numbers were
+    read off the 19.3.0 jar with `javap`, not remembered.
+  - **`8007` is not evidence that Bluetooth is off.** It is also what Nearby
+    answers while the stack settles after a dropped link, which is every
+    dropped link. So *Bluetooth is off* is only ever said from the switch's own
+    reading (`isBluetoothOn`), and a refusal nothing else explains has to
+    outlast `SETTLE_ROUNDS` before it is called `refused` — a line that
+    appeared for ten seconds after each drop would be a statement about a
+    problem already fixing itself.
+  - **The switch readings are reads, never gates.** The starts are attempted
+    whatever they say: Nearby still turns Bluetooth on by itself today, and a
+    gate would refuse a start that was about to work. Google has announced the
+    end of that for late 2026, which is why the reading also stands alone — a
+    start accepted over a radio that is off finds nobody. `isLocationOn` decides
+    nothing; it rides in the `radio state` log line, where a one-sided
+    discovery is diagnosed.
+  - **A permission is checked from an effect and asked for from a tap.**
+    `radioGrant` never prompts; `askRadioPermissions` does, and has exactly
+    three callers — the tour's card, opening share mode, the line itself. It
+    used to run inside the `active` effect, which put a system dialog on the
+    glass every time a link dropped. `blocked` is Android no longer offering
+    the dialog: `check` cannot tell it from a plain denial, so it is learned
+    from a request's answer and remembered in the bridge for the process.
+  - **It is `finishLogsNothing`'s shape, not a tip's**, and it borrows nothing
+    that already means something: no dashed outline, and no `warn` — nothing
+    here was refused by the app. The way out is an accent link on the end of
+    the sentence and opens the place the thing is changed, because none of it
+    is this app's to switch.
+  - **Transient, and `ok` means *not known to be stopped*.** Outside `PERSIST`,
+    reset when nothing is asking for the radio, never in a snapshot. The sim
+    and a build with no radio never leave `ok`, which is what keeps the line
+    off every screen with no business showing it.
+
+  What it costs is a ticker: the preconditions are looked at every `RETRY_MS`
+  for as long as the radio is wanted, not only while a start is failing — a
+  switch thrown in the quick-settings shade never leaves the app, so no
+  lifecycle event reports it. Native change, so both phones rebuild; not a
+  protocol change, and an older native build degrades to the message fallback
+  and unknown readings.
+- **Discovery steps aside while a connection forms, and advertising does
+  not** (`src/data/scan-pause.ts`, pure and tested; `<BuddyRadio>` only wires
+  it). Google's guidance is that discovery is a heavy radio operation that
+  raises the odds of a connection breaking, and `active` only goes false at
+  `trust` — so the phone used to scan through the Bluetooth connect, both
+  accepts and both hellos, the most fragile seconds a link has. Stopping
+  discovery does not stop Nearby honouring a request for an endpoint already
+  found, which is what makes the pause free. Six things hold it together:
+  - **The pause is heard at the bridge, not at the call site**
+    (`watchRequests` in `buddy-radio.ts`). Requests leave from four places and
+    two of them are outside `<BuddyRadio>`; `radio.requestConnection` is where
+    all four meet, so a fifth needs no wiring. It also reports what became of
+    the *call* — `took` or `refused` — because a refused request is followed by
+    no lifecycle event at all: `onConnectionFailed` is only ever about a
+    connection that was offered first.
+  - **`nearbyPeers` survives a pause.** Those endpoints are still requestable,
+    and emptying the list would take the buddy off the roster, and out of the
+    ticker's reach, for the length of the very connection being made to them.
+    It is cleared where it always was: the radio effect's cleanup.
+  - **One writer.** A pause and a resume only say what is wanted; `follow`
+    decides, and the radio effect's `round` is the one place Nearby is told —
+    the same round that retries a refused start, restarts a stale discovery
+    and re-advertises a rename. So however they interleave, a stop is never
+    followed by a stop, and a retry cannot bring the scan back under the
+    connection it stepped aside for: the round reads `paused` every pass.
+  - **The stop waits a beat and the restart waits longer** (`PAUSE_GRACE_MS`,
+    `QUIET_MS`). Nearby refuses some requests out of hand — a stale endpoint, a
+    link it already holds — and under the ticker that is one every five
+    seconds; stopping and restarting the scan around each would be the heavy
+    operation the pause exists to avoid. The floor on restarts is for Android's
+    scan throttle, which may or may not count Nearby's.
+  - **A refusal releases only a pause nothing else is owed.** The ticker asks
+    again while the first attempt is still forming, and that second request
+    being refused must not restart the scan under the first.
+  - **Every pause ends** (`FORMING_MS`). It is a backstop and not a handshake
+    deadline — it tears nothing down — and a repeat request does not push it
+    back, or a half-open link with a ticker behind it would hold the scan off
+    for ever. A pause nothing ends is a phone that sees nobody, which would be
+    one more state only a restart clears.
+
+  What it costs: an endpoint lost *during* a pause is never reported lost, so
+  it stays listed until discovery next restarts from empty. The window is the
+  length of a handshake; the fix belongs with the stale-endpoint dedupe rather
+  than here.
+- **The link is `NON_DISRUPTIVE`, on both sides of it.** Nearby connects over
+  Bluetooth and then tries to move the link onto Wi-Fi, and under the default
+  (`BALANCED`) it may change the phone's Wi-Fi state to get there — in the
+  seconds after connect, which are the seconds the handshake runs in. The
+  upgrade buys bandwidth and everything Spotter sends is JSON under the 32 KB
+  byte-payload cap, so there is nothing for it to carry. Set on
+  `AdvertisingOptions` and on the `ConnectionOptions` handed to
+  `requestConnection`, because either end can start the upgrade. The strategy
+  (`P2P_POINT_TO_POINT`) and `setLowPower` are **open decisions** and were
+  deliberately left alone: both need two phones to judge.
+- **The radio's links end when the activity does, not only when the module
+  does.** `OnDestroy` is `MODULE_DESTROY`, which expo-modules-core posts from
+  `AppContext.onDestroy` — the React instance going away — so it is not what a
+  swipe-away fires. That is `ACTIVITY_DESTROYS`, and in the same call
+  `ReactDelegate` stops the surface: the tree unmounts, and the store,
+  `buddyEndpoint` and the handshake state go with it while the module and its
+  Nearby client live on. So the worry was the wrong way round — JS never
+  outlives a `stopAllEndpoints` — and the real state was its mirror: **a link
+  Nearby still holds that nothing in JS knows about.** Point-to-point allows
+  one connection, so the tree that mounts on the way back could make no other,
+  and the buddy, whose payloads still deliver, would never learn there was
+  anything to heal. `OnActivityDestroys` now drops everything, which hands
+  their phone the disconnect its reconnect is built on. The client is cached
+  (`lazy`, on the application context) and a radio never touched builds none
+  just to tear it down. **Read from source, not yet watched on a phone** — one
+  deliberate swipe-away mid shared session, log on, on the buddy's side.
 - **Re-joining a shared workout is a button, not a resurrection.** A phone
   whose app died mid shared session resumes it *solo* (see the LIVE keys),
   while the pairing heals by itself: the survivor's ticker re-requests, the
@@ -2257,6 +2642,26 @@ Keep these; they're decisions, not drift. Each is commented at its site.
   `joinSent` and win the asker a second prompt for what they just asked for);
   idle, `joinReply { ok: true }` is the yes and simply leaves the two linked.
   Either way the asker's phone never asks them again.
+- **A workout already running can be offered, from the roster row.** Hosting
+  was decided on one transition — a routine session *starting* while the link
+  was up — so a workout begun thirty seconds before the link healed was solo
+  for good: *Request a session* needs the link down, *Rejoin* needs their
+  shared broadcast, and a link standing beside a solo session was offered
+  neither. **Invite to this workout** is the same `sessionInvite` on a tap,
+  with the writes `JoinAskSheet`'s yes makes, so their phone cannot tell the
+  three senders apart and nothing about the protocol moved.
+  - **The row has one action slot and three tenants, and no two can be true
+    together.** `canAsk` needs the link down. `canRejoin` and `canInvite` both
+    need it up beside an unshared session, and part on whether the buddy's
+    shared workout is still broadcasting: if it is, the way in is into theirs,
+    and a second workout is not offered over it.
+  - **It clears `buddyProgress` / `buddyRest` on the way**, which the join
+    sheet's yes does not need to. The only thing that can be standing there
+    when this button shows is a *finished* from their last shared workout, and
+    that is a statement about a session this invite is not.
+  - **Free sessions still do not travel** — there is no routine to send, so
+    the row offers nothing. And a declined invite is still the end of it for
+    that workout, exactly as it is for one hosted from the start.
 - Exercises are editable, the seeded ones included. A custom exercise is edited
   where it lives (so it still syncs); a seeded one gets an override in
   `exEdits` / `cueEdits`, which is also what makes `resetEx` possible. Machine
@@ -2434,7 +2839,10 @@ Keep these; they're decisions, not drift. Each is commented at its site.
   only while the pairing needs the radio breathing** (`keepAwake` =
   shared-or-buddy — a suspended JS thread can't broadcast or heal a link,
   where a solo session's clock is wall-anchored and its alarm is already
-  Android's, so there the battery would buy nothing); and the ongoing
+  Android's, so there the battery would buy nothing — and the service is
+  what lets the radio stay on in a pocket at all: with no session there is
+  none, so a backgrounded radio is put away, see `awake` under
+  `knownBuddies`); and the ongoing
   notification is the way back in — silent, low importance, the system
   chronometer counting from `now − elapsed` so it matches the in-app clock
   without ever re-posting. Repeated starts re-post the same notification id,
@@ -2690,7 +3098,7 @@ screens.
 Nocturne palette exactly. That is the one design invariant nothing else
 checked.
 
-What is covered, and why it is these two:
+What is covered, and why it is these three:
 
 - **`data/migrate`** — the version chain, the shape guard and the backup
   merge. Every bug in it is silent and lands on real training data: a key
@@ -2706,9 +3114,16 @@ What is covered, and why it is these two:
   placeholder row copied out of the template, `1e999`, and a German
   `"gewicht"` where a measure identifier belongs.
 
-Both suites were checked by mutation rather than trusted for passing: putting
+- **`data/scan-pause`** — when discovery steps aside for a forming connection.
+  Tested as sequences under fake timers, because every bug it can have is an
+  interleaving and the two phones those happen on cannot be put in a test. The
+  radio is a list of the calls made to it, in order.
+
+The suites were checked by mutation rather than trusted for passing: putting
 the `migrateV3(data, data)` bug back fails five tests, and flipping `fillGaps`
-so a backup wins fails a sixth.
+so a backup wins fails a sixth. Seven mutations of `scan-pause` — any refusal
+releasing, a repeat request counting as a step, no grace, no floor, a retry
+that ignores being overtaken — each fail at least one.
 
 ## Releasing
 

@@ -2,23 +2,29 @@
 import { useEffect, useState } from 'react';
 import { Animated, Pressable, Text, View } from 'react-native';
 
+import { PairingNote } from '@/components/pairing-note';
+import { RadioLine, radioDown } from '@/components/radio-line';
 import { Sheet } from '@/components/sheet';
-import { hasRadio, radio } from '@/data/buddy-radio';
-import { diffBuddy, encodePeerName, shareableSlice } from '@/data/buddy-sync';
+import { declinePairing, hasRadio, radio, requestLink } from '@/data/buddy-radio';
+import { diffBuddy, shareableSlice } from '@/data/buddy-sync';
 import { connectPeer, scanPeers } from '@/data/buddy-transport';
 import { useBackClose } from '@/hooks/use-back-close';
 import { themed, useThemed } from '@/design/theme';
-import { color, font, linger, motion, tracking, wash } from '@/design/tokens';
+import { color, font, linger, motion, space, tracking, wash } from '@/design/tokens';
 import { Btn, H4, Input } from '@/design/ui';
-import { myName, useStore } from '@/store/workout-store';
+import { useStore } from '@/store/workout-store';
 
 export function ScanSheet() {
   const styles = useThemed(sheet);
   const { s, L, patch } = useStore();
 
-  // Which endpoint got our invite — its row reads "Invite sent" until the
-  // code stage arrives or the request dies.
-  const [sentTo, setSentTo] = useState<string | null>(null);
+  // Which rows read "Invite sent" is not this sheet's to remember: it is
+  // `s.requesting`, the radio's own record of what it has out. A local flag
+  // only ever reset when the code stage came and went, so a request that died
+  // before one opened left its row disabled until the sheet was closed. The
+  // radio's marker ends with the request — refused, failed, connected, or
+  // unanswered for its full deadline — and the row ends with the marker.
+
   // The inviter's typed code attempt, and whether the last one was wrong.
   const [code, setCode] = useState('');
   const [wrong, setWrong] = useState(false);
@@ -29,15 +35,18 @@ export function ScanSheet() {
   const pa = s.pendingAuth;
 
   // Leaving the code stage (paired, cancelled, or failed) resets the local
-  // trail so the list is fresh if we come back.
+  // trail so the list is fresh if we come back. A pairing issue arriving does
+  // the same: a request turned away on the spot opens and closes the code
+  // stage inside one render, so `pa` never changes and the row would go on
+  // reading "Invite sent" under a line saying it wasn't.
+  const issue = s.pairingIssue;
   useEffect(() => {
     if (!pa) {
-      setSentTo(null);
       setCode('');
       setWrong(false);
       setConfirmed(false);
     }
-  }, [pa]);
+  }, [pa, issue]);
 
   // The invitee confirms the code they're showing before this phone accepts —
   // the mirror of the inviter typing it. Nothing becomes a durable buddy until
@@ -47,8 +56,10 @@ export function ScanSheet() {
     setConfirmed(true);
   };
 
+  // Through `declinePairing`, so <BuddyRadio> can tell this Cancel from the
+  // other person's — theirs is worth a line on this screen, ours is not.
   const cancelAuth = () => {
-    if (radio && s.pendingAuth) radio.rejectConnection(s.pendingAuth.endpointId).catch(() => {});
+    if (s.pendingAuth) declinePairing(s.pendingAuth.endpointId);
     patch({ pendingAuth: null });
   };
   const close = () => {
@@ -70,11 +81,11 @@ export function ScanSheet() {
   const invite = (n: { id: string; name: string }) => {
     if (hasRadio && radio) {
       // Just request — the code stage decides the pairing; <BuddyRadio>
-      // opens the sync screen once the connection lands.
-      setSentTo(n.id);
-      radio
-        .requestConnection(encodePeerName(s.selfId, myName(s)), n.id)
-        .catch(() => setSentTo(null));
+      // opens the sync screen once the connection lands. Asked for as a
+      // *pairing* (`invite`): that is what makes both phones take the code,
+      // whatever secret either of them still holds for the other.
+      patch({ pairingIssue: null });
+      requestLink(n.id, 'invite');
       return;
     }
     // Mock pairing connects first — the sync screen only opens if the two
@@ -148,15 +159,23 @@ export function ScanSheet() {
     <Sheet zIndex={87} maxHeight="70%" onClose={close}>
       <H4>{L.nearby}</H4>
 
-      <View style={styles.searchingRow}>
-        <SearchingDot />
-        <Text style={styles.searching}>{L.searching}</Text>
-      </View>
+      {/* The radar is a claim that a search is running. While the radio
+          can't, the line that says why takes its place. */}
+      {radioDown(s.radioState) ? (
+        <RadioLine style={styles.radioLine} />
+      ) : (
+        <View style={styles.searchingRow}>
+          <SearchingDot />
+          <Text style={styles.searching}>{L.searching}</Text>
+        </View>
+      )}
       <Text style={styles.shareHint}>{L.shareHint}</Text>
+      {/* What went wrong with the last attempt, where the next one is made. */}
+      <PairingNote inSharing style={styles.pairingNote} />
 
       <View style={styles.list}>
         {nearby.map((n) => {
-          const sent = sentTo === n.id;
+          const sent = s.requesting.includes(n.id);
           return (
             <Pressable key={n.id} disabled={sent} onPress={() => invite(n)} style={styles.row}>
               <View style={styles.avatar}>
@@ -245,6 +264,8 @@ const sheet = themed(() => ({
     borderColor: color.accent,
   },
   searching: { fontFamily: font.regular, fontSize: 11.5, color: color.neutral500 },
+  radioLine: { marginTop: space[2] },
+  pairingNote: { marginTop: 12 },
   shareHint: { fontFamily: font.regular, fontSize: 11, color: color.neutral600, marginTop: 6 },
 
   authName: { fontFamily: font.regular, fontSize: 13, color: color.neutral400, marginTop: 10 },
